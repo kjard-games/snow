@@ -10,6 +10,95 @@ const Entity = struct {
     health: f32,
     max_health: f32,
     is_enemy: bool,
+
+    // Skill system components
+    background: Background,
+    player_position: Position,
+    energy: u8,
+    max_energy: u8,
+    adrenaline: u8,
+    max_adrenaline: u8,
+    skill_bar: [8]?*Skill,
+    selected_skill: u8 = 0,
+};
+
+const Background = enum {
+    private_school,
+    public_school,
+    montessori,
+    homeschool,
+};
+
+const Position = enum {
+    pitcher,
+    fielder,
+    sledder,
+    digger,
+    runner,
+    catcher,
+
+    pub fn getSkills(self: Position) []const Skill {
+        return switch (self) {
+            .pitcher => &pitcher_skills,
+            .fielder => &fielder_skills,
+            .sledder => &sledder_skills,
+            .digger => &digger_skills,
+            .runner => &runner_skills,
+            .catcher => &catcher_skills,
+        };
+    }
+};
+
+const Skill = struct {
+    name: [:0]const u8,
+};
+
+// Pitcher skills
+const pitcher_skills = [_]Skill{
+    .{ .name = "Fastball" },
+    .{ .name = "Curveball" },
+    .{ .name = "Changeup" },
+    .{ .name = "Slider" },
+};
+
+// Fielder skills
+const fielder_skills = [_]Skill{
+    .{ .name = "Catch" },
+    .{ .name = "Throw" },
+    .{ .name = "Dive" },
+    .{ .name = "Scoop" },
+};
+
+// Sledder skills
+const sledder_skills = [_]Skill{
+    .{ .name = "Push" },
+    .{ .name = "Brake" },
+    .{ .name = "Drift" },
+    .{ .name = "Boost" },
+};
+
+// Digger skills
+const digger_skills = [_]Skill{
+    .{ .name = "Dig" },
+    .{ .name = "Excavate" },
+    .{ .name = "Tunnel" },
+    .{ .name = "Fortify" },
+};
+
+// Runner skills
+const runner_skills = [_]Skill{
+    .{ .name = "Sprint" },
+    .{ .name = "Slide" },
+    .{ .name = "Jump" },
+    .{ .name = "Dash" },
+};
+
+// Catcher skills
+const catcher_skills = [_]Skill{
+    .{ .name = "Frame" },
+    .{ .name = "Block" },
+    .{ .name = "Throw Out" },
+    .{ .name = "Signal" },
 };
 
 const GameState = struct {
@@ -21,17 +110,52 @@ const GameState = struct {
     camera_angle: f32,
     camera_distance: f32,
 
+    // Skill system state
+    delta_time: f32,
+
     fn init() GameState {
+        // Initialize player with background and position
+        const player_background = Background.private_school;
+        const player_position = Position.pitcher;
+
+        var player = Entity{
+            .position = .{ .x = 0, .y = 0, .z = 0 },
+            .radius = 20,
+            .color = .blue,
+            .name = "Player",
+            .health = 100,
+            .max_health = 100,
+            .is_enemy = false,
+
+            // Skill system components
+            .background = player_background,
+            .player_position = player_position,
+            .energy = 20,
+            .max_energy = 20,
+            .adrenaline = 0,
+            .max_adrenaline = 10,
+            .skill_bar = [_]?*Skill{null} ** 8,
+            .selected_skill = 0,
+        };
+
+        // Load skills from position into skill bar
+        const position_skills = player_position.getSkills();
+        const skill_count = @min(position_skills.len, player.skill_bar.len);
+
+        for (0..skill_count) |i| {
+            player.skill_bar[i] = @constCast(&position_skills[i]);
+        }
+
+        // Clear remaining slots
+        for (skill_count..player.skill_bar.len) |i| {
+            player.skill_bar[i] = null;
+        }
+
+        print("Player {s} initialized with background: {s}, position: {s}\n", .{ player.name, @tagName(player_background), @tagName(player_position) });
+        print("Loaded {d} skills into skill bar\n", .{skill_count});
+
         return GameState{
-            .player = Entity{
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 20,
-                .color = .blue,
-                .name = "Player",
-                .health = 100,
-                .max_health = 100,
-                .is_enemy = false,
-            },
+            .player = player,
             .entities = &[_]Entity{
                 Entity{
                     .position = .{ .x = -100, .y = 0, .z = -100 },
@@ -41,6 +165,15 @@ const GameState = struct {
                     .health = 50,
                     .max_health = 50,
                     .is_enemy = true,
+                    // Skill components for enemies
+                    .background = .public_school,
+                    .player_position = .fielder,
+                    .energy = 15,
+                    .max_energy = 15,
+                    .adrenaline = 0,
+                    .max_adrenaline = 8,
+                    .skill_bar = [_]?*Skill{null} ** 8,
+                    .selected_skill = 0,
                 },
                 Entity{
                     .position = .{ .x = 100, .y = 0, .z = -100 },
@@ -50,6 +183,14 @@ const GameState = struct {
                     .health = 50,
                     .max_health = 50,
                     .is_enemy = false,
+                    .background = .montessori,
+                    .player_position = .runner,
+                    .energy = 18,
+                    .max_energy = 18,
+                    .adrenaline = 0,
+                    .max_adrenaline = 12,
+                    .skill_bar = [_]?*Skill{null} ** 8,
+                    .selected_skill = 0,
                 },
                 Entity{
                     .position = .{ .x = 0, .y = 0, .z = -150 },
@@ -59,6 +200,14 @@ const GameState = struct {
                     .health = 50,
                     .max_health = 50,
                     .is_enemy = true,
+                    .background = .homeschool,
+                    .player_position = .digger,
+                    .energy = 25,
+                    .max_energy = 25,
+                    .adrenaline = 0,
+                    .max_adrenaline = 6,
+                    .skill_bar = [_]?*Skill{null} ** 8,
+                    .selected_skill = 0,
                 },
                 Entity{
                     .position = .{ .x = 150, .y = 0, .z = -100 },
@@ -68,6 +217,14 @@ const GameState = struct {
                     .health = 50,
                     .max_health = 50,
                     .is_enemy = true,
+                    .background = .public_school,
+                    .player_position = .pitcher,
+                    .energy = 15,
+                    .max_energy = 15,
+                    .adrenaline = 0,
+                    .max_adrenaline = 10,
+                    .skill_bar = [_]?*Skill{null} ** 8,
+                    .selected_skill = 0,
                 },
             },
             .selected_target = null,
@@ -81,6 +238,7 @@ const GameState = struct {
                 .fovy = 45.0,
                 .projection = .perspective,
             },
+            .delta_time = 0.0,
         };
     }
 
@@ -156,6 +314,16 @@ const GameState = struct {
         return nearest;
     }
 
+    fn useSkill(self: *GameState, skill_index: u8) void {
+        if (skill_index >= self.player.skill_bar.len) return;
+
+        if (self.player.skill_bar[skill_index]) |skill| {
+            print("Using skill: {s}\n", .{skill.name});
+        } else {
+            print("No skill in slot {d}\n", .{skill_index});
+        }
+    }
+
     fn handleInput(self: *GameState) void {
         // Track Shift key state
         if (rl.isKeyPressed(.left_shift)) {
@@ -164,14 +332,58 @@ const GameState = struct {
             self.shift_held = false;
         }
 
+        // === SKILL USAGE ===
+        // Face buttons for skills (1-4)
+        if (rl.isGamepadAvailable(0)) {
+            if (rl.isGamepadButtonPressed(0, .right_face_down)) { // A button
+                self.useSkill(0);
+            }
+            if (rl.isGamepadButtonPressed(0, .right_face_right)) { // B button
+                self.useSkill(1);
+            }
+            if (rl.isGamepadButtonPressed(0, .right_face_left)) { // X button
+                self.useSkill(2);
+            }
+            if (rl.isGamepadButtonPressed(0, .right_face_up)) { // Y button
+                self.useSkill(3);
+            }
+
+            // Shoulder buttons for skills 5-8
+            if (rl.isGamepadButtonPressed(0, .right_trigger_1)) { // RB
+                self.useSkill(4);
+            }
+            if (rl.isGamepadButtonPressed(0, .left_trigger_1)) { // LB
+                self.useSkill(5);
+            }
+            // Could use trigger pulls for skills 6-7
+        }
+
+        // Keyboard skill usage (1-8 keys)
+        if (rl.isKeyPressed(.one)) self.useSkill(0);
+        if (rl.isKeyPressed(.two)) self.useSkill(1);
+        if (rl.isKeyPressed(.three)) self.useSkill(2);
+        if (rl.isKeyPressed(.four)) self.useSkill(3);
+        if (rl.isKeyPressed(.five)) self.useSkill(4);
+        if (rl.isKeyPressed(.six)) self.useSkill(5);
+        if (rl.isKeyPressed(.seven)) self.useSkill(6);
+        if (rl.isKeyPressed(.eight)) self.useSkill(7);
+
+        // Skill selection (for UI/highlighting)
+        if (rl.isKeyPressed(.q)) {
+            self.player.selected_skill = (self.player.selected_skill + 7) % 8; // -1 wrap
+        }
+        if (rl.isKeyPressed(.e)) {
+            self.player.selected_skill = (self.player.selected_skill + 1) % 8;
+        }
+
         // === TARGET CYCLING ===
         // Gamepad shoulder buttons (first-class)
         var cycle_forward = false;
         var cycle_backward = false;
 
         if (rl.isGamepadAvailable(0)) {
-            if (rl.isGamepadButtonPressed(0, .right_trigger_1)) cycle_forward = true;
-            if (rl.isGamepadButtonPressed(0, .left_trigger_1)) cycle_backward = true;
+            if (rl.isGamepadButtonPressed(0, .right_trigger_2)) cycle_forward = true;
+            if (rl.isGamepadButtonPressed(0, .left_trigger_2)) cycle_backward = true;
         }
 
         // Keyboard Tab/Shift+Tab (secondary)
@@ -339,15 +551,16 @@ const GameState = struct {
         if (rl.isGamepadAvailable(0)) {
             rl.drawText("Left Stick: Move", 10, 85, 16, .lime);
             rl.drawText("Right Stick: Rotate camera", 10, 105, 16, .lime);
-            rl.drawText("RB/LB: Cycle targets", 10, 125, 16, .lime);
-            rl.drawText("(Keyboard: WASD/Mouse/Tab)", 10, 145, 14, .dark_gray);
+            rl.drawText("Face Buttons: Use skills 1-4", 10, 125, 16, .lime);
+            rl.drawText("Shoulders: Target cycle / skills 5-8", 10, 145, 16, .lime);
+            rl.drawText("Q/E: Select skill", 10, 165, 16, .lime);
+            rl.drawText("(Keyboard: 1-8 skills, Tab target, WASD move)", 10, 185, 14, .dark_gray);
         } else {
-            rl.drawText("Left Stick: Move", 10, 85, 16, .dark_gray);
-            rl.drawText("Right Stick: Rotate camera", 10, 105, 16, .dark_gray);
-            rl.drawText("RB/LB: Cycle targets", 10, 125, 16, .dark_gray);
+            rl.drawText("1-8: Use skills", 10, 85, 16, .light_gray);
+            rl.drawText("Q/E: Select skill", 10, 105, 16, .light_gray);
+            rl.drawText("Tab/Shift+Tab: Cycle targets", 10, 125, 16, .light_gray);
             rl.drawText("WASD: Move", 10, 145, 16, .light_gray);
             rl.drawText("Right Mouse: Rotate camera", 10, 165, 16, .light_gray);
-            rl.drawText("Tab/Shift+Tab: Cycle targets", 10, 185, 16, .light_gray);
         }
 
         rl.drawText("ESC: Exit", 10, 205, 16, .light_gray);
@@ -401,32 +614,69 @@ const GameState = struct {
             );
         }
 
-        // Draw player health bar
-        const player_health_percentage = self.player.health / self.player.max_health;
-        const player_health_bar_width = 50;
-        const player_health_bar_height = 6;
-
-        const player_screen_pos = rl.getWorldToScreen(self.player.position, self.camera);
-
-        const player_health_bar_pos = rl.Rectangle{
-            .x = player_screen_pos.x - player_health_bar_width / 2,
-            .y = player_screen_pos.y - 35,
-            .width = player_health_bar_width,
-            .height = player_health_bar_height,
-        };
-
-        rl.drawRectangleRec(player_health_bar_pos, .black);
-        rl.drawRectangleRec(
-            rl.Rectangle{
-                .x = player_health_bar_pos.x,
-                .y = player_health_bar_pos.y,
-                .width = player_health_bar_width * player_health_percentage,
-                .height = player_health_bar_height,
-            },
-            .blue,
-        );
+        // Draw skill bar
+        drawSkillBar(self);
     }
 };
+
+fn drawSkillBar(game_state: GameState) void {
+    const skill_bar_width = 400;
+    const skill_bar_height = 50;
+    const skill_size = 40;
+    const skill_spacing = 5;
+    const start_x = @as(f32, @floatFromInt(rl.getScreenWidth())) / 2.0 - @as(f32, @floatFromInt(skill_bar_width)) / 2.0;
+    const start_y = @as(f32, @floatFromInt(rl.getScreenHeight())) - 80.0;
+
+    // Draw skill bar background
+    rl.drawRectangle(@intFromFloat(start_x - 5), @intFromFloat(start_y - 5), @intFromFloat(skill_bar_width + 10), @intFromFloat(skill_bar_height + 10), .black);
+
+    for (game_state.player.skill_bar, 0..) |maybe_skill, i| {
+        const skill_x = start_x + @as(f32, @floatFromInt(i)) * (skill_size + skill_spacing);
+        const skill_y = start_y;
+
+        // Draw skill slot
+        const slot_color: rl.Color = if (i == game_state.player.selected_skill) .yellow else .dark_gray;
+        rl.drawRectangleLines(@intFromFloat(skill_x), @intFromFloat(skill_y), @intFromFloat(skill_size), @intFromFloat(skill_size), slot_color);
+
+        if (maybe_skill) |skill| {
+            // Draw skill background
+            const skill_color: rl.Color = .blue;
+            rl.drawRectangle(@intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), @intFromFloat(skill_size - 4), @intFromFloat(skill_size - 4), skill_color);
+
+            // Draw skill name
+            rl.drawText(skill.name, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, .white);
+        } else {
+            // Empty slot
+            rl.drawRectangle(@intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), @intFromFloat(skill_size - 4), @intFromFloat(skill_size - 4), .dark_gray);
+            var key_buf: [8]u8 = undefined;
+            const key_text = std.fmt.bufPrintZ(&key_buf, "{d}", .{i + 1}) catch "?";
+            rl.drawText(key_text, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, .white);
+        }
+    }
+
+    // Draw player resources
+    const resource_y = start_y + skill_bar_height + 15;
+
+    // Energy bar
+    rl.drawText("Energy:", @intFromFloat(start_x), @intFromFloat(resource_y), 16, .white);
+    rl.drawRectangle(@intFromFloat(start_x + 60), @intFromFloat(resource_y), 100, 16, .black);
+    rl.drawRectangle(@intFromFloat(start_x + 60), @intFromFloat(resource_y), @intFromFloat(@as(f32, @floatFromInt(game_state.player.energy)) / @as(f32, @floatFromInt(game_state.player.max_energy)) * 100), 16, .blue);
+    var energy_buf: [16]u8 = undefined;
+    const energy_text = std.fmt.bufPrintZ(&energy_buf, "{d}/{d}", .{ game_state.player.energy, game_state.player.max_energy }) catch "?";
+    rl.drawText(energy_text, @intFromFloat(start_x + 165), @intFromFloat(resource_y), 14, .white);
+
+    // Adrenaline bar
+    rl.drawText("Adr:", @intFromFloat(start_x + 220), @intFromFloat(resource_y), 16, .white);
+    rl.drawRectangle(@intFromFloat(start_x + 260), @intFromFloat(resource_y), 100, 16, .black);
+    rl.drawRectangle(@intFromFloat(start_x + 260), @intFromFloat(resource_y), @intFromFloat(@as(f32, @floatFromInt(game_state.player.adrenaline)) / @as(f32, @floatFromInt(game_state.player.max_adrenaline)) * 100), 16, .red);
+    var adr_buf: [16]u8 = undefined;
+    const adr_text = std.fmt.bufPrintZ(&adr_buf, "{d}/{d}", .{ game_state.player.adrenaline, game_state.player.max_adrenaline }) catch "?";
+    rl.drawText(adr_text, @intFromFloat(start_x + 365), @intFromFloat(resource_y), 14, .white);
+
+    // Draw background info
+    const background_name = @tagName(game_state.player.background);
+    rl.drawText(background_name, 10, @intFromFloat(resource_y + 25), 12, .light_gray);
+}
 
 pub fn main() anyerror!void {
     const screenWidth = 800;
@@ -440,6 +690,11 @@ pub fn main() anyerror!void {
     var game_state = GameState.init();
 
     while (!rl.windowShouldClose()) {
+        game_state.delta_time = rl.getFrameTime();
+
+        // Update skill cooldowns
+        // TODO: implement skill cooldown updates
+
         game_state.handleInput();
 
         rl.beginDrawing();
