@@ -5,10 +5,12 @@ const combat = @import("combat.zig");
 const game_state = @import("game_state.zig");
 const skills = @import("skills.zig");
 const movement = @import("movement.zig");
+const entity_types = @import("entity.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
 const MovementIntent = movement.MovementIntent;
+const EntityId = entity_types.EntityId;
 const print = std.debug.print;
 
 pub const AIRole = enum {
@@ -34,7 +36,6 @@ fn selectSkillWithBehaviorTree(
     caster: *Character,
     target: *Character,
     all_entities: []Character,
-    player: *Character,
     role: AIRole,
     rng: *std.Random,
 ) ?SkillDecision {
@@ -45,7 +46,7 @@ fn selectSkillWithBehaviorTree(
             }
             return null;
         },
-        .support => return selectSupportSkill(caster, all_entities, player, rng),
+        .support => return selectSupportSkill(caster, all_entities, rng),
         .disruptor => {
             if (selectDisruptorSkill(caster, target, rng)) |idx| {
                 return SkillDecision{ .skill_idx = idx, .target_ally = false };
@@ -101,24 +102,13 @@ fn selectDamageSkill(caster: *Character, target: *Character, _: *std.Random) ?u8
 
 // Support: heal low health allies, buff team
 // Returns skill index and whether it should be cast on an ally (true) or enemy (false)
-fn selectSupportSkill(caster: *Character, all_entities: []Character, player: *Character, _: *std.Random) ?SkillDecision {
+fn selectSupportSkill(caster: *Character, all_entities: []Character, _: *std.Random) ?SkillDecision {
 
-    // Find lowest health ally (check both entities and player)
+    // Find lowest health ally (check all entities - player is in entities array now!)
     var lowest_health_pct: f32 = 1.0;
     var needs_healing = false;
 
-    // Check player first (if caster is an ally)
-    if (!caster.is_enemy and player.isAlive()) {
-        const player_health_pct = player.warmth / player.max_warmth;
-        if (player_health_pct < lowest_health_pct) {
-            lowest_health_pct = player_health_pct;
-        }
-        if (player_health_pct < 0.6) {
-            needs_healing = true;
-        }
-    }
-
-    // Check other allies in entities
+    // Check all allies in entities
     for (all_entities) |ent| {
         if (!ent.is_enemy and ent.isAlive()) {
             const health_pct = ent.warmth / ent.max_warmth;
@@ -307,14 +297,26 @@ fn calculateMovementIntent(
 
 pub fn updateAI(
     entities: []Character,
-    player: *Character,
+    controlled_entity_id: EntityId,
     delta_time: f32,
     ai_states: []AIState,
     rng: *std.Random,
 ) void {
+    // Find the controlled player entity
+    var player_ent: ?*Character = null;
+    for (entities) |*e| {
+        if (e.id == controlled_entity_id) {
+            player_ent = e;
+            break;
+        }
+    }
+
     for (entities, 0..) |*ent, i| {
         // Skip dead entities
         if (!ent.isAlive()) continue;
+
+        // Skip the player-controlled entity (no AI for player!)
+        if (ent.id == controlled_entity_id) continue;
 
         // Skip if no AI state for this entity
         if (i >= ai_states.len) continue;
@@ -323,27 +325,35 @@ pub fn updateAI(
 
         // Find target for movement and skills
         var target: ?*Character = null;
-        var target_index: ?usize = null;
+        var target_id: ?EntityId = null;
 
         if (ent.is_enemy) {
             // Enemies target player
-            target = player;
-            target_index = game_state.PLAYER_TARGET_INDEX;
+            if (player_ent) |player| {
+                target = player;
+                target_id = player.id;
+            }
         } else {
             // Allies target nearest enemy
-            if (targeting.getNearestEnemy(ent.*, entities)) |enemy_idx| {
-                target = &entities[enemy_idx];
-                target_index = enemy_idx;
+            if (targeting.getNearestEnemy(ent.*, entities)) |enemy_id| {
+                // Find entity by ID
+                for (entities) |*e| {
+                    if (e.id == enemy_id) {
+                        target = e;
+                        target_id = enemy_id;
+                        break;
+                    }
+                }
             } else {
                 // No enemies, follow player
-                target = player;
+                target = player_ent;
             }
         }
 
-        // Calculate and apply movement every frame (smooth like player)
+        // Calculate and apply movement every tick
         if (target) |tgt| {
             const move_intent = calculateMovementIntent(ent, tgt, ai_state.role);
-            movement.applyMovement(ent, move_intent, entities, player, i);
+            movement.applyMovement(ent, move_intent, entities, null, null, delta_time);
         }
 
         // Update skill casting timer
@@ -352,25 +362,23 @@ pub fn updateAI(
         // Time to cast a skill?
         if (ai_state.next_skill_time <= 0 and target != null) {
             // Use behavior tree to select skill and target type
-            const skill_decision = selectSkillWithBehaviorTree(ent, target.?, entities, player, ai_state.role, rng);
+            const skill_decision = selectSkillWithBehaviorTree(ent, target.?, entities, ai_state.role, rng);
 
             if (skill_decision) |decision| {
                 var actual_target: ?*Character = null;
-                var actual_target_index: ?usize = null;
+                var actual_target_id: ?EntityId = null;
 
                 if (decision.target_ally) {
                     // Find ally to heal/buff (prioritize lowest health)
                     var lowest_health_pct: f32 = 1.0;
-                    var best_ally_idx: ?usize = null;
 
                     // Check player (if we're an ally)
-                    if (!ent.is_enemy and player.isAlive()) {
-                        const player_health_pct = player.warmth / player.max_warmth;
+                    if (!ent.is_enemy and player_ent.?.isAlive()) {
+                        const player_health_pct = player_ent.?.warmth / player_ent.?.max_warmth;
                         if (player_health_pct < lowest_health_pct) {
                             lowest_health_pct = player_health_pct;
-                            actual_target = player;
-                            actual_target_index = game_state.PLAYER_TARGET_INDEX;
-                            best_ally_idx = game_state.PLAYER_TARGET_INDEX;
+                            actual_target = player_ent.?;
+                            actual_target_id = player_ent.?.id;
                         }
                     }
 
@@ -381,24 +389,23 @@ pub fn updateAI(
                             if (ally_health_pct < lowest_health_pct) {
                                 lowest_health_pct = ally_health_pct;
                                 actual_target = ally_ent;
-                                actual_target_index = ally_idx;
-                                best_ally_idx = ally_idx;
+                                actual_target_id = ally_ent.id;
                             }
                         }
                     }
 
                     // If no one needs healing, target self
-                    if (best_ally_idx == null) {
+                    if (actual_target == null) {
                         actual_target = ent;
-                        actual_target_index = i;
+                        actual_target_id = ent.id;
                     }
                 } else {
                     // Target enemy
                     actual_target = target;
-                    actual_target_index = target_index;
+                    actual_target_id = target_id;
                 }
 
-                const result = combat.tryStartCast(ent, decision.skill_idx, actual_target, actual_target_index, rng);
+                const result = combat.tryStartCast(ent, decision.skill_idx, actual_target, actual_target_id, rng);
                 if (result == .success or result == .casting_started) {
                     // Reset AI timer
                     ai_state.next_skill_time = ai_state.skill_cooldown;

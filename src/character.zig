@@ -4,6 +4,7 @@ const school = @import("school.zig");
 const position = @import("position.zig");
 const skills = @import("skills.zig");
 const equipment = @import("equipment.zig");
+const entity = @import("entity.zig");
 
 const print = std.debug.print;
 
@@ -11,6 +12,7 @@ pub const School = school.School;
 pub const Position = position.Position;
 pub const Skill = skills.Skill;
 pub const Equipment = equipment.Equipment;
+pub const EntityId = entity.EntityId;
 
 // Character configuration constants
 pub const MAX_SKILLS: usize = 8;
@@ -20,7 +22,9 @@ pub const MAX_GRIT_STACKS: u8 = 5;
 pub const MAX_RHYTHM_CHARGE: u8 = 10;
 
 pub const Character = struct {
-    position: rl.Vector3,
+    id: EntityId, // Unique identifier for this entity (stable across ticks)
+    position: rl.Vector3, // Current tick position (authoritative)
+    previous_position: rl.Vector3 = .{ .x = 0, .y = 0, .z = 0 }, // Previous tick position (for interpolation)
     radius: f32,
     color: rl.Color,
     name: [:0]const u8,
@@ -69,7 +73,7 @@ pub const Character = struct {
     is_casting: bool = false,
     casting_skill_index: u8 = 0,
     cast_time_remaining: f32 = 0.0, // seconds remaining on current cast
-    cast_target_index: ?usize = null, // Target entity index for cast completion
+    cast_target_id: ?EntityId = null, // Target entity ID for cast completion
 
     // Active chills (debuffs) on this character
     active_chills: [MAX_ACTIVE_CONDITIONS]?skills.ActiveChill = [_]?skills.ActiveChill{null} ** MAX_ACTIVE_CONDITIONS,
@@ -84,6 +88,20 @@ pub const Character = struct {
 
     pub fn isAlive(self: Character) bool {
         return !self.is_dead and self.warmth > 0;
+    }
+
+    /// Get interpolated position for smooth rendering between ticks
+    pub fn getInterpolatedPosition(self: Character, alpha: f32) rl.Vector3 {
+        // Lerp between previous and current position
+        // alpha = 0.0 → previous position (tick just happened)
+        // alpha = 1.0 → current position (about to tick)
+        const result = rl.Vector3{
+            .x = self.previous_position.x + (self.position.x - self.previous_position.x) * alpha,
+            .y = self.previous_position.y + (self.position.y - self.previous_position.y) * alpha,
+            .z = self.previous_position.z + (self.position.z - self.previous_position.z) * alpha,
+        };
+
+        return result;
     }
 
     pub fn takeDamage(self: *Character, damage: f32) void {

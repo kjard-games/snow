@@ -5,11 +5,12 @@ const character = @import("character.zig");
 const Character = character.Character;
 
 // Movement speed constants (Guild Wars style)
-pub const BASE_MOVE_SPEED: f32 = 3.0; // Base units per frame
+// Tick-based: units per SECOND (not per frame)
+pub const BASE_MOVE_SPEED: f32 = 150.0; // Base units per second (was 3.0 per frame at 60fps = 180/s, tuned down for feel)
 pub const BACKPEDAL_SPEED: f32 = 0.6; // 60% speed when backing up
 pub const STRAFE_SPEED: f32 = 0.85; // 85% speed when strafing
 
-/// Movement intent - what an entity wants to do this frame
+/// Movement intent - what an entity wants to do this tick
 pub const MovementIntent = struct {
     // Movement direction in local space (relative to facing/camera)
     // x: -1 = left, +1 = right
@@ -24,13 +25,14 @@ pub const MovementIntent = struct {
     apply_penalties: bool = true,
 };
 
-/// Apply movement to a character with collision detection
+/// Apply movement to a character with collision detection (tick-based)
 pub fn applyMovement(
     entity: *Character,
     intent: MovementIntent,
     all_entities: []Character,
     player: ?*Character,
     entity_index: ?usize,
+    delta_time: f32, // Time since last tick (e.g., 0.05 seconds for 20Hz)
 ) void {
     // Skip if no movement
     if (intent.local_x == 0.0 and intent.local_z == 0.0) return;
@@ -66,9 +68,10 @@ pub fn applyMovement(
     const world_x = norm_x * cos_angle + norm_z * sin_angle;
     const world_z = -norm_x * sin_angle + norm_z * cos_angle;
 
-    // Calculate new position
-    const new_x = entity.position.x + world_x * BASE_MOVE_SPEED * speed_multiplier;
-    const new_z = entity.position.z + world_z * BASE_MOVE_SPEED * speed_multiplier;
+    // Calculate new position (tick-based: speed is units/second * time)
+    const distance = BASE_MOVE_SPEED * speed_multiplier * delta_time;
+    const new_x = entity.position.x + world_x * distance;
+    const new_z = entity.position.z + world_z * distance;
 
     // Store old position for collision resolution
     const old_x = entity.position.x;
@@ -117,7 +120,7 @@ pub fn applyMovement(
     const pushed_distance = @sqrt((entity.position.x - new_x) * (entity.position.x - new_x) +
         (entity.position.z - new_z) * (entity.position.z - new_z));
 
-    if (pushed_distance > BASE_MOVE_SPEED * 2.0) {
+    if (pushed_distance > distance * 2.0) {
         // Pushed too far, just stop at the collision point
         entity.position.x = old_x;
         entity.position.z = old_z;

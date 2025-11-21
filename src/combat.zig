@@ -1,10 +1,12 @@
 const std = @import("std");
 const character = @import("character.zig");
 const skills = @import("skills.zig");
+const entity_types = @import("entity.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
 const Condition = skills.Condition;
+const EntityId = entity_types.EntityId;
 const print = std.debug.print;
 
 pub const CastResult = enum {
@@ -19,7 +21,7 @@ pub const CastResult = enum {
     already_casting,
 };
 
-pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_index: ?usize, rng: *std.Random) CastResult {
+pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_id: ?EntityId, rng: *std.Random) CastResult {
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
 
@@ -58,12 +60,12 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
 
     // Start casting (consumes energy, sets cast state)
     caster.startCasting(skill_index);
-    caster.cast_target_index = target_index; // Store target for cast completion
+    caster.cast_target_id = target_id; // Store target ID for cast completion
 
     // If instant cast, execute immediately
     if (skill.activation_time_ms == 0) {
         executeSkill(caster, skill, target, skill_index, rng);
-        caster.cast_target_index = null; // Clear target
+        caster.cast_target_id = null; // Clear target
         return .success;
     }
 

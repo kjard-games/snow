@@ -4,10 +4,12 @@ const character = @import("character.zig");
 const targeting = @import("targeting.zig");
 const combat = @import("combat.zig");
 const movement = @import("movement.zig");
+const entity_types = @import("entity.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
 const MovementIntent = movement.MovementIntent;
+const EntityId = entity_types.EntityId;
 const print = std.debug.print;
 
 pub const InputState = struct {
@@ -18,14 +20,32 @@ pub const InputState = struct {
     autorun: bool = false,
     move_target: ?rl.Vector3 = null, // Click-to-move destination
     last_click_time: f32 = 0.0, // For double-click detection
-    last_click_target: ?usize = null, // For double-click on enemies
+    last_click_target: ?EntityId = null, // For double-click on enemies
     action_camera: bool = false, // GW2 Action Camera mode
+};
+
+// Input Command - Represents player input for ONE tick
+// In multiplayer, this is the data sent from client → server
+// Server validates and applies this at a specific tick number
+pub const InputCommand = struct {
+    // Movement intent (WASD + facing direction)
+    movement: MovementIntent,
+
+    // Skill usage (which skill button was pressed)
+    skill_use: ?u8 = null, // null = no skill, 0-7 = skill index
+
+    // Target selection (tab-targeting)
+    target_id: ?EntityId = null,
+
+    // Tick number (for client-side prediction / server reconciliation)
+    // In single-player, this isn't strictly needed, but shows the intent
+    tick: u64 = 0,
 };
 
 pub fn handleInput(
     player: *Character,
     entities: []Character,
-    selected_target: *?usize,
+    selected_target: *?EntityId,
     camera: *rl.Camera,
     input_state: *InputState,
     rng: *std.Random,
@@ -204,7 +224,7 @@ pub fn handleInput(
         const ray = rl.getScreenToWorldRay(mouse_pos, camera.*);
 
         // First, check if we clicked on an entity
-        var clicked_entity: ?usize = null;
+        var clicked_entity: ?EntityId = null;
         var closest_distance: f32 = std.math.inf(f32);
 
         for (entities, 0..) |entity, i| {
@@ -230,7 +250,7 @@ pub fn handleInput(
 
                 if (t < closest_distance) {
                     closest_distance = t;
-                    clicked_entity = i;
+                    clicked_entity = entity.id; // Use EntityId instead of array index
                 }
             }
         }
@@ -244,19 +264,24 @@ pub fn handleInput(
             break :blk false;
         } else false;
 
-        if (clicked_entity) |entity_idx| {
+        if (clicked_entity) |entity_id| {
             // Clicked on an entity - target it
-            selected_target.* = entity_idx;
-            print("Targeted entity {d}\n", .{entity_idx});
+            selected_target.* = entity_id;
+            print("Targeted entity ID {d}\n", .{entity_id});
 
             if (is_double_click) {
                 // Double-click: move to range and attack
-                const target = entities[entity_idx];
-                input_state.move_target = target.position;
-                print("Double-click: move to target and attack\n", .{});
+                // Find entity by ID to get position
+                for (entities) |e| {
+                    if (e.id == entity_id) {
+                        input_state.move_target = e.position;
+                        print("Double-click: move to target and attack\n", .{});
+                        break;
+                    }
+                }
             }
 
-            input_state.last_click_target = entity_idx;
+            input_state.last_click_target = entity_id;
         } else {
             // Clicked on terrain - click-to-move
             // Raycast to ground plane (y = 0)
@@ -350,26 +375,8 @@ pub fn handleInput(
     // Clamp pitch: 0.1 (nearly horizontal) to 1.4 (nearly straight down)
     input_state.camera_pitch = @max(0.1, @min(1.4, input_state.camera_pitch));
 
-    // Update camera to follow player with pitch
-    // Use spherical coordinates: distance, angle (yaw), pitch
-    const horizontal_distance = input_state.camera_distance * @cos(input_state.camera_pitch);
-    const cam_height = player.position.y + input_state.camera_distance * @sin(input_state.camera_pitch);
-
-    const cam_x = player.position.x + @sin(input_state.camera_angle) * horizontal_distance;
-    const cam_z = player.position.z + @cos(input_state.camera_angle) * horizontal_distance;
-
-    camera.position = .{ .x = cam_x, .y = cam_height, .z = cam_z };
-
-    // Offset camera target up and slightly to the side for over-shoulder view
-    // This prevents the reticle from aiming through the player character
-    const target_offset_y: f32 = 50.0; // Height offset (up)
-    const target_offset_x: f32 = 20.0; // Shoulder offset (right)
-
-    camera.target = .{
-        .x = player.position.x + target_offset_x,
-        .y = player.position.y + target_offset_y,
-        .z = player.position.z,
-    };
+    // NOTE: Camera position is now updated every frame in updateCamera()
+    // using interpolated player position for smooth visuals
 
     // Return movement intent for movement system to process
     return MovementIntent{
@@ -380,7 +387,7 @@ pub fn handleInput(
     };
 }
 
-fn useSkill(player: *Character, entities: []Character, selected_target: ?usize, skill_index: u8, rng: *std.Random) void {
+fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityId, skill_index: u8, rng: *std.Random) void {
     if (skill_index >= player.skill_bar.len) return;
 
     if (player.skill_bar[skill_index] == null) {
@@ -388,13 +395,46 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?usize, 
         return;
     }
 
-    // Get target entity
+    // Get target entity by ID
     var target: ?*Character = null;
-    if (selected_target) |idx| {
-        if (idx < entities.len) {
-            target = &entities[idx];
+    if (selected_target) |target_id| {
+        // Check if targeting player
+        if (player.id == target_id) {
+            target = player;
+        } else {
+            // Search entities array
+            for (entities) |*entity| {
+                if (entity.id == target_id) {
+                    target = entity;
+                    break;
+                }
+            }
         }
     }
 
     _ = combat.tryStartCast(player, skill_index, target, selected_target, rng);
+}
+
+// Update camera to follow player (called every frame for smooth interpolation)
+pub fn updateCamera(camera: *rl.Camera, player_pos: rl.Vector3, input_state: InputState) void {
+    // Update camera to follow player with pitch
+    // Use spherical coordinates: distance, angle (yaw), pitch
+    const horizontal_distance = input_state.camera_distance * @cos(input_state.camera_pitch);
+    const cam_height = player_pos.y + input_state.camera_distance * @sin(input_state.camera_pitch);
+
+    const cam_x = player_pos.x + @sin(input_state.camera_angle) * horizontal_distance;
+    const cam_z = player_pos.z + @cos(input_state.camera_angle) * horizontal_distance;
+
+    camera.position = .{ .x = cam_x, .y = cam_height, .z = cam_z };
+
+    // Offset camera target up and slightly to the side for over-shoulder view
+    // This prevents the reticle from aiming through the player character
+    const target_offset_y: f32 = 50.0; // Height offset (up)
+    const target_offset_x: f32 = 20.0; // Shoulder offset (right)
+
+    camera.target = .{
+        .x = player_pos.x + target_offset_x,
+        .y = player_pos.y + target_offset_y,
+        .z = player_pos.z,
+    };
 }

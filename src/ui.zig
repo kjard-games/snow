@@ -2,11 +2,13 @@ const std = @import("std");
 const rl = @import("raylib");
 const character = @import("character.zig");
 const input = @import("input.zig");
+const entity_types = @import("entity.zig");
 
 const Character = character.Character;
 const InputState = input.InputState;
+const EntityId = entity_types.EntityId;
 
-pub fn drawUI(player: *const Character, entities: []const Character, selected_target: ?usize, input_state: InputState, camera: rl.Camera) void {
+pub fn drawUI(player: *const Character, entities: []const Character, selected_target: ?EntityId, input_state: InputState, camera: rl.Camera) void {
     _ = camera; // Suppress unused parameter warning
 
     // Debug info
@@ -35,31 +37,44 @@ pub fn drawUI(player: *const Character, entities: []const Character, selected_ta
     }
 
     // Draw current target info
-    if (selected_target) |target_index| {
-        if (target_index >= entities.len) return; // Bounds check
-        const target = entities[target_index];
-        rl.drawText("Current Target:", 10, 70, 18, .white);
-        // TODO: Fix target.name drawing - string issue
-        rl.drawText("Target Name", 10, 90, 16, target.color);
+    if (selected_target) |target_id| {
+        // Find target by ID
+        var target: ?Character = null;
+        if (player.*.id == target_id) {
+            target = player.*;
+        } else {
+            for (entities) |ent| {
+                if (ent.id == target_id) {
+                    target = ent;
+                    break;
+                }
+            }
+        }
 
-        const target_type_text = if (target.is_enemy) "Enemy" else "Ally";
-        rl.drawText(target_type_text, 10, 110, 14, .light_gray);
+        if (target) |tgt| {
+            rl.drawText("Current Target:", 10, 70, 18, .white);
+            // TODO: Fix target.name drawing - string issue
+            rl.drawText("Target Name", 10, 90, 16, tgt.color);
 
-        var warmth_buf: [64]u8 = undefined;
-        const warmth_text = std.fmt.bufPrintZ(
-            &warmth_buf,
-            "Warmth: {d:.1}/{d:.1}",
-            .{ target.warmth, target.max_warmth },
-        ) catch unreachable; // Buffer is large enough
-        rl.drawText(warmth_text, 10, 130, 14, .light_gray);
+            const target_type_text = if (tgt.is_enemy) "Enemy" else "Ally";
+            rl.drawText(target_type_text, 10, 110, 14, .light_gray);
 
-        var energy_buf: [64]u8 = undefined;
-        const energy_text = std.fmt.bufPrintZ(
-            &energy_buf,
-            "Energy: {d}/{d}",
-            .{ target.energy, target.max_energy },
-        ) catch unreachable; // Buffer is large enough
-        rl.drawText(energy_text, 10, 150, 14, .light_gray);
+            var warmth_buf: [64]u8 = undefined;
+            const warmth_text = std.fmt.bufPrintZ(
+                &warmth_buf,
+                "Warmth: {d:.1}/{d:.1}",
+                .{ tgt.warmth, tgt.max_warmth },
+            ) catch unreachable; // Buffer is large enough
+            rl.drawText(warmth_text, 10, 130, 14, .light_gray);
+
+            var energy_buf: [64]u8 = undefined;
+            const energy_text = std.fmt.bufPrintZ(
+                &energy_buf,
+                "Energy: {d}/{d}",
+                .{ tgt.energy, tgt.max_energy },
+            ) catch unreachable; // Buffer is large enough
+            rl.drawText(energy_text, 10, 150, 14, .light_gray);
+        }
     }
 
     // Draw skill bar

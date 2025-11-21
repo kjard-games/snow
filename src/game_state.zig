@@ -10,6 +10,7 @@ const ui = @import("ui.zig");
 const combat = @import("combat.zig");
 const skills = @import("skills.zig");
 const movement = @import("movement.zig");
+const entity = @import("entity.zig");
 
 const print = std.debug.print;
 
@@ -19,12 +20,16 @@ const School = school.School;
 const Position = position.Position;
 const Skill = character.Skill;
 const AIState = ai.AIState;
-
-// Special index value to represent player as target (player is not in entities array)
-pub const PLAYER_TARGET_INDEX: usize = std.math.maxInt(usize);
+const EntityId = entity.EntityId;
+const EntityIdGenerator = entity.EntityIdGenerator;
 
 // Game configuration constants
-pub const MAX_ENTITIES: usize = 4;
+pub const MAX_ENTITIES: usize = 5; // Player + allies + enemies
+
+// Tick-based game loop (Guild Wars / tab-targeting style)
+pub const TICK_RATE_HZ: u32 = 20; // 20 ticks per second
+pub const TICK_RATE_MS: u32 = 50; // 50 milliseconds per tick
+pub const TICK_RATE_SEC: f32 = 0.05; // 0.05 seconds per tick
 
 pub const CombatState = enum {
     active,
@@ -33,104 +38,112 @@ pub const CombatState = enum {
 };
 
 pub const GameState = struct {
-    player: Character,
-    entities: [MAX_ENTITIES]Character,
-    selected_target: ?usize,
+    entities: [MAX_ENTITIES]Character, // All entities including player
+    controlled_entity_id: EntityId, // Which entity the local player controls
+    selected_target: ?EntityId, // Target referenced by ID, not array index
     camera: rl.Camera,
-    delta_time: f32,
     input_state: input.InputState,
     ai_states: [MAX_ENTITIES]AIState,
     rng: std.Random.DefaultPrng,
     combat_state: CombatState,
 
+    // Entity ID management
+    entity_id_gen: EntityIdGenerator = .{},
+
+    // Tick-based game loop state
+    tick_accumulator: f32 = 0.0,
+    current_tick: u64 = 0,
+
     pub fn init() GameState {
-        // Initialize player with school and position
-        const player_school = School.waldorf;
-        const player_position = Position.animator;
+        var id_gen = EntityIdGenerator{};
 
-        var player = Character{
-            .position = .{ .x = 0, .y = 0, .z = 0 },
-            .radius = 20,
-            .color = .blue,
-            .name = "Player",
-            .warmth = 100,
-            .max_warmth = 100,
-            .is_enemy = false,
+        // Setup positions for all entities
+        const player_start_pos = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
+        const ally_pos = rl.Vector3{ .x = 60, .y = 0, .z = 20 };
+        const enemy1_pos = rl.Vector3{ .x = -80, .y = 0, .z = -120 };
+        const enemy2_pos = rl.Vector3{ .x = 80, .y = 0, .z = -120 };
+        const empty_pos = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
 
-            // Skill system components
-            .school = player_school,
-            .player_position = player_position,
-            .energy = player_school.getMaxEnergy(),
-            .max_energy = player_school.getMaxEnergy(),
-            .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-            .selected_skill = 0,
-        };
-
-        // Load skills from position into skill bar
-        const position_skills = player_position.getSkills();
-        const skill_count = @min(position_skills.len, character.MAX_SKILLS);
-
-        for (0..skill_count) |i| {
-            player.skill_bar[i] = &position_skills[i];
-        }
-
-        print("Player {s} initialized with school: {s}, position: {s}\n", .{ player.name, @tagName(player_school), @tagName(player_position) });
-        print("Loaded {d} skills into skill bar\n", .{skill_count});
-
-        // Create 2v2 setup: Player + Ally vs 2 Enemies
-        // All entities have proper school+position combos and use position skills
+        // Create entities array with player at index 0
+        // In multiplayer: "controlled_entity_id" determines which one is "yours"
         var entities = [_]Character{
-            // Ally: Waldorf Thermos (Support/Healer) - same school as player for synergy
+            // Index 0: Player (Waldorf Animator)
             Character{
-                .position = .{ .x = 60, .y = 0, .z = 20 },
+                .id = id_gen.generate(),
+                .position = player_start_pos,
+                .previous_position = player_start_pos,
+                .radius = 20,
+                .color = .blue,
+                .name = "Player",
+                .warmth = 100,
+                .max_warmth = 100,
+                .is_enemy = false,
+                .school = .waldorf,
+                .player_position = .animator,
+                .energy = School.waldorf.getMaxEnergy(),
+                .max_energy = School.waldorf.getMaxEnergy(),
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            // Index 1: Ally (Waldorf Thermos - Support/Healer)
+            Character{
+                .id = id_gen.generate(),
+                .position = ally_pos,
+                .previous_position = ally_pos,
                 .radius = 18,
                 .color = .green,
                 .name = "Ally Healer",
                 .warmth = 100,
                 .max_warmth = 100,
                 .is_enemy = false,
-                .school = .waldorf, // Rhythm school - good for support
+                .school = .waldorf,
                 .player_position = .thermos,
                 .energy = School.waldorf.getMaxEnergy(),
                 .max_energy = School.waldorf.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
-            // Enemy 1: Public School Pitcher (Pure Damage)
+            // Index 2: Enemy 1 (Public School Pitcher - Pure Damage)
             Character{
-                .position = .{ .x = -80, .y = 0, .z = -120 },
+                .id = id_gen.generate(),
+                .position = enemy1_pos,
+                .previous_position = enemy1_pos,
                 .radius = 18,
                 .color = .red,
                 .name = "Enemy Ranger",
                 .warmth = 100,
                 .max_warmth = 100,
                 .is_enemy = true,
-                .school = .public_school, // Grit/aggression
+                .school = .public_school,
                 .player_position = .pitcher,
                 .energy = School.public_school.getMaxEnergy(),
                 .max_energy = School.public_school.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
-            // Enemy 2: Homeschool Animator (Burst Damage + Disruption)
+            // Index 3: Enemy 2 (Homeschool Animator - Burst Damage + Disruption)
             Character{
-                .position = .{ .x = 80, .y = 0, .z = -120 },
+                .id = id_gen.generate(),
+                .position = enemy2_pos,
+                .previous_position = enemy2_pos,
                 .radius = 18,
                 .color = .red,
                 .name = "Enemy Caster",
                 .warmth = 100,
                 .max_warmth = 100,
                 .is_enemy = true,
-                .school = .homeschool, // Sacrifice/power
+                .school = .homeschool,
                 .player_position = .animator,
                 .energy = School.homeschool.getMaxEnergy(),
                 .max_energy = School.homeschool.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
-            // Empty slot
+            // Index 4: Empty slot
             Character{
-                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .id = id_gen.generate(),
+                .position = empty_pos,
+                .previous_position = empty_pos,
                 .radius = 0,
                 .color = .black,
                 .name = "Empty",
@@ -147,9 +160,12 @@ pub const GameState = struct {
             },
         };
 
+        // Store player's entity ID
+        const player_entity_id = entities[0].id;
+
         // Load skills from position definitions for all entities
         for (&entities, 0..) |*ent, i| {
-            if (i >= 3) break; // Skip empty slot
+            if (i >= 4) break; // Skip empty slot (index 4)
             const ent_skills = ent.player_position.getSkills();
             const ent_skill_count = @min(ent_skills.len, character.MAX_SKILLS);
             for (0..ent_skill_count) |skill_idx| {
@@ -180,8 +196,8 @@ pub const GameState = struct {
         }
 
         return GameState{
-            .player = player,
             .entities = entities,
+            .controlled_entity_id = player_entity_id, // Track which entity is "ours"
             .selected_target = null,
             .camera = rl.Camera{
                 .position = .{ .x = 0, .y = 200, .z = 200 },
@@ -190,11 +206,11 @@ pub const GameState = struct {
                 .fovy = 45.0,
                 .projection = .perspective,
             },
-            .delta_time = 0.0,
             .input_state = input.InputState{
                 .action_camera = use_action_camera,
             },
             .ai_states = [_]AIState{
+                .{}, // Player (no AI)
                 .{ .role = .support }, // Ally Thermos - healer/support
                 .{ .role = .damage_dealer }, // Enemy Pitcher - ranged DPS
                 .{ .role = .disruptor }, // Enemy Animator - burst/control
@@ -202,33 +218,76 @@ pub const GameState = struct {
             },
             .rng = rng,
             .combat_state = .active,
+            .entity_id_gen = id_gen,
         };
     }
 
-    pub fn update(self: *GameState) void {
-        self.delta_time = rl.getFrameTime();
-        const delta_time_ms = @as(u32, @intFromFloat(self.delta_time * 1000.0));
-
-        // Update energy regeneration for all entities
-        self.player.updateEnergy(self.delta_time);
-        self.player.updateCooldowns(self.delta_time);
-        self.player.updateConditions(delta_time_ms);
-
+    // Entity lookup helpers for tab-targeting
+    pub fn getEntityById(self: *GameState, id: EntityId) ?*Character {
+        // Search entities array (player is now in here too!)
         for (&self.entities) |*ent| {
-            ent.updateEnergy(self.delta_time);
-            ent.updateCooldowns(self.delta_time);
-            ent.updateConditions(delta_time_ms);
+            if (ent.id == id) return ent;
+        }
+        return null;
+    }
+
+    pub fn getEntityByIdConst(self: *const GameState, id: EntityId) ?*const Character {
+        // Search entities array (player is now in here too!)
+        for (&self.entities) |*ent| {
+            if (ent.id == id) return ent;
+        }
+        return null;
+    }
+
+    // Get the player-controlled entity
+    pub fn getPlayer(self: *GameState) *Character {
+        return self.getEntityById(self.controlled_entity_id).?;
+    }
+
+    pub fn getPlayerConst(self: *const GameState) *const Character {
+        return self.getEntityByIdConst(self.controlled_entity_id).?;
+    }
+
+    pub fn update(self: *GameState) void {
+        const frame_time = rl.getFrameTime();
+
+        // Accumulate time for tick loop
+        self.tick_accumulator += frame_time;
+
+        // Fixed timestep tick loop (love the tick!)
+        // Process game logic at exactly 20Hz (50ms per tick)
+        while (self.tick_accumulator >= TICK_RATE_SEC) {
+            self.processTick();
+            self.tick_accumulator -= TICK_RATE_SEC;
+            self.current_tick += 1;
+        }
+    }
+
+    fn processTick(self: *GameState) void {
+        // ALL game logic runs here at fixed 20Hz tick rate (50ms per tick)
+        // This makes the game deterministic and multiplayer-ready
+
+        // Save previous positions for interpolation BEFORE any movement this tick
+        // Update energy, cooldowns, conditions for ALL entities (including player!)
+        for (&self.entities) |*ent| {
+            ent.previous_position = ent.position;
+            ent.updateEnergy(TICK_RATE_SEC);
+            ent.updateCooldowns(TICK_RATE_SEC);
+            ent.updateConditions(TICK_RATE_MS);
         }
 
-        // Handle input and AI with RNG (only if combat is active)
+        // Handle input and AI (only if combat is active)
         var random_state = self.rng.random();
         if (self.combat_state == .active) {
-            // Get player movement intent from input and apply it
-            const player_movement = input.handleInput(&self.player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state);
-            movement.applyMovement(&self.player, player_movement, &self.entities, null, null);
+            // Get player-controlled entity
+            const player = self.getPlayer();
 
-            // Update AI (which now handles its own movement internally)
-            ai.updateAI(&self.entities, &self.player, self.delta_time, &self.ai_states, &random_state);
+            // Get player movement intent from input and apply it
+            const player_movement = input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state);
+            movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC);
+
+            // Update AI for non-player entities
+            ai.updateAI(&self.entities, self.controlled_entity_id, TICK_RATE_SEC, &self.ai_states, &random_state);
 
             // Finish any completed casts
             self.finishCasts(&random_state);
@@ -243,7 +302,8 @@ pub const GameState = struct {
         if (self.combat_state != .active) return;
 
         // Check if player is dead
-        if (!self.player.isAlive()) {
+        const player = self.getPlayerConst();
+        if (!player.isAlive()) {
             print("=== DEFEAT! ===\n", .{});
             print("Player has been defeated!\n", .{});
             self.combat_state = .defeat;
@@ -268,53 +328,18 @@ pub const GameState = struct {
     }
 
     fn finishCasts(self: *GameState, rng: *std.Random) void {
-
-        // Check player cast completion
-        if (self.player.is_casting and self.player.cast_time_remaining <= 0) {
-            const skill = self.player.skill_bar[self.player.casting_skill_index];
-            var target: ?*Character = null;
-            var target_valid = false;
-
-            if (self.player.cast_target_index) |idx| {
-                if (idx < self.entities.len) {
-                    target = &self.entities[idx];
-                    // Check if target is still alive
-                    if (target.?.isAlive()) {
-                        target_valid = true;
-                    } else {
-                        print("{s}'s target died during cast!\n", .{self.player.name});
-                    }
-                }
-            } else if (skill.?.target_type == .self) {
-                // Self-targeted skills always succeed
-                target_valid = true;
-            }
-
-            if (target_valid) {
-                combat.executeSkill(&self.player, skill.?, target, self.player.casting_skill_index, rng);
-            }
-            self.player.cast_target_index = null;
-        }
-
-        // Check entity cast completions
+        // Check cast completions for ALL entities (including player!)
         for (&self.entities) |*ent| {
             if (ent.is_casting and ent.cast_time_remaining <= 0) {
                 const skill = ent.skill_bar[ent.casting_skill_index];
                 var target: ?*Character = null;
                 var target_valid = false;
 
-                // Entity might be targeting player (index would be out of bounds)
-                if (ent.cast_target_index) |idx| {
-                    if (idx == PLAYER_TARGET_INDEX) {
-                        target = &self.player;
-                        if (target.?.isAlive()) {
-                            target_valid = true;
-                        } else {
-                            print("{s}'s target died during cast!\n", .{ent.name});
-                        }
-                    } else if (idx < self.entities.len) {
-                        target = &self.entities[idx];
-                        if (target.?.isAlive()) {
+                if (ent.cast_target_id) |target_id| {
+                    // Look up target by ID (could be player or another entity)
+                    target = self.getEntityById(target_id);
+                    if (target) |tgt| {
+                        if (tgt.isAlive()) {
                             target_valid = true;
                         } else {
                             print("{s}'s target died during cast!\n", .{ent.name});
@@ -327,16 +352,26 @@ pub const GameState = struct {
                 if (target_valid) {
                     combat.executeSkill(ent, skill.?, target, ent.casting_skill_index, rng);
                 }
-                ent.cast_target_index = null;
+                ent.cast_target_id = null;
             }
         }
     }
 
-    pub fn draw(self: *const GameState) void {
-        render.draw(&self.player, &self.entities, self.selected_target, self.camera);
+    pub fn draw(self: *GameState) void {
+        // Calculate interpolation alpha for smooth rendering between ticks
+        // alpha = 0.0 means just after a tick, alpha = 1.0 means about to tick
+        const alpha = self.tick_accumulator / TICK_RATE_SEC;
+
+        // Update camera to follow interpolated player position (smooth every frame!)
+        const player = self.getPlayerConst();
+        const player_render_pos = player.getInterpolatedPosition(alpha);
+        input.updateCamera(&self.camera, player_render_pos, self.input_state);
+
+        render.draw(player, &self.entities, self.selected_target, self.camera, alpha);
     }
 
     pub fn drawUI(self: *const GameState) void {
-        ui.drawUI(&self.player, &self.entities, self.selected_target, self.input_state, self.camera);
+        const player = self.getPlayerConst();
+        ui.drawUI(player, &self.entities, self.selected_target, self.input_state, self.camera);
     }
 };

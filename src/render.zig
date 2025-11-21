@@ -1,11 +1,13 @@
 const std = @import("std");
 const rl = @import("raylib");
 const character = @import("character.zig");
+const entity_types = @import("entity.zig");
 
 const Character = character.Character;
+const EntityId = entity_types.EntityId;
 const print = std.debug.print;
 
-pub fn draw(player: *const Character, entities: []const Character, selected_target: ?usize, camera: rl.Camera) void {
+pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32) void {
     rl.clearBackground(.dark_gray);
 
     // === 3D RENDERING ===
@@ -14,46 +16,55 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     // Draw ground plane
     rl.drawGrid(20, 50);
 
-    // Draw entities
+    // Draw entities (interpolated for smooth movement)
     for (entities) |ent| {
         // Skip dead entities
         if (!ent.isAlive()) continue;
 
-        // Draw entity as sphere
+        // Draw entity as sphere at interpolated position
+        const render_pos = ent.getInterpolatedPosition(interpolation_alpha);
         const color = if (ent.is_dead) rl.Color.gray else ent.color;
-        rl.drawSphere(ent.position, ent.radius, color);
-        rl.drawSphereWires(ent.position, ent.radius, 8, 8, .black);
+        rl.drawSphere(render_pos, ent.radius, color);
+        rl.drawSphereWires(render_pos, ent.radius, 8, 8, .black);
     }
 
-    // Draw player
+    // Draw player (interpolated)
+    const player_render_pos = player.*.getInterpolatedPosition(interpolation_alpha);
     const player_color = if (player.*.is_dead) rl.Color.gray else player.*.color;
-    rl.drawSphere(player.*.position, player.*.radius, player_color);
-    rl.drawSphereWires(player.*.position, player.*.radius, 8, 8, .black);
+    rl.drawSphere(player_render_pos, player.*.radius, player_color);
+    rl.drawSphereWires(player_render_pos, player.*.radius, 8, 8, .black);
 
     // Draw target selection indicator
-    if (selected_target) |target_index| {
-        if (target_index < entities.len) {
-            const target = entities[target_index];
+    if (selected_target) |target_id| {
+        // Find target by ID
+        var target: ?Character = null;
+        if (player.*.id == target_id) {
+            target = player.*;
+        } else {
+            for (entities) |ent| {
+                if (ent.id == target_id) {
+                    target = ent;
+                    break;
+                }
+            }
+        }
 
+        if (target) |tgt| {
             // Skip if target is dead
-            if (!target.isAlive()) {
+            if (!tgt.isAlive()) {
                 rl.endMode3D();
                 return;
             }
 
-            // Draw selection ring around target
-            const ring_pos = rl.Vector3{
-                .x = target.position.x,
-                .y = target.position.y,
-                .z = target.position.z,
-            };
-            rl.drawCylinder(ring_pos, target.radius + 5, target.radius + 5, 2, 16, .yellow);
+            // Draw selection ring around target (interpolated)
+            const target_render_pos = tgt.getInterpolatedPosition(interpolation_alpha);
+            rl.drawCylinder(target_render_pos, tgt.radius + 5, tgt.radius + 5, 2, 16, .yellow);
 
             // Draw selection arrow above target
             const arrow_pos = rl.Vector3{
-                .x = target.position.x,
-                .y = target.position.y + target.radius + 15,
-                .z = target.position.z,
+                .x = target_render_pos.x,
+                .y = target_render_pos.y + tgt.radius + 15,
+                .z = target_render_pos.z,
             };
             rl.drawCube(arrow_pos, 5, 5, 5, .yellow);
         }
@@ -62,14 +73,15 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     rl.endMode3D();
 
     // === 2D RENDERING (names, labels) ===
-    // Draw entity names
+    // Draw entity names (interpolated positions)
     for (entities) |ent| {
         if (!ent.isAlive()) continue;
 
+        const render_pos = ent.getInterpolatedPosition(interpolation_alpha);
         const name_3d_pos = rl.Vector3{
-            .x = ent.position.x,
-            .y = ent.position.y + ent.radius + 10,
-            .z = ent.position.z,
+            .x = render_pos.x,
+            .y = render_pos.y + ent.radius + 10,
+            .z = render_pos.z,
         };
         const name_2d_pos = rl.getWorldToScreen(name_3d_pos, camera);
 
@@ -82,11 +94,11 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         }
     }
 
-    // Draw player name
+    // Draw player name (interpolated)
     const player_name_3d_pos = rl.Vector3{
-        .x = player.*.position.x,
-        .y = player.*.position.y + player.*.radius + 10,
-        .z = player.*.position.z,
+        .x = player_render_pos.x,
+        .y = player_render_pos.y + player.*.radius + 10,
+        .z = player_render_pos.z,
     };
     const player_name_2d_pos = rl.getWorldToScreen(player_name_3d_pos, camera);
 
