@@ -1,11 +1,12 @@
 const std = @import("std");
+const color_pie = @import("color_pie.zig");
 
 pub const School = enum {
-    private_school,
-    public_school,
-    montessori,
-    homeschool,
-    waldorf,
+    private_school, // White: Order, Privilege, Resources
+    public_school, // Red: Aggression, Grit, Combat
+    montessori, // Green: Adaptation, Variety, Growth
+    homeschool, // Black: Sacrifice, Power, Isolation
+    waldorf, // Blue: Rhythm, Timing, Harmony
 
     // Energy generation rates and mechanics
     pub fn getEnergyRegen(self: School) f32 {
@@ -45,6 +46,37 @@ pub const School = enum {
             .montessori => "Variety Bonus",
             .homeschool => "Sacrifice",
             .waldorf => "Perfect Timing",
+        };
+    }
+
+    // Color pie access methods
+    pub fn getChillAccess(self: School) color_pie.ChillAccess {
+        return color_pie.getChillAccess(self);
+    }
+
+    pub fn getCozyAccess(self: School) color_pie.CozyAccess {
+        return color_pie.getCozyAccess(self);
+    }
+
+    pub fn getSkillTypeAccess(self: School) color_pie.SkillTypeAccess {
+        return color_pie.getSkillTypeAccess(self);
+    }
+
+    pub fn getDamageRange(self: School) color_pie.DamageRange {
+        return color_pie.getDamageRange(self);
+    }
+
+    pub fn getCooldownRange(self: School) color_pie.CooldownRange {
+        return color_pie.getCooldownRange(self);
+    }
+
+    pub fn getColorIdentity(self: School) [:0]const u8 {
+        return switch (self) {
+            .private_school => "White: Order, Privilege, Resources",
+            .public_school => "Red: Aggression, Grit, Combat",
+            .montessori => "Green: Adaptation, Variety, Growth",
+            .homeschool => "Black: Sacrifice, Power, Isolation",
+            .waldorf => "Blue: Rhythm, Timing, Harmony",
         };
     }
 };

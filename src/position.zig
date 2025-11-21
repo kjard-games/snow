@@ -1,16 +1,17 @@
 const std = @import("std");
 const skills = @import("skills.zig");
+const school_mod = @import("school.zig");
 
 pub const Skill = skills.Skill;
+pub const School = school_mod.School;
 
 pub const Position = enum {
-    pitcher,
-    fielder,
-    sledder,
-    shoveler,
-    skater,
-    goalie,
-    summoner,
+    pitcher, // Pure Damage Dealer - the kid with the cannon arm
+    fielder, // Balanced Generalist - athletic all-rounder
+    sledder, // Aggressive Skirmisher - sled charge attacks
+    shoveler, // Tank/Defender - digs in, builds walls
+    animator, // Summoner/Necromancer - brings snowmen to life (Calvin & Hobbes style)
+    thermos, // Healer/Support - brings hot cocoa and hand warmers
 
     pub fn getSkills(self: Position) []const Skill {
         return switch (self) {
@@ -18,9 +19,52 @@ pub const Position = enum {
             .fielder => &fielder_skills,
             .sledder => &sledder_skills,
             .shoveler => &shoveler_skills,
-            .skater => &skater_skills,
-            .goalie => &goalie_skills,
-            .summoner => &summoner_skills,
+            .animator => &animator_skills,
+            .thermos => &thermos_skills,
+        };
+    }
+
+    pub fn getDescription(self: Position) [:0]const u8 {
+        return switch (self) {
+            .pitcher => "Pure Damage Dealer - high damage, long range, fragile",
+            .fielder => "Balanced Generalist - adapts to any situation",
+            .sledder => "Aggressive Skirmisher - high mobility, in-your-face combat",
+            .shoveler => "Tank/Defender - absorbs damage, protects others",
+            .animator => "Summoner/Necromancer - brings grotesque snowmen to life",
+            .thermos => "Healer/Support - shares cocoa, hand warmers, and comfort",
+        };
+    }
+
+    pub fn getPrimarySchools(self: Position) []const School {
+        return switch (self) {
+            .pitcher => &[_]School{ .public_school, .homeschool },
+            .fielder => &[_]School{ .montessori, .public_school },
+            .sledder => &[_]School{ .public_school, .waldorf },
+            .shoveler => &[_]School{ .private_school, .homeschool },
+            .animator => &[_]School{ .homeschool, .waldorf },
+            .thermos => &[_]School{ .waldorf, .private_school },
+        };
+    }
+
+    pub fn getRangeMin(self: Position) f32 {
+        return switch (self) {
+            .pitcher => 200.0,
+            .fielder => 150.0,
+            .sledder => 80.0,
+            .shoveler => 100.0,
+            .animator => 180.0,
+            .thermos => 150.0,
+        };
+    }
+
+    pub fn getRangeMax(self: Position) f32 {
+        return switch (self) {
+            .pitcher => 300.0,
+            .fielder => 220.0,
+            .sledder => 150.0,
+            .shoveler => 160.0,
+            .animator => 240.0,
+            .thermos => 200.0,
         };
     }
 };
@@ -57,26 +101,20 @@ const shoveler_skills = [_]Skill{
     .{ .name = "Pack Snow", .skill_type = .throw, .energy_cost = 7, .damage = 11.0, .cast_range = 160.0 },
 };
 
-// Skater skills - fast, low energy
-const skater_skills = [_]Skill{
-    .{ .name = "Speed Burst", .skill_type = .stance, .energy_cost = 3, .damage = 7.0, .cast_range = 150.0 },
-    .{ .name = "Crossover", .skill_type = .throw, .energy_cost = 4, .damage = 9.0, .cast_range = 140.0 },
-    .{ .name = "Stop-and-Go", .skill_type = .throw, .energy_cost = 5, .damage = 11.0, .cast_range = 160.0 },
-    .{ .name = "Breakaway", .skill_type = .throw, .energy_cost = 6, .damage = 16.0, .cast_range = 190.0 },
+// Animator skills - summons (Calvin & Hobbes grotesque snowmen)
+// TODO: Implement proper summon mechanics
+const animator_skills = [_]Skill{
+    .{ .name = "Deranged Snowman", .skill_type = .trick, .energy_cost = 10, .damage = 8.0, .cast_range = 200.0 },
+    .{ .name = "Snow Family", .skill_type = .trick, .energy_cost = 8, .damage = 12.0, .cast_range = 220.0 },
+    .{ .name = "Abomination", .skill_type = .trick, .energy_cost = 15, .damage = 25.0, .cast_range = 180.0 },
+    .{ .name = "Snowman Sentinel", .skill_type = .trick, .energy_cost = 12, .damage = 15.0, .cast_range = 240.0 },
 };
 
-// Goalie skills - defensive counters
-const goalie_skills = [_]Skill{
-    .{ .name = "Glove Save", .skill_type = .stance, .energy_cost = 4, .damage = 8.0, .cast_range = 120.0 },
-    .{ .name = "Blocker", .skill_type = .stance, .energy_cost = 5, .damage = 10.0, .cast_range = 130.0 },
-    .{ .name = "Butterfly", .skill_type = .stance, .energy_cost = 6, .damage = 7.0, .cast_range = 110.0 },
-    .{ .name = "Poke Check", .skill_type = .throw, .energy_cost = 3, .damage = 12.0, .cast_range = 100.0 },
-};
-
-// Summoner skills - high cost, high damage
-const summoner_skills = [_]Skill{
-    .{ .name = "Call Snowman", .skill_type = .trick, .energy_cost = 10, .damage = 8.0, .cast_range = 200.0 },
-    .{ .name = "Frost Servant", .skill_type = .trick, .energy_cost = 8, .damage = 12.0, .cast_range = 220.0 },
-    .{ .name = "Ice Golem", .skill_type = .trick, .energy_cost = 15, .damage = 25.0, .cast_range = 180.0 },
-    .{ .name = "Winter's Army", .skill_type = .trick, .energy_cost = 12, .damage = 15.0, .cast_range = 240.0 },
+// Thermos skills - healer/support (hot cocoa themed)
+// TODO: Implement proper healing and buff mechanics
+const thermos_skills = [_]Skill{
+    .{ .name = "Share Cocoa", .skill_type = .gesture, .energy_cost = 5, .healing = 20.0, .cast_range = 150.0, .target_type = .ally },
+    .{ .name = "Hand Warmers", .skill_type = .gesture, .energy_cost = 4, .cast_range = 180.0, .target_type = .ally },
+    .{ .name = "Extra Scarf", .skill_type = .gesture, .energy_cost = 6, .cast_range = 160.0, .target_type = .ally },
+    .{ .name = "Cocoa Break", .skill_type = .call, .energy_cost = 10, .healing = 15.0, .cast_range = 200.0, .target_type = .ally, .aoe_type = .area, .aoe_radius = 150.0 },
 };

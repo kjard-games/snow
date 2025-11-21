@@ -27,7 +27,7 @@ pub const GameState = struct {
     pub fn init() GameState {
         // Initialize player with school and position
         const player_school = School.waldorf;
-        const player_position = Position.summoner;
+        const player_position = Position.animator;
 
         var player = Character{
             .position = .{ .x = 0, .y = 0, .z = 0 },
@@ -83,7 +83,7 @@ pub const GameState = struct {
                 .max_warmth = 50,
                 .is_enemy = false,
                 .school = .montessori,
-                .player_position = .skater,
+                .player_position = .thermos,
                 .energy = School.montessori.getMaxEnergy(),
                 .max_energy = School.montessori.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** 8,
