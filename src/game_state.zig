@@ -1,6 +1,6 @@
 const std = @import("std");
 const rl = @import("raylib");
-const entity = @import("entity.zig");
+const character = @import("character.zig");
 const school = @import("school.zig");
 const position = @import("position.zig");
 const input = @import("input.zig");
@@ -8,16 +8,16 @@ const render = @import("render.zig");
 const ui = @import("ui.zig");
 const ai = @import("ai.zig");
 
-const Entity = entity.Entity;
+const Character = character.Character;
 const School = school.School;
 const Position = position.Position;
-const Skill = entity.Skill;
+const Skill = character.Skill;
 const AIState = ai.AIState;
 const print = std.debug.print;
 
 pub const GameState = struct {
-    player: Entity,
-    entities: [4]Entity,
+    player: Character,
+    entities: [4]Character,
     selected_target: ?usize,
     camera: rl.Camera,
     delta_time: f32,
@@ -29,7 +29,7 @@ pub const GameState = struct {
         const player_school = School.waldorf;
         const player_position = Position.summoner;
 
-        var player = Entity{
+        var player = Character{
             .position = .{ .x = 0, .y = 0, .z = 0 },
             .radius = 20,
             .color = .blue,
@@ -58,8 +58,8 @@ pub const GameState = struct {
         print("Player {s} initialized with school: {s}, position: {s}\n", .{ player.name, @tagName(player_school), @tagName(player_position) });
         print("Loaded {d} skills into skill bar\n", .{skill_count});
 
-        const entities = [_]Entity{
-            Entity{
+        const entities = [_]Character{
+            Character{
                 .position = .{ .x = -100, .y = 0, .z = -100 },
                 .radius = 18,
                 .color = .red,
@@ -74,7 +74,7 @@ pub const GameState = struct {
                 .skill_bar = [_]?*const Skill{null} ** 8,
                 .selected_skill = 0,
             },
-            Entity{
+            Character{
                 .position = .{ .x = 100, .y = 0, .z = -100 },
                 .radius = 18,
                 .color = .green,
@@ -89,7 +89,7 @@ pub const GameState = struct {
                 .skill_bar = [_]?*const Skill{null} ** 8,
                 .selected_skill = 0,
             },
-            Entity{
+            Character{
                 .position = .{ .x = 0, .y = 0, .z = -150 },
                 .radius = 18,
                 .color = .red,
@@ -104,7 +104,7 @@ pub const GameState = struct {
                 .skill_bar = [_]?*const Skill{null} ** 8,
                 .selected_skill = 0,
             },
-            Entity{
+            Character{
                 .position = .{ .x = 150, .y = 0, .z = -100 },
                 .radius = 18,
                 .color = .red,

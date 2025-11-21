@@ -1,11 +1,11 @@
 const std = @import("std");
 const rl = @import("raylib");
-const entity = @import("entity.zig");
+const character = @import("character.zig");
 
-const Entity = entity.Entity;
+const Character = character.Character;
 const print = std.debug.print;
 
-pub fn cycleTarget(entities: []const Entity, selected_target: ?usize, forward: bool) ?usize {
+pub fn cycleTarget(entities: []const Character, selected_target: ?usize, forward: bool) ?usize {
     if (entities.len == 0) return null;
 
     if (selected_target == null) {
@@ -34,7 +34,7 @@ pub fn cycleTarget(entities: []const Entity, selected_target: ?usize, forward: b
     return next;
 }
 
-pub fn getNearestEnemy(player: Entity, entities: []const Entity) ?usize {
+pub fn getNearestEnemy(player: Character, entities: []const Character) ?usize {
     var nearest: ?usize = null;
     var min_dist: f32 = std.math.floatMax(f32);
 
@@ -55,7 +55,7 @@ pub fn getNearestEnemy(player: Entity, entities: []const Entity) ?usize {
     return nearest;
 }
 
-pub fn getNearestAlly(player: Entity, entities: []const Entity) ?usize {
+pub fn getNearestAlly(player: Character, entities: []const Character) ?usize {
     var nearest: ?usize = null;
     var min_dist: f32 = std.math.floatMax(f32);
 

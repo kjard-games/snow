@@ -1,11 +1,11 @@
 const std = @import("std");
 const rl = @import("raylib");
-const entity = @import("entity.zig");
+const character = @import("character.zig");
 
-const Entity = entity.Entity;
+const Character = character.Character;
 const print = std.debug.print;
 
-pub fn draw(player: Entity, entities: []const Entity, selected_target: ?usize, camera: rl.Camera) void {
+pub fn draw(player: Character, entities: []const Character, selected_target: ?usize, camera: rl.Camera) void {
     rl.clearBackground(.dark_gray);
 
     rl.beginMode3D(camera);
@@ -26,7 +26,7 @@ pub fn draw(player: Entity, entities: []const Entity, selected_target: ?usize, c
 
         // Debug: print entity positions
         if (i == 0) {
-            print("Entity 0 at ({d:.1}, {d:.1}, {d:.1})\n", .{ ent.position.x, ent.position.y, ent.position.z });
+            print("Character 0 at ({d:.1}, {d:.1}, {d:.1})\n", .{ ent.position.x, ent.position.y, ent.position.z });
         }
 
         // TODO: Fix entity name drawing - getWorldToScreen causing crashes

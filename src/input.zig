@@ -1,11 +1,11 @@
 const std = @import("std");
 const rl = @import("raylib");
-const entity = @import("entity.zig");
+const character = @import("character.zig");
 const targeting = @import("targeting.zig");
 const combat = @import("combat.zig");
 
-const Entity = entity.Entity;
-const Skill = entity.Skill;
+const Character = character.Character;
+const Skill = character.Skill;
 const print = std.debug.print;
 
 pub const InputState = struct {
@@ -15,8 +15,8 @@ pub const InputState = struct {
 };
 
 pub fn handleInput(
-    player: *Entity,
-    entities: []Entity,
+    player: *Character,
+    entities: []Character,
     selected_target: *?usize,
     camera: *rl.Camera,
     input_state: *InputState,
@@ -169,7 +169,7 @@ pub fn handleInput(
     camera.target = player.position;
 }
 
-fn useSkill(player: *Entity, entities: []Entity, selected_target: ?usize, skill_index: u8) void {
+fn useSkill(player: *Character, entities: []Character, selected_target: ?usize, skill_index: u8) void {
     if (skill_index >= player.skill_bar.len) return;
 
     const skill = player.skill_bar[skill_index] orelse {
@@ -178,7 +178,7 @@ fn useSkill(player: *Entity, entities: []Entity, selected_target: ?usize, skill_
     };
 
     // Get target entity
-    var target: ?*Entity = null;
+    var target: ?*Character = null;
     if (selected_target) |idx| {
         if (idx < entities.len) {
             target = &entities[idx];

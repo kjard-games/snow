@@ -1,10 +1,10 @@
 const std = @import("std");
 const rl = @import("raylib");
-const entity = @import("entity.zig");
+const character = @import("character.zig");
 
-const Entity = entity.Entity;
+const Character = character.Character;
 
-pub fn drawUI(player: Entity, entities: []const Entity, selected_target: ?usize, shift_held: bool, camera: rl.Camera) void {
+pub fn drawUI(player: Character, entities: []const Character, selected_target: ?usize, shift_held: bool, camera: rl.Camera) void {
     // Debug info
     const shift_text = if (shift_held) "Shift Held: true" else "Shift Held: false";
     rl.drawText(shift_text, 10, 10, 16, .yellow);
@@ -101,7 +101,7 @@ pub fn drawUI(player: Entity, entities: []const Entity, selected_target: ?usize,
     drawSkillBar(player);
 }
 
-fn drawSkillBar(player: Entity) void {
+fn drawSkillBar(player: Character) void {
     const skill_bar_width = 400;
     const skill_bar_height = 50;
     const skill_size = 40;

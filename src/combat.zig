@@ -1,9 +1,9 @@
 const std = @import("std");
-const entity = @import("entity.zig");
+const character = @import("character.zig");
 const skills = @import("skills.zig");
 
-const Entity = entity.Entity;
-const Skill = entity.Skill;
+const Character = character.Character;
+const Skill = character.Skill;
 const print = std.debug.print;
 
 pub const CastResult = enum {
@@ -15,7 +15,7 @@ pub const CastResult = enum {
     caster_dead,
 };
 
-pub fn castSkill(caster: *Entity, skill: *const Skill, target: ?*Entity) CastResult {
+pub fn castSkill(caster: *Character, skill: *const Skill, target: ?*Character) CastResult {
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
 

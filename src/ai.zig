@@ -1,9 +1,9 @@
 const std = @import("std");
-const entity = @import("entity.zig");
+const character = @import("character.zig");
 const targeting = @import("targeting.zig");
 const combat = @import("combat.zig");
 
-const Entity = entity.Entity;
+const Character = character.Character;
 const print = std.debug.print;
 
 pub const AIState = struct {
@@ -12,8 +12,8 @@ pub const AIState = struct {
 };
 
 pub fn updateAI(
-    entities: []Entity,
-    player: Entity,
+    entities: []Character,
+    player: Character,
     delta_time: f32,
     ai_states: []AIState,
 ) void {
@@ -32,7 +32,7 @@ pub fn updateAI(
         // Time to cast a skill?
         if (ai_state.next_skill_time <= 0) {
             // Find target
-            var target: ?*Entity = null;
+            var target: ?*Character = null;
 
             if (ent.is_enemy) {
                 // Enemies target player
