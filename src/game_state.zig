@@ -159,6 +159,6 @@ pub const GameState = struct {
     }
 
     pub fn drawUI(self: GameState) void {
-        ui.drawUI(self.player, &self.entities, self.selected_target, self.input_state.shift_held, self.camera);
+        ui.drawUI(self.player, &self.entities, self.selected_target, self.input_state, self.camera);
     }
 };

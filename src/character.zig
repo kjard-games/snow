@@ -3,10 +3,12 @@ const rl = @import("raylib");
 const school = @import("school.zig");
 const position = @import("position.zig");
 const skills = @import("skills.zig");
+const equipment = @import("equipment.zig");
 
 pub const School = school.School;
 pub const Position = position.Position;
 pub const Skill = skills.Skill;
+pub const Equipment = equipment.Equipment;
 
 pub const Character = struct {
     position: rl.Vector3,
@@ -20,6 +22,11 @@ pub const Character = struct {
     // Skill system components
     school: School,
     player_position: Position,
+
+    // Equipment system
+    main_hand: ?*const equipment.Equipment = null,
+    off_hand: ?*const equipment.Equipment = null,
+    shield: ?*const equipment.Equipment = null,
 
     // Universal primary resource
     energy: u8,

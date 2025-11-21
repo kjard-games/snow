@@ -1,206 +1,197 @@
 const std = @import("std");
 const rl = @import("raylib");
 const character = @import("character.zig");
+const input = @import("input.zig");
 
 const Character = character.Character;
+const InputState = input.InputState;
 
-pub fn drawUI(player: Character, entities: []const Character, selected_target: ?usize, shift_held: bool, camera: rl.Camera) void {
+pub fn drawUI(player: Character, entities: []const Character, selected_target: ?usize, input_state: InputState, camera: rl.Camera) void {
+    _ = camera; // Suppress unused parameter warning
+
     // Debug info
-    const shift_text = if (shift_held) "Shift Held: true" else "Shift Held: false";
+    const shift_text = if (input_state.shift_held) "Shift Held: true" else "Shift Held: false";
     rl.drawText(shift_text, 10, 10, 16, .yellow);
 
+    // Action Camera indicator
+    if (input_state.action_camera) {
+        rl.drawText("ACTION CAMERA", 10, 30, 16, .orange);
+        // Draw center reticle
+        const screen_width = rl.getScreenWidth();
+        const screen_height = rl.getScreenHeight();
+        const center_x = @divTrunc(screen_width, 2);
+        const center_y = @divTrunc(screen_height, 2);
+
+        // Draw crosshair
+        rl.drawLine(center_x - 10, center_y, center_x + 10, center_y, .white);
+        rl.drawLine(center_x, center_y - 10, center_x, center_y + 10, .white);
+        rl.drawCircleLines(center_x, center_y, 5, .white);
+    }
+
     if (selected_target) |_| {
-        rl.drawText("Target: some", 10, 30, 16, .sky_blue);
+        rl.drawText("Target: some", 10, 50, 16, .sky_blue);
     } else {
-        rl.drawText("Target: null", 10, 30, 16, .sky_blue);
+        rl.drawText("Target: null", 10, 50, 16, .sky_blue);
     }
 
     // Draw controls help
-    rl.drawText("Controls:", 10, 60, 20, .white);
+    rl.drawText("Controls:", 10, 80, 20, .white);
 
     // Show gamepad controls if available
     if (rl.isGamepadAvailable(0)) {
-        rl.drawText("Left Stick: Move", 10, 85, 16, .lime);
-        rl.drawText("Right Stick: Rotate camera", 10, 105, 16, .lime);
-        rl.drawText("Face Buttons: Use skills 1-4", 10, 125, 16, .lime);
-        rl.drawText("Shoulders: Target cycle / skills 5-8", 10, 145, 16, .lime);
-        rl.drawText("Q/E: Select skill", 10, 165, 16, .lime);
-        rl.drawText("(Keyboard: 1-8 skills, Tab target, WASD move)", 10, 185, 14, .dark_gray);
+        rl.drawText("Left Stick: Move", 10, 105, 16, .lime);
+        rl.drawText("Right Stick: Camera (pitch+yaw)", 10, 125, 16, .lime);
+        rl.drawText("Face Buttons: Use skills 1-4", 10, 145, 16, .lime);
+        rl.drawText("Shoulders: Target cycle / skills 5-8", 10, 165, 16, .lime);
     } else {
-        rl.drawText("1-8: Use skills", 10, 85, 16, .light_gray);
-        rl.drawText("Q/E: Select skill", 10, 105, 16, .light_gray);
-        rl.drawText("Tab/Shift+Tab: Cycle targets", 10, 125, 16, .light_gray);
-        rl.drawText("WASD: Move", 10, 145, 16, .light_gray);
-        rl.drawText("Right Mouse: Rotate camera", 10, 165, 16, .light_gray);
+        rl.drawText("1-8: Use skills", 10, 105, 16, .light_gray);
+        rl.drawText("WASD: Move (strafe/backward penalty)", 10, 125, 16, .light_gray);
+        rl.drawText("R: Autorun | X: Quick 180", 10, 145, 16, .light_gray);
+        rl.drawText("C: Toggle Action Camera", 10, 165, 16, .light_gray);
+        rl.drawText("Right Mouse: Camera | Wheel: Zoom", 10, 185, 16, .light_gray);
+        rl.drawText("Left Click: Move/Target", 10, 205, 16, .light_gray);
     }
 
-    rl.drawText("ESC: Exit", 10, 205, 16, .light_gray);
+    rl.drawText("ESC: Exit", 10, 225, 16, .light_gray);
 
     // Draw current target info
     if (selected_target) |target_index| {
         const target = entities[target_index];
-        rl.drawText("Current Target:", 10, 230, 18, .white);
+        rl.drawText("Current Target:", 10, 250, 18, .white);
         // TODO: Fix target.name drawing - string issue
-        rl.drawText("Target Name", 10, 250, 16, target.color);
+        rl.drawText("Target Name", 10, 270, 16, target.color);
 
         const target_type_text = if (target.is_enemy) "Enemy" else "Ally";
-        rl.drawText(target_type_text, 10, 270, 14, .light_gray);
+        rl.drawText(target_type_text, 10, 290, 14, .light_gray);
 
         var warmth_buf: [32]u8 = undefined;
         const warmth_text = std.fmt.bufPrintZ(
             &warmth_buf,
-            "Health: {d:.0}/{d:.0}",
+            "Warmth: {d}/{d}",
             .{ target.warmth, target.max_warmth },
-        ) catch "Health: ???";
-        rl.drawText(warmth_text, 10, 250, 14, .light_gray);
-    }
+        ) catch "Warmth: ???";
+        rl.drawText(warmth_text, 10, 310, 14, .light_gray);
 
-    // Draw warmth bars in 2D overlay
-    for (entities) |ent| {
-        // Skip dead entities
-        if (!ent.isAlive()) continue;
-
-        const warmth_percentage = ent.warmth / ent.max_warmth;
-        const warmth_bar_width = 40;
-        const warmth_bar_height = 4;
-
-        // Convert 3D position to 2D screen coordinates
-        const screen_pos = rl.getWorldToScreen(ent.position, camera);
-
-        // Only draw if on screen and valid coordinates
-        const screen_width = @as(f32, @floatFromInt(rl.getScreenWidth()));
-        const screen_height = @as(f32, @floatFromInt(rl.getScreenHeight()));
-        if (screen_pos.x >= 0 and screen_pos.x < screen_width and
-            screen_pos.y >= 0 and screen_pos.y < screen_height and
-            std.math.isFinite(screen_pos.x) and std.math.isFinite(screen_pos.y))
-        {
-            const warmth_bar_pos = rl.Rectangle{
-                .x = screen_pos.x - warmth_bar_width / 2,
-                .y = screen_pos.y - 30,
-                .width = warmth_bar_width,
-                .height = warmth_bar_height,
-            };
-
-            // Health bar background
-            rl.drawRectangleRec(warmth_bar_pos, .black);
-
-            // Health bar fill
-            rl.drawRectangleRec(
-                rl.Rectangle{
-                    .x = warmth_bar_pos.x,
-                    .y = warmth_bar_pos.y,
-                    .width = warmth_bar_width * warmth_percentage,
-                    .height = warmth_bar_height,
-                },
-                if (ent.is_dead) rl.Color.gray else if (ent.is_enemy) rl.Color.red else rl.Color.green,
-            );
-        }
+        var energy_buf: [32]u8 = undefined;
+        const energy_text = std.fmt.bufPrintZ(
+            &energy_buf,
+            "Energy: {d}/{d}",
+            .{ target.energy, target.max_energy },
+        ) catch "Energy: ???";
+        rl.drawText(energy_text, 10, 330, 14, .light_gray);
     }
 
     // Draw skill bar
     drawSkillBar(player);
+
+    // Draw secondary info (bottom right)
+    const secondary_x = 800;
+    const secondary_y = 500;
+
+    // Draw player info
+    var energy_buf: [32]u8 = undefined;
+    const energy_text = std.fmt.bufPrintZ(
+        &energy_buf,
+        "Energy: {d}/{d}",
+        .{ player.energy, player.max_energy },
+    ) catch "Energy: ???";
+    rl.drawText(energy_text, secondary_x, secondary_y, 16, .red);
+
+    var warmth_buf: [32]u8 = undefined;
+    const warmth_text = std.fmt.bufPrintZ(
+        &warmth_buf,
+        "Warmth: {d}/{d}",
+        .{ player.warmth, player.max_warmth },
+    ) catch "Warmth: ???";
+    rl.drawText(warmth_text, secondary_x, secondary_y + 20, 16, .orange);
+
+    // Draw school info
+    const school_name = @tagName(player.school);
+    rl.drawText(school_name, secondary_x, secondary_y + 40, 12, .light_gray);
 }
 
 fn drawSkillBar(player: Character) void {
-    const skill_bar_width = 400;
-    const skill_bar_height = 50;
-    const skill_size = 40;
-    const skill_spacing = 5;
-    const start_x = @as(f32, @floatFromInt(rl.getScreenWidth())) / 2.0 - @as(f32, @floatFromInt(skill_bar_width)) / 2.0;
-    const start_y = @as(f32, @floatFromInt(rl.getScreenHeight())) - 80.0;
+    const start_x: f32 = 300;
+    const start_y: f32 = 500;
+    const skill_size: f32 = 40;
+    const skill_spacing: f32 = 10;
+    const skill_bar_height: f32 = 60;
 
-    // Draw skill bar background
-    rl.drawRectangle(@intFromFloat(start_x - 5), @intFromFloat(start_y - 5), @intFromFloat(skill_bar_width + 10), @intFromFloat(skill_bar_height + 10), .black);
+    // Draw background for skill bar
+    rl.drawRectangle(@intFromFloat(start_x - 10), @intFromFloat(start_y - 10), 400, @intFromFloat(skill_bar_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 50 });
 
-    for (player.skill_bar, 0..) |maybe_skill, i| {
+    // Draw skill slots 1-4 (main row)
+    for (0..4) |i| {
         const skill_x = start_x + @as(f32, @floatFromInt(i)) * (skill_size + skill_spacing);
         const skill_y = start_y;
 
         // Draw skill slot
-        const slot_color: rl.Color = if (i == player.selected_skill) .yellow else .dark_gray;
-        rl.drawRectangleLines(@intFromFloat(skill_x), @intFromFloat(skill_y), @intFromFloat(skill_size), @intFromFloat(skill_size), slot_color);
+        rl.drawRectangleLines(@intFromFloat(skill_x), @intFromFloat(skill_y), @intFromFloat(skill_size), @intFromFloat(skill_size), .white);
 
-        if (maybe_skill) |skill| {
-            // Draw skill background
-            const skill_color: rl.Color = .blue;
-            rl.drawRectangle(@intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), @intFromFloat(skill_size - 4), @intFromFloat(skill_size - 4), skill_color);
+        // Draw skill number
+        var num_buf: [8]u8 = undefined;
+        const num_text = std.fmt.bufPrintZ(&num_buf, "{}", .{i + 1}) catch "?";
+        rl.drawText(num_text, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, .white);
 
-            // Draw skill name
-            rl.drawText(skill.name, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, .white);
-        } else {
-            // Empty slot
-            rl.drawRectangle(@intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), @intFromFloat(skill_size - 4), @intFromFloat(skill_size - 4), .dark_gray);
-            var key_buf: [8]u8 = undefined;
-            const key_text = std.fmt.bufPrintZ(&key_buf, "{d}", .{i + 1}) catch "?";
-            rl.drawText(key_text, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, .white);
+        // Draw skill name if available
+        if (player.skill_bar[i]) |skill| {
+            rl.drawText(skill.name, @intFromFloat(skill_x + 15), @intFromFloat(skill_y + 15), 8, .yellow);
         }
     }
 
-    // Draw player resources
-    const resource_y = start_y + skill_bar_height + 15;
+    // Draw skill slots 5-8 (secondary row, below)
+    for (0..4) |i| {
+        const skill_x = start_x + @as(f32, @floatFromInt(i)) * (skill_size + skill_spacing);
+        const skill_y = start_y + skill_size + skill_spacing;
 
-    // Primary resource bar (Universal Energy)
-    const resource_name = switch (player.school) {
-        .private_school => "Allowance",
-        .public_school => "Grit",
-        .montessori => "Focus",
-        .homeschool => "Life Force",
-        .waldorf => "Rhythm",
-    };
-    rl.drawText(resource_name, @intFromFloat(start_x), @intFromFloat(resource_y), 16, .white);
-    rl.drawRectangle(@intFromFloat(start_x + 80), @intFromFloat(resource_y), 100, 16, .black);
-    rl.drawRectangle(@intFromFloat(start_x + 80), @intFromFloat(resource_y), @intFromFloat(@as(f32, @floatFromInt(player.energy)) / @as(f32, @floatFromInt(player.max_energy)) * 100), 16, .blue);
-    var energy_buf: [16]u8 = undefined;
-    const energy_text = std.fmt.bufPrintZ(&energy_buf, "{d}/{d}", .{ player.energy, player.max_energy }) catch "?";
-    rl.drawText(energy_text, @intFromFloat(start_x + 185), @intFromFloat(resource_y), 14, .white);
+        // Draw skill slot
+        rl.drawRectangleLines(@intFromFloat(skill_x), @intFromFloat(skill_y), @intFromFloat(skill_size), @intFromFloat(skill_size), .gray);
 
-    // Secondary mechanic display
-    const secondary_y = resource_y + 20;
-    const secondary_name = switch (player.school) {
-        .private_school => "Steady Income",
-        .public_school => "Grit Stacks",
-        .montessori => "Variety Bonus",
-        .homeschool => "Sacrifice",
-        .waldorf => "Perfect Timing",
-    };
-    rl.drawText(secondary_name, @intFromFloat(start_x), @intFromFloat(secondary_y), 12, .light_gray);
+        // Draw skill number
+        var num_buf: [8]u8 = undefined;
+        const num_text = std.fmt.bufPrintZ(&num_buf, "{}", .{i + 5}) catch "?";
+        rl.drawText(num_text, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, .gray);
 
-    // Display school-specific secondary state
-    switch (player.school) {
-        .private_school => {
-            const regen = player.school.getEnergyRegen();
-            var regen_buf: [32]u8 = undefined;
-            const regen_text = std.fmt.bufPrintZ(&regen_buf, "+{d:.1}/sec", .{regen}) catch "?";
-            rl.drawText(regen_text, @intFromFloat(start_x + 110), @intFromFloat(secondary_y), 12, .green);
-        },
-        .public_school => {
-            var grit_buf: [16]u8 = undefined;
-            const grit_text = std.fmt.bufPrintZ(&grit_buf, "{d}/{d}", .{ player.grit_stacks, player.max_grit_stacks }) catch "?";
-            rl.drawText(grit_text, @intFromFloat(start_x + 110), @intFromFloat(secondary_y), 12, .red);
-        },
-        .montessori => {
-            var variety_buf: [16]u8 = undefined;
-            const variety_pct = @as(u8, @intFromFloat(player.variety_bonus_damage * 100));
-            const variety_text = std.fmt.bufPrintZ(&variety_buf, "+{d}% dmg", .{variety_pct}) catch "?";
-            rl.drawText(variety_text, @intFromFloat(start_x + 110), @intFromFloat(secondary_y), 12, .orange);
-        },
-        .homeschool => {
-            if (player.sacrifice_cooldown > 0) {
-                var cd_buf: [16]u8 = undefined;
-                const cd_text = std.fmt.bufPrintZ(&cd_buf, "CD: {d:.1}s", .{player.sacrifice_cooldown}) catch "?";
-                rl.drawText(cd_text, @intFromFloat(start_x + 110), @intFromFloat(secondary_y), 12, .gray);
-            } else {
-                rl.drawText("Ready!", @intFromFloat(start_x + 110), @intFromFloat(secondary_y), 12, .green);
-            }
-        },
-        .waldorf => {
-            var rhythm_buf: [16]u8 = undefined;
-            const rhythm_text = std.fmt.bufPrintZ(&rhythm_buf, "{d}/{d}", .{ player.rhythm_charge, player.max_rhythm_charge }) catch "?";
-            rl.drawText(rhythm_text, @intFromFloat(start_x + 110), @intFromFloat(secondary_y), 12, .purple);
-        },
+        // Draw skill name if available
+        if (player.skill_bar[i + 4]) |skill| {
+            rl.drawText(skill.name, @intFromFloat(skill_x + 15), @intFromFloat(skill_y + 15), 8, .yellow);
+        }
     }
 
-    // Draw school info
-    const school_name = @tagName(player.school);
-    rl.drawText(school_name, 10, @intFromFloat(secondary_y + 20), 12, .light_gray);
+    // Draw equipment slots (slots 4-7)
+    const equip_start_y = start_y + skill_bar_height + 10;
+    rl.drawText("Equipment:", @intFromFloat(start_x), @intFromFloat(equip_start_y), 12, .white);
+
+    // Main hand (slot 4)
+    const main_hand_x = start_x;
+    const main_hand_y = equip_start_y + 20;
+    rl.drawText("Main:", @intFromFloat(main_hand_x), @intFromFloat(main_hand_y), 10, .white);
+    rl.drawRectangleLines(@intFromFloat(main_hand_x + 50), @intFromFloat(main_hand_y), @intFromFloat(skill_size), @intFromFloat(skill_size), .dark_gray);
+    if (player.main_hand) |equip| {
+        rl.drawText(equip.name, @intFromFloat(main_hand_x + 52), @intFromFloat(main_hand_y + 2), 10, .white);
+    } else {
+        rl.drawText("Empty", @intFromFloat(main_hand_x + 52), @intFromFloat(main_hand_y + 2), 10, .gray);
+    }
+
+    // Off hand (slot 5)
+    const off_hand_x = start_x + 120;
+    const off_hand_y = equip_start_y + 20;
+    rl.drawText("Off:", @intFromFloat(off_hand_x), @intFromFloat(off_hand_y), 10, .white);
+    rl.drawRectangleLines(@intFromFloat(off_hand_x + 50), @intFromFloat(off_hand_y), @intFromFloat(skill_size), @intFromFloat(skill_size), .dark_gray);
+    if (player.off_hand) |equip| {
+        rl.drawText(equip.name, @intFromFloat(off_hand_x + 52), @intFromFloat(off_hand_y + 2), 10, .white);
+    } else {
+        rl.drawText("Empty", @intFromFloat(off_hand_x + 52), @intFromFloat(off_hand_y + 2), 10, .gray);
+    }
+
+    // Shield (slot 6)
+    const shield_x = start_x + 240;
+    const shield_y = equip_start_y + 20;
+    rl.drawText("Shield:", @intFromFloat(shield_x), @intFromFloat(shield_y), 10, .white);
+    rl.drawRectangleLines(@intFromFloat(shield_x + 50), @intFromFloat(shield_y), @intFromFloat(skill_size), @intFromFloat(skill_size), .dark_gray);
+    if (player.shield) |equip| {
+        rl.drawText(equip.name, @intFromFloat(shield_x + 52), @intFromFloat(shield_y + 2), 10, .white);
+    } else {
+        rl.drawText("Empty", @intFromFloat(shield_x + 52), @intFromFloat(shield_y + 2), 10, .gray);
+    }
 }
