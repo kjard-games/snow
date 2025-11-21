@@ -121,6 +121,19 @@ pub const GameState = struct {
             },
         };
 
+        // Check if gamepad is available and default to Action Camera if so
+        const has_gamepad = rl.isGamepadAvailable(0);
+        const use_action_camera = has_gamepad;
+
+        // Set cursor state based on Action Camera
+        if (use_action_camera) {
+            rl.disableCursor();
+            print("Gamepad detected - Action Camera enabled by default\n", .{});
+        } else {
+            rl.enableCursor();
+            print("Keyboard/Mouse mode - Action Camera disabled by default\n", .{});
+        }
+
         return GameState{
             .player = player,
             .entities = entities,
@@ -133,18 +146,26 @@ pub const GameState = struct {
                 .projection = .perspective,
             },
             .delta_time = 0.0,
-            .input_state = .{},
+            .input_state = input.InputState{
+                .action_camera = use_action_camera,
+            },
             .ai_states = [_]AIState{.{}} ** 4,
         };
     }
 
     pub fn update(self: *GameState) void {
         self.delta_time = rl.getFrameTime();
+        const delta_time_ms = @as(u32, @intFromFloat(self.delta_time * 1000.0));
 
         // Update energy regeneration for all entities
         self.player.updateEnergy(self.delta_time);
+        self.player.updateCooldowns(self.delta_time);
+        self.player.updateConditions(delta_time_ms);
+
         for (&self.entities) |*ent| {
             ent.updateEnergy(self.delta_time);
+            ent.updateCooldowns(self.delta_time);
+            ent.updateConditions(delta_time_ms);
         }
 
         // Update AI

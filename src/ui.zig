@@ -39,7 +39,7 @@ pub fn drawUI(player: Character, entities: []const Character, selected_target: ?
 
     // Show gamepad controls if available
     if (rl.isGamepadAvailable(0)) {
-        rl.drawText("Left Stick: Move", 10, 105, 16, .lime);
+        rl.drawText("Left Stick: Move | Click: Action Cam", 10, 105, 16, .lime);
         rl.drawText("Right Stick: Camera (pitch+yaw)", 10, 125, 16, .lime);
         rl.drawText("Face Buttons: Use skills 1-4", 10, 145, 16, .lime);
         rl.drawText("Shoulders: Target cycle / skills 5-8", 10, 165, 16, .lime);
@@ -110,6 +110,58 @@ pub fn drawUI(player: Character, entities: []const Character, selected_target: ?
     rl.drawText(school_name, secondary_x, secondary_y + 40, 12, .light_gray);
 }
 
+fn drawSkillSlot(player: Character, index: usize, base_x: f32, base_y: f32, size: f32, spacing: f32, is_main_row: bool) void {
+    const i_mod = index % 4;
+    const skill_x = base_x + @as(f32, @floatFromInt(i_mod)) * (size + spacing);
+    const skill_y = base_y;
+
+    const border_color = if (is_main_row) rl.Color.white else rl.Color.gray;
+
+    // Draw skill slot background
+    const bg_color = if (player.skill_cooldowns[index] > 0)
+        rl.Color{ .r = 40, .g = 40, .b = 40, .a = 200 }
+    else
+        rl.Color{ .r = 0, .g = 0, .b = 0, .a = 100 };
+    rl.drawRectangle(@intFromFloat(skill_x), @intFromFloat(skill_y), @intFromFloat(size), @intFromFloat(size), bg_color);
+
+    // Draw border - highlight if currently casting this skill
+    const is_casting_this = player.is_casting and player.casting_skill_index == index;
+    const final_border = if (is_casting_this) rl.Color.orange else border_color;
+    rl.drawRectangleLines(@intFromFloat(skill_x), @intFromFloat(skill_y), @intFromFloat(size), @intFromFloat(size), final_border);
+
+    // Draw skill number
+    var num_buf: [8]u8 = undefined;
+    const num_text = std.fmt.bufPrintZ(&num_buf, "{}", .{index + 1}) catch "?";
+    const num_color = if (is_main_row) rl.Color.white else rl.Color.gray;
+    rl.drawText(num_text, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, num_color);
+
+    // Draw skill name if available
+    if (player.skill_bar[index]) |skill| {
+        const name_color = if (player.skill_cooldowns[index] > 0) rl.Color.dark_gray else rl.Color.yellow;
+        rl.drawText(skill.name, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 25), 6, name_color);
+
+        // Draw cooldown overlay
+        if (player.skill_cooldowns[index] > 0) {
+            const cooldown_total = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
+            const cooldown_progress = player.skill_cooldowns[index] / cooldown_total;
+            const overlay_height = size * cooldown_progress;
+
+            rl.drawRectangle(@intFromFloat(skill_x), @intFromFloat(skill_y + (size - overlay_height)), @intFromFloat(size), @intFromFloat(overlay_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 150 });
+
+            // Draw cooldown time
+            var cd_buf: [8]u8 = undefined;
+            const cd_text = std.fmt.bufPrintZ(&cd_buf, "{d:.1}", .{player.skill_cooldowns[index]}) catch "?";
+            rl.drawText(cd_text, @intFromFloat(skill_x + 10), @intFromFloat(skill_y + 15), 12, .red);
+        }
+
+        // Draw energy cost
+        var cost_buf: [8]u8 = undefined;
+        const cost_text = std.fmt.bufPrintZ(&cost_buf, "{d}", .{skill.energy_cost}) catch "?";
+        const cost_color = if (player.energy >= skill.energy_cost) rl.Color.sky_blue else rl.Color.red;
+        rl.drawText(cost_text, @intFromFloat(skill_x + size - 15), @intFromFloat(skill_y + 2), 10, cost_color);
+    }
+}
+
 fn drawSkillBar(player: Character) void {
     const start_x: f32 = 300;
     const start_y: f32 = 500;
@@ -120,42 +172,32 @@ fn drawSkillBar(player: Character) void {
     // Draw background for skill bar
     rl.drawRectangle(@intFromFloat(start_x - 10), @intFromFloat(start_y - 10), 400, @intFromFloat(skill_bar_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 50 });
 
+    // Draw casting bar if casting
+    if (player.is_casting) {
+        const casting_skill = player.skill_bar[player.casting_skill_index];
+        if (casting_skill) |skill| {
+            const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
+            const progress = 1.0 - (player.cast_time_remaining / cast_time_total);
+
+            // Draw casting bar above skill bar
+            const cast_bar_y = start_y - 30;
+            const cast_bar_width: f32 = 400;
+            rl.drawRectangleLines(@intFromFloat(start_x), @intFromFloat(cast_bar_y), @intFromFloat(cast_bar_width), 15, .white);
+            rl.drawRectangle(@intFromFloat(start_x + 2), @intFromFloat(cast_bar_y + 2), @intFromFloat((cast_bar_width - 4) * progress), 11, .yellow);
+
+            // Show skill name being cast
+            rl.drawText(skill.name, @intFromFloat(start_x + 5), @intFromFloat(cast_bar_y - 18), 12, .white);
+        }
+    }
+
     // Draw skill slots 1-4 (main row)
     for (0..4) |i| {
-        const skill_x = start_x + @as(f32, @floatFromInt(i)) * (skill_size + skill_spacing);
-        const skill_y = start_y;
-
-        // Draw skill slot
-        rl.drawRectangleLines(@intFromFloat(skill_x), @intFromFloat(skill_y), @intFromFloat(skill_size), @intFromFloat(skill_size), .white);
-
-        // Draw skill number
-        var num_buf: [8]u8 = undefined;
-        const num_text = std.fmt.bufPrintZ(&num_buf, "{}", .{i + 1}) catch "?";
-        rl.drawText(num_text, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, .white);
-
-        // Draw skill name if available
-        if (player.skill_bar[i]) |skill| {
-            rl.drawText(skill.name, @intFromFloat(skill_x + 15), @intFromFloat(skill_y + 15), 8, .yellow);
-        }
+        drawSkillSlot(player, i, start_x, start_y, skill_size, skill_spacing, true);
     }
 
     // Draw skill slots 5-8 (secondary row, below)
     for (0..4) |i| {
-        const skill_x = start_x + @as(f32, @floatFromInt(i)) * (skill_size + skill_spacing);
-        const skill_y = start_y + skill_size + skill_spacing;
-
-        // Draw skill slot
-        rl.drawRectangleLines(@intFromFloat(skill_x), @intFromFloat(skill_y), @intFromFloat(skill_size), @intFromFloat(skill_size), .gray);
-
-        // Draw skill number
-        var num_buf: [8]u8 = undefined;
-        const num_text = std.fmt.bufPrintZ(&num_buf, "{}", .{i + 5}) catch "?";
-        rl.drawText(num_text, @intFromFloat(skill_x + 2), @intFromFloat(skill_y + 2), 10, .gray);
-
-        // Draw skill name if available
-        if (player.skill_bar[i + 4]) |skill| {
-            rl.drawText(skill.name, @intFromFloat(skill_x + 15), @intFromFloat(skill_y + 15), 8, .yellow);
-        }
+        drawSkillSlot(player, i + 4, start_x, start_y + skill_size + skill_spacing, skill_size, skill_spacing, false);
     }
 
     // Draw equipment slots (slots 4-7)

@@ -309,8 +309,16 @@ pub fn handleInput(
     }
 
     // === CAMERA SYSTEM ===
-    // Toggle Action Camera mode with C key
+    // Toggle Action Camera mode with C key or gamepad L3 (left stick click)
+    var toggle_action_camera = false;
     if (rl.isKeyPressed(.c)) {
+        toggle_action_camera = true;
+    }
+    if (rl.isGamepadAvailable(0) and rl.isGamepadButtonPressed(0, .left_thumb)) {
+        toggle_action_camera = true;
+    }
+
+    if (toggle_action_camera) {
         input_state.action_camera = !input_state.action_camera;
         if (input_state.action_camera) {
             rl.disableCursor();
@@ -384,10 +392,10 @@ pub fn handleInput(
 fn useSkill(player: *Character, entities: []Character, selected_target: ?usize, skill_index: u8) void {
     if (skill_index >= player.skill_bar.len) return;
 
-    const skill = player.skill_bar[skill_index] orelse {
+    if (player.skill_bar[skill_index] == null) {
         print("No skill in slot {d}\n", .{skill_index});
         return;
-    };
+    }
 
     // Get target entity
     var target: ?*Character = null;
@@ -397,5 +405,5 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?usize, 
         }
     }
 
-    _ = combat.castSkill(player, skill, target);
+    _ = combat.tryStartCast(player, skill_index, target);
 }

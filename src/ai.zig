@@ -46,10 +46,10 @@ pub fn updateAI(
 
             // Try to cast first available skill
             if (target) |tgt| {
-                for (ent.skill_bar) |maybe_skill| {
-                    if (maybe_skill) |skill| {
-                        const result = combat.castSkill(ent, skill, tgt);
-                        if (result == .success) {
+                for (ent.skill_bar, 0..) |maybe_skill, skill_index| {
+                    if (maybe_skill) |_| {
+                        const result = combat.tryStartCast(ent, @intCast(skill_index), tgt);
+                        if (result == .success or result == .casting_started) {
                             // Reset AI timer
                             ai_state.next_skill_time = ai_state.skill_cooldown;
                             break;
