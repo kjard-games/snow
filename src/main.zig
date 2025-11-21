@@ -3,7 +3,7 @@ const game_state = @import("game_state.zig");
 
 const GameState = game_state.GameState;
 
-pub fn main() anyerror!void {
+pub fn main() void {
     const screenWidth = 800;
     const screenHeight = 600;
 

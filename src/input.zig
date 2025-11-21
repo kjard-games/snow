@@ -26,6 +26,7 @@ pub fn handleInput(
     selected_target: *?usize,
     camera: *rl.Camera,
     input_state: *InputState,
+    rng: *std.Random,
 ) void {
     // Track Shift key state
     if (rl.isKeyPressed(.left_shift)) {
@@ -38,37 +39,37 @@ pub fn handleInput(
     // Face buttons for skills (1-4)
     if (rl.isGamepadAvailable(0)) {
         if (rl.isGamepadButtonPressed(0, .right_face_down)) { // A button
-            useSkill(player, entities, selected_target.*, 0);
+            useSkill(player, entities, selected_target.*, 0, rng);
         }
         if (rl.isGamepadButtonPressed(0, .right_face_right)) { // B button
-            useSkill(player, entities, selected_target.*, 1);
+            useSkill(player, entities, selected_target.*, 1, rng);
         }
         if (rl.isGamepadButtonPressed(0, .right_face_left)) { // X button
-            useSkill(player, entities, selected_target.*, 2);
+            useSkill(player, entities, selected_target.*, 2, rng);
         }
         if (rl.isGamepadButtonPressed(0, .right_face_up)) { // Y button
-            useSkill(player, entities, selected_target.*, 3);
+            useSkill(player, entities, selected_target.*, 3, rng);
         }
 
         // Shoulder buttons for skills 5-8
         if (rl.isGamepadButtonPressed(0, .right_trigger_1)) { // RB
-            useSkill(player, entities, selected_target.*, 4);
+            useSkill(player, entities, selected_target.*, 4, rng);
         }
         if (rl.isGamepadButtonPressed(0, .left_trigger_1)) { // LB
-            useSkill(player, entities, selected_target.*, 5);
+            useSkill(player, entities, selected_target.*, 5, rng);
         }
         // Could use trigger pulls for skills 6-7
     }
 
     // Keyboard skill usage (1-8 keys)
-    if (rl.isKeyPressed(.one)) useSkill(player, entities, selected_target.*, 0);
-    if (rl.isKeyPressed(.two)) useSkill(player, entities, selected_target.*, 1);
-    if (rl.isKeyPressed(.three)) useSkill(player, entities, selected_target.*, 2);
-    if (rl.isKeyPressed(.four)) useSkill(player, entities, selected_target.*, 3);
-    if (rl.isKeyPressed(.five)) useSkill(player, entities, selected_target.*, 4);
-    if (rl.isKeyPressed(.six)) useSkill(player, entities, selected_target.*, 5);
-    if (rl.isKeyPressed(.seven)) useSkill(player, entities, selected_target.*, 6);
-    if (rl.isKeyPressed(.eight)) useSkill(player, entities, selected_target.*, 7);
+    if (rl.isKeyPressed(.one)) useSkill(player, entities, selected_target.*, 0, rng);
+    if (rl.isKeyPressed(.two)) useSkill(player, entities, selected_target.*, 1, rng);
+    if (rl.isKeyPressed(.three)) useSkill(player, entities, selected_target.*, 2, rng);
+    if (rl.isKeyPressed(.four)) useSkill(player, entities, selected_target.*, 3, rng);
+    if (rl.isKeyPressed(.five)) useSkill(player, entities, selected_target.*, 4, rng);
+    if (rl.isKeyPressed(.six)) useSkill(player, entities, selected_target.*, 5, rng);
+    if (rl.isKeyPressed(.seven)) useSkill(player, entities, selected_target.*, 6, rng);
+    if (rl.isKeyPressed(.eight)) useSkill(player, entities, selected_target.*, 7, rng);
 
     // Skill selection (for UI/highlighting)
     if (rl.isKeyPressed(.q)) {
@@ -267,9 +268,12 @@ pub fn handleInput(
 
         // Check for double-click on same target
         const current_time = @as(f32, @floatCast(rl.getTime()));
-        const is_double_click = (current_time - input_state.last_click_time) < 0.3 and
-            clicked_entity != null and
-            clicked_entity.? == input_state.last_click_target.?;
+        const is_double_click = if (clicked_entity) |ce| blk: {
+            if (input_state.last_click_target) |lct| {
+                break :blk (current_time - input_state.last_click_time) < 0.3 and ce == lct;
+            }
+            break :blk false;
+        } else false;
 
         if (clicked_entity) |entity_idx| {
             // Clicked on an entity - target it
@@ -386,10 +390,20 @@ pub fn handleInput(
     const cam_z = player.position.z + @cos(input_state.camera_angle) * horizontal_distance;
 
     camera.position = .{ .x = cam_x, .y = cam_height, .z = cam_z };
-    camera.target = player.position;
+
+    // Offset camera target up and slightly to the side for over-shoulder view
+    // This prevents the reticle from aiming through the player character
+    const target_offset_y: f32 = 50.0; // Height offset (up)
+    const target_offset_x: f32 = 20.0; // Shoulder offset (right)
+
+    camera.target = .{
+        .x = player.position.x + target_offset_x,
+        .y = player.position.y + target_offset_y,
+        .z = player.position.z,
+    };
 }
 
-fn useSkill(player: *Character, entities: []Character, selected_target: ?usize, skill_index: u8) void {
+fn useSkill(player: *Character, entities: []Character, selected_target: ?usize, skill_index: u8, rng: *std.Random) void {
     if (skill_index >= player.skill_bar.len) return;
 
     if (player.skill_bar[skill_index] == null) {
@@ -405,5 +419,5 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?usize, 
         }
     }
 
-    _ = combat.tryStartCast(player, skill_index, target);
+    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng);
 }

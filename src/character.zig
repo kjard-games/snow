@@ -5,10 +5,19 @@ const position = @import("position.zig");
 const skills = @import("skills.zig");
 const equipment = @import("equipment.zig");
 
+const print = std.debug.print;
+
 pub const School = school.School;
 pub const Position = position.Position;
 pub const Skill = skills.Skill;
 pub const Equipment = equipment.Equipment;
+
+// Character configuration constants
+pub const MAX_SKILLS: usize = 8;
+pub const MAX_ACTIVE_CONDITIONS: usize = 10;
+pub const MAX_RECENT_SKILLS: usize = 5;
+pub const MAX_GRIT_STACKS: u8 = 5;
+pub const MAX_RHYTHM_CHARGE: u8 = 10;
 
 pub const Character = struct {
     position: rl.Vector3,
@@ -31,13 +40,14 @@ pub const Character = struct {
     // Universal primary resource
     energy: u8,
     max_energy: u8,
+    energy_accumulator: f32 = 0.0, // Tracks fractional energy for smooth regen
 
     // School-specific secondary mechanics
     // Private School: Passive regen (no extra state needed)
 
     // Public School: Grit stacks
     grit_stacks: u8 = 0, // Every 5 stacks = free skill
-    max_grit_stacks: u8 = 5,
+    max_grit_stacks: u8 = MAX_GRIT_STACKS,
 
     // Homeschool: Warmth-to-Energy conversion (cooldown tracker)
     sacrifice_cooldown: f32 = 0.0, // seconds until can sacrifice again
@@ -45,27 +55,28 @@ pub const Character = struct {
     // Waldorf: Rhythm timing
     rhythm_charge: u8 = 0, // 0-10, builds with skill casts
     rhythm_perfect_window: f32 = 0.0, // timing window tracker
-    max_rhythm_charge: u8 = 10,
+    max_rhythm_charge: u8 = MAX_RHYTHM_CHARGE,
 
     // Montessori: Skill variety bonus
-    last_skills_used: [5]?u8 = [_]?u8{null} ** 5, // tracks last 5 skills
+    last_skills_used: [MAX_RECENT_SKILLS]?u8 = [_]?u8{null} ** MAX_RECENT_SKILLS, // tracks last 5 skills
     variety_bonus_damage: f32 = 0.0, // 0.0 to 0.5 (0% to 50% bonus)
 
-    skill_bar: [8]?*const Skill,
+    skill_bar: [MAX_SKILLS]?*const Skill,
     selected_skill: u8 = 0,
 
     // Skill cooldowns and activation tracking
-    skill_cooldowns: [8]f32 = [_]f32{0.0} ** 8, // time remaining in seconds
+    skill_cooldowns: [MAX_SKILLS]f32 = [_]f32{0.0} ** MAX_SKILLS, // time remaining in seconds
     is_casting: bool = false,
     casting_skill_index: u8 = 0,
     cast_time_remaining: f32 = 0.0, // seconds remaining on current cast
+    cast_target_index: ?usize = null, // Target entity index for cast completion
 
-    // Active chills (debuffs) on this character (fixed size array, max 10)
-    active_chills: [10]?skills.ActiveChill = [_]?skills.ActiveChill{null} ** 10,
+    // Active chills (debuffs) on this character
+    active_chills: [MAX_ACTIVE_CONDITIONS]?skills.ActiveChill = [_]?skills.ActiveChill{null} ** MAX_ACTIVE_CONDITIONS,
     active_chill_count: u8 = 0,
 
-    // Active cozies (buffs) on this character (fixed size array, max 10)
-    active_cozies: [10]?skills.ActiveCozy = [_]?skills.ActiveCozy{null} ** 10,
+    // Active cozies (buffs) on this character
+    active_cozies: [MAX_ACTIVE_CONDITIONS]?skills.ActiveCozy = [_]?skills.ActiveCozy{null} ** MAX_ACTIVE_CONDITIONS,
     active_cozy_count: u8 = 0,
 
     // Death state
@@ -79,6 +90,18 @@ pub const Character = struct {
         self.warmth = @max(0, self.warmth - damage);
         if (self.warmth <= 0) {
             self.is_dead = true;
+            // Death interrupts casting
+            if (self.is_casting) {
+                self.cancelCasting();
+            }
+        }
+    }
+
+    /// Interrupt current cast (from interrupt skills, dazed condition, etc)
+    pub fn interrupt(self: *Character) void {
+        if (self.is_casting) {
+            print("{s}'s cast was interrupted!\n", .{self.name});
+            self.cancelCasting();
         }
     }
 
@@ -92,8 +115,16 @@ pub const Character = struct {
     pub fn updateEnergy(self: *Character, delta_time: f32) void {
         // Passive energy regeneration based on school
         const regen = self.school.getEnergyRegen() * delta_time;
-        const new_energy = @min(self.max_energy, @as(u8, @intFromFloat(@as(f32, @floatFromInt(self.energy)) + regen)));
-        self.energy = new_energy;
+
+        // Accumulate fractional energy
+        self.energy_accumulator += regen;
+
+        // Convert whole points to energy
+        if (self.energy_accumulator >= 1.0) {
+            const energy_to_add = @as(u8, @intFromFloat(self.energy_accumulator));
+            self.energy = @min(self.max_energy, self.energy + energy_to_add);
+            self.energy_accumulator -= @as(f32, @floatFromInt(energy_to_add));
+        }
 
         // Update school-specific mechanics
         switch (self.school) {
@@ -136,7 +167,7 @@ pub const Character = struct {
             self.cast_time_remaining = @max(0, self.cast_time_remaining - delta_time);
             if (self.cast_time_remaining <= 0) {
                 self.is_casting = false;
-                // Skill will be executed by combat system
+                // Cast is complete - will be executed by game_state.finishCasts()
             }
         }
     }
@@ -213,7 +244,7 @@ pub const Character = struct {
         return false;
     }
 
-    pub fn addChill(self: *Character, effect: skills.ChillEffect, source_id: ?u32) !void {
+    pub fn addChill(self: *Character, effect: skills.ChillEffect, source_id: ?u32) void {
         // Check if chill already exists (stack or refresh)
         for (self.active_chills[0..self.active_chill_count]) |*maybe_active| {
             if (maybe_active.*) |*active| {
@@ -236,9 +267,10 @@ pub const Character = struct {
             };
             self.active_chill_count += 1;
         }
+        // Silently ignore if array is full - this is a game, not critical
     }
 
-    pub fn addCozy(self: *Character, effect: skills.CozyEffect, source_id: ?u32) !void {
+    pub fn addCozy(self: *Character, effect: skills.CozyEffect, source_id: ?u32) void {
         // Check if cozy already exists (stack or refresh)
         for (self.active_cozies[0..self.active_cozy_count]) |*maybe_active| {
             if (maybe_active.*) |*active| {
@@ -261,10 +293,11 @@ pub const Character = struct {
             };
             self.active_cozy_count += 1;
         }
+        // Silently ignore if array is full - this is a game, not critical
     }
 
     pub fn canUseSkill(self: Character, skill_index: u8) bool {
-        if (skill_index >= 8) return false;
+        if (skill_index >= MAX_SKILLS) return false;
         if (self.is_casting) return false;
         if (self.skill_cooldowns[skill_index] > 0) return false;
 

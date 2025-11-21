@@ -2,6 +2,7 @@ const std = @import("std");
 const character = @import("character.zig");
 const targeting = @import("targeting.zig");
 const combat = @import("combat.zig");
+const game_state = @import("game_state.zig");
 
 const Character = character.Character;
 const print = std.debug.print;
@@ -13,9 +14,10 @@ pub const AIState = struct {
 
 pub fn updateAI(
     entities: []Character,
-    player: Character,
+    player: *Character,
     delta_time: f32,
     ai_states: []AIState,
+    rng: *std.Random,
 ) void {
     for (entities, 0..) |*ent, i| {
         // Skip dead entities
@@ -33,14 +35,17 @@ pub fn updateAI(
         if (ai_state.next_skill_time <= 0) {
             // Find target
             var target: ?*Character = null;
+            var target_index: ?usize = null;
 
             if (ent.is_enemy) {
                 // Enemies target player
-                target = @constCast(&player);
+                target = player;
+                target_index = game_state.PLAYER_TARGET_INDEX;
             } else {
                 // Allies target nearest enemy
                 if (targeting.getNearestEnemy(ent.*, entities)) |enemy_idx| {
                     target = &entities[enemy_idx];
+                    target_index = enemy_idx;
                 }
             }
 
@@ -48,7 +53,7 @@ pub fn updateAI(
             if (target) |tgt| {
                 for (ent.skill_bar, 0..) |maybe_skill, skill_index| {
                     if (maybe_skill) |_| {
-                        const result = combat.tryStartCast(ent, @intCast(skill_index), tgt);
+                        const result = combat.tryStartCast(ent, @intCast(skill_index), tgt, target_index, rng);
                         if (result == .success or result == .casting_started) {
                             // Reset AI timer
                             ai_state.next_skill_time = ai_state.skill_cooldown;

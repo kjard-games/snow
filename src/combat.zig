@@ -19,7 +19,7 @@ pub const CastResult = enum {
     already_casting,
 };
 
-pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character) CastResult {
+pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_index: ?usize, rng: *std.Random) CastResult {
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
 
@@ -58,19 +58,19 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character) Ca
 
     // Start casting (consumes energy, sets cast state)
     caster.startCasting(skill_index);
+    caster.cast_target_index = target_index; // Store target for cast completion
 
     // If instant cast, execute immediately
     if (skill.activation_time_ms == 0) {
-        executeSkill(caster, skill, target, skill_index) catch {
-            print("Error executing skill\n", .{});
-        };
+        executeSkill(caster, skill, target, skill_index, rng);
+        caster.cast_target_index = null; // Clear target
         return .success;
     }
 
     return .casting_started;
 }
 
-pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8) !void {
+pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random) void {
     // Set cooldown
     caster.skill_cooldowns[skill_index] = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
 
@@ -104,7 +104,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         // Apply miss chance from chills
         if (caster.hasChill(.frost_eyes)) {
             // 50% miss chance
-            const rand = std.crypto.random.intRangeAtMost(u8, 0, 100);
+            const rand = rng.intRangeAtMost(u8, 0, 99);
             if (rand < 50) {
                 print("{s} missed {s} due to Frost Eyes!\n", .{ caster.name, tgt.name });
                 return;
@@ -137,6 +137,18 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
                 tgt.warmth,
                 tgt.max_warmth,
             });
+
+            // Check if target is Dazed - if so, damage interrupts
+            if (tgt.hasChill(.dazed)) {
+                tgt.interrupt();
+            }
+        }
+
+        // Check for interrupt skills (by name - cleaner than adding a flag)
+        const is_interrupt_skill = std.mem.eql(u8, skill.name, "Interrupt Shot") or
+            std.mem.eql(u8, skill.name, "Disrupting Throw");
+        if (is_interrupt_skill) {
+            tgt.interrupt();
         }
 
         // Apply healing
@@ -166,7 +178,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
                 continue;
             }
 
-            try tgt.addChill(chill_effect, null); // TODO: add character IDs
+            tgt.addChill(chill_effect, null); // TODO: add character IDs
             print("{s} applied {s} to {s} for {d}ms\n", .{
                 caster.name,
                 @tagName(chill_effect.chill),
@@ -177,7 +189,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
 
         // Apply cozies (buffs)
         for (skill.cozies) |cozy_effect| {
-            try tgt.addCozy(cozy_effect, null); // TODO: add character IDs
+            tgt.addCozy(cozy_effect, null); // TODO: add character IDs
             print("{s} gave {s} {s} for {d}ms\n", .{
                 caster.name,
                 tgt.name,
@@ -201,7 +213,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
 
         // Apply self-buffs (cozies)
         for (skill.cozies) |cozy_effect| {
-            try caster.addCozy(cozy_effect, null);
+            caster.addCozy(cozy_effect, null);
             print("{s} gained {s} for {d}ms\n", .{
                 caster.name,
                 @tagName(cozy_effect.cozy),
@@ -211,7 +223,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
 
         // Apply self-debuffs (chills) - some skills might have drawbacks
         for (skill.chills) |chill_effect| {
-            try caster.addChill(chill_effect, null);
+            caster.addChill(chill_effect, null);
             print("{s} gained {s} for {d}ms\n", .{
                 caster.name,
                 @tagName(chill_effect.chill),

@@ -30,6 +30,7 @@ pub const Chill = enum {
     windburn, // DoT - cold wind
     brain_freeze, // Energy degen (ate snow)
     packed_snow, // Max health reduction
+    dazed, // Attacks interrupt casts
 };
 
 // Positive effects - "Cozy" (buffs)
@@ -296,6 +297,47 @@ pub const SPRINT = Skill{
     .recharge_time_ms = 12000, // 12 seconds
     .target_type = .self,
     .cozies = &sure_footed_cozy,
+};
+
+// Interrupt skills - these call target.interrupt() on hit
+pub const INTERRUPT_SHOT = Skill{
+    .name = "Interrupt Shot",
+    .skill_type = .throw,
+    .energy_cost = 10,
+    .activation_time_ms = 500, // Half second cast
+    .recharge_time_ms = 10000, // 10 seconds
+    .damage = 15.0,
+    .cast_range = 200.0,
+    // Special: interrupts on hit (handled in combat.zig)
+};
+
+const dazed_chill = [_]ChillEffect{.{
+    .chill = .dazed,
+    .duration_ms = 5000, // 5 seconds - attacks interrupt during this time
+    .stack_intensity = 1,
+}};
+
+pub const DAZING_BLOW = Skill{
+    .name = "Dazing Blow",
+    .skill_type = .throw,
+    .energy_cost = 5,
+    .activation_time_ms = 0, // Instant
+    .recharge_time_ms = 8000, // 8 seconds
+    .damage = 10.0,
+    .cast_range = 180.0,
+    .chills = &dazed_chill, // Applies dazed - future attacks will interrupt
+};
+
+pub const DISRUPTING_THROW = Skill{
+    .name = "Disrupting Throw",
+    .skill_type = .trick,
+    .energy_cost = 15,
+    .activation_time_ms = 0, // Instant - must be fast to interrupt
+    .recharge_time_ms = 20000, // 20 seconds - powerful interrupt
+    .damage = 5.0,
+    .cast_range = 250.0,
+    // Special: interrupts on hit AND applies dazed
+    .chills = &dazed_chill,
 };
 
 // Default skill bar for new characters
