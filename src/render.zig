@@ -2,6 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 const character = @import("character.zig");
 const entity_types = @import("entity.zig");
+const vfx = @import("vfx.zig");
 
 const Character = character.Character;
 const EntityId = entity_types.EntityId;
@@ -15,7 +16,7 @@ inline fn toScreenPos(pos: rl.Vector2) struct { x: i32, y: i32 } {
     };
 }
 
-pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32) void {
+pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager) void {
     rl.clearBackground(.dark_gray);
 
     // === 3D RENDERING ===
@@ -75,6 +76,9 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         }
     }
 
+    // Draw visual effects (projectiles, impacts, heal effects)
+    vfx_manager.draw3D();
+
     rl.endMode3D();
 
     // === 2D RENDERING (names, labels) ===
@@ -118,4 +122,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         const screen_pos = toScreenPos(player_name_2d_pos);
         rl.drawText(player.*.name, screen_pos.x - @divTrunc(text_width, 2), screen_pos.y, 12, .lime);
     }
+
+    // Draw visual effects 2D overlay (damage numbers)
+    vfx_manager.draw2D(camera);
 }

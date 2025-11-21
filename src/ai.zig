@@ -293,6 +293,7 @@ pub fn updateAI(
     delta_time: f32,
     ai_states: []AIState,
     rng: *std.Random,
+    vfx_manager: *@import("vfx.zig").VFXManager,
 ) void {
     // Find the controlled player entity
     var player_ent: ?*Character = null;
@@ -397,7 +398,7 @@ pub fn updateAI(
                     actual_target_id = target_id;
                 }
 
-                const result = combat.tryStartCast(ent, decision.skill_idx, actual_target, actual_target_id, rng);
+                const result = combat.tryStartCast(ent, decision.skill_idx, actual_target, actual_target_id, rng, vfx_manager);
                 if (result == .success or result == .casting_started) {
                     // Reset AI timer
                     ai_state.next_skill_time = ai_state.skill_cooldown;

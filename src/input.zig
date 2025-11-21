@@ -30,6 +30,7 @@ pub const InputState = struct {
     buffered_click_entity: ?EntityId = null,
     buffered_click_terrain: ?rl.Vector3 = null,
     buffered_skills: [8]bool = [_]bool{false} ** 8, // Skill buttons 1-8
+    buffered_spacebar: bool = false, // Auto-attack toggle
 };
 
 // Input Command - Represents player input for ONE tick
@@ -76,13 +77,23 @@ pub fn pollInput(
     if (cycle_backward) input_state.buffered_tab_backward = true;
 
     // === SKILL BUTTON PRESSES (buffered) ===
+    // Pattern: Face buttons (ABXY) = Skills 1-4, L1 + Face buttons = Skills 5-8
     if (rl.isGamepadAvailable(0)) {
-        if (rl.isGamepadButtonPressed(0, .right_face_down)) input_state.buffered_skills[0] = true;
-        if (rl.isGamepadButtonPressed(0, .right_face_right)) input_state.buffered_skills[1] = true;
-        if (rl.isGamepadButtonPressed(0, .right_face_left)) input_state.buffered_skills[2] = true;
-        if (rl.isGamepadButtonPressed(0, .right_face_up)) input_state.buffered_skills[3] = true;
-        if (rl.isGamepadButtonPressed(0, .right_trigger_1)) input_state.buffered_skills[4] = true;
-        if (rl.isGamepadButtonPressed(0, .left_trigger_1)) input_state.buffered_skills[5] = true;
+        const l1_held = rl.isGamepadButtonDown(0, .left_trigger_1);
+
+        if (l1_held) {
+            // L1 + Face buttons = Skills 5-8
+            if (rl.isGamepadButtonPressed(0, .right_face_down)) input_state.buffered_skills[4] = true;
+            if (rl.isGamepadButtonPressed(0, .right_face_right)) input_state.buffered_skills[5] = true;
+            if (rl.isGamepadButtonPressed(0, .right_face_left)) input_state.buffered_skills[6] = true;
+            if (rl.isGamepadButtonPressed(0, .right_face_up)) input_state.buffered_skills[7] = true;
+        } else {
+            // Face buttons alone = Skills 1-4
+            if (rl.isGamepadButtonPressed(0, .right_face_down)) input_state.buffered_skills[0] = true;
+            if (rl.isGamepadButtonPressed(0, .right_face_right)) input_state.buffered_skills[1] = true;
+            if (rl.isGamepadButtonPressed(0, .right_face_left)) input_state.buffered_skills[2] = true;
+            if (rl.isGamepadButtonPressed(0, .right_face_up)) input_state.buffered_skills[3] = true;
+        }
     }
 
     if (rl.isKeyPressed(.one)) input_state.buffered_skills[0] = true;
@@ -93,6 +104,82 @@ pub fn pollInput(
     if (rl.isKeyPressed(.six)) input_state.buffered_skills[5] = true;
     if (rl.isKeyPressed(.seven)) input_state.buffered_skills[6] = true;
     if (rl.isKeyPressed(.eight)) input_state.buffered_skills[7] = true;
+
+    // === AUTO-ATTACK TOGGLE (buffered) ===
+    // Gamepad: R1 (right bumper) - feels natural as primary attack button
+    if (rl.isGamepadAvailable(0)) {
+        if (rl.isGamepadButtonPressed(0, .right_trigger_1)) input_state.buffered_spacebar = true;
+    }
+
+    // Keyboard: Spacebar
+    if (rl.isKeyPressed(.space)) input_state.buffered_spacebar = true;
+
+    // === CAMERA SYSTEM (every frame for smooth camera movement) ===
+    // Toggle Action Camera mode with C key or gamepad L3 (left stick click)
+    var toggle_action_camera = false;
+    if (rl.isKeyPressed(.c)) {
+        toggle_action_camera = true;
+    }
+    if (rl.isGamepadAvailable(0) and rl.isGamepadButtonPressed(0, .left_thumb)) {
+        toggle_action_camera = true;
+    }
+
+    if (toggle_action_camera) {
+        input_state.action_camera = !input_state.action_camera;
+        if (input_state.action_camera) {
+            rl.disableCursor();
+            print("Action Camera: ON (mouse-look active)\n", .{});
+        } else {
+            rl.enableCursor();
+            print("Action Camera: OFF\n", .{});
+        }
+    }
+
+    // Camera rotation and pitch (processed every frame!)
+    var camera_rotation: f32 = 0.0;
+    var camera_pitch_delta: f32 = 0.0;
+    const camera_speed = 0.05;
+
+    // Gamepad right stick (first-class)
+    if (rl.isGamepadAvailable(0)) {
+        const right_x = rl.getGamepadAxisMovement(0, .right_x);
+        const right_y = rl.getGamepadAxisMovement(0, .right_y);
+        const deadzone = 0.15;
+
+        if (@abs(right_x) > deadzone) {
+            camera_rotation = right_x * camera_speed;
+        }
+        if (@abs(right_y) > deadzone) {
+            camera_pitch_delta = -right_y * camera_speed; // Inverted Y
+        }
+    }
+
+    // Mouse camera control
+    if (input_state.action_camera) {
+        // Action Camera: Always mouse-look (like GW2)
+        const mouse_delta = rl.getMouseDelta();
+        camera_rotation = mouse_delta.x * 0.003;
+        camera_pitch_delta = -mouse_delta.y * 0.003; // Inverted Y
+    } else if (rl.isMouseButtonDown(.right)) {
+        // Traditional: Right-click to mouse-look
+        const mouse_delta = rl.getMouseDelta();
+        camera_rotation = mouse_delta.x * 0.003;
+        camera_pitch_delta = -mouse_delta.y * 0.003; // Inverted Y
+    }
+
+    // Mouse wheel zoom
+    const wheel = rl.getMouseWheelMove();
+    if (wheel != 0.0) {
+        input_state.camera_distance -= wheel * 20.0;
+        // Clamp zoom distance
+        input_state.camera_distance = @max(50.0, @min(400.0, input_state.camera_distance));
+    }
+
+    // Apply camera rotation and pitch (every frame!)
+    input_state.camera_angle += camera_rotation;
+    input_state.camera_pitch += camera_pitch_delta;
+    // Clamp pitch: 0.1 (nearly horizontal) to 1.4 (nearly straight down)
+    input_state.camera_pitch = @max(0.1, @min(1.4, input_state.camera_pitch));
 
     // === CLICK-TO-TARGET & CLICK-TO-MOVE (buffered) ===
     if (rl.isMouseButtonPressed(.left)) {
@@ -160,6 +247,7 @@ pub fn handleInput(
     _: *rl.Camera,
     input_state: *InputState,
     rng: *std.Random,
+    vfx_manager: *@import("vfx.zig").VFXManager,
 ) MovementIntent {
     // Track Shift key state
     if (rl.isKeyPressed(.left_shift)) {
@@ -171,9 +259,23 @@ pub fn handleInput(
     // === SKILL USAGE (from buffered inputs) ===
     for (input_state.buffered_skills, 0..) |pressed, i| {
         if (pressed) {
-            useSkill(player, entities, selected_target.*, @intCast(i), rng);
+            useSkill(player, entities, selected_target.*, @intCast(i), rng, vfx_manager);
             input_state.buffered_skills[i] = false; // Consume the input
         }
+    }
+
+    // === AUTO-ATTACK TOGGLE (from buffered inputs) ===
+    if (input_state.buffered_spacebar) {
+        if (player.is_auto_attacking) {
+            player.stopAutoAttack();
+            print("Auto-attack: OFF\n", .{});
+        } else if (selected_target.*) |target_id| {
+            player.startAutoAttack(target_id);
+            print("Auto-attack: ON (target ID {d})\n", .{target_id});
+        } else {
+            print("No target selected for auto-attack\n", .{});
+        }
+        input_state.buffered_spacebar = false; // Consume the input
     }
 
     // Skill selection (for UI/highlighting)
@@ -322,77 +424,8 @@ pub fn handleInput(
         input_state.buffered_click_terrain = null; // Consume the input
     }
 
-    // === CAMERA SYSTEM ===
-    // Toggle Action Camera mode with C key or gamepad L3 (left stick click)
-    var toggle_action_camera = false;
-    if (rl.isKeyPressed(.c)) {
-        toggle_action_camera = true;
-    }
-    if (rl.isGamepadAvailable(0) and rl.isGamepadButtonPressed(0, .left_thumb)) {
-        toggle_action_camera = true;
-    }
-
-    if (toggle_action_camera) {
-        input_state.action_camera = !input_state.action_camera;
-        if (input_state.action_camera) {
-            rl.disableCursor();
-            print("Action Camera: ON (mouse-look active)\n", .{});
-        } else {
-            rl.enableCursor();
-            print("Action Camera: OFF\n", .{});
-        }
-    }
-
-    // Camera rotation and pitch
-    var camera_rotation: f32 = 0.0;
-    var camera_pitch_delta: f32 = 0.0;
-    const camera_speed = 0.05;
-
-    // Gamepad right stick (first-class)
-    if (rl.isGamepadAvailable(0)) {
-        const right_x = rl.getGamepadAxisMovement(0, .right_x);
-        const right_y = rl.getGamepadAxisMovement(0, .right_y);
-        const deadzone = 0.15;
-
-        if (@abs(right_x) > deadzone) {
-            camera_rotation = right_x * camera_speed;
-        }
-        if (@abs(right_y) > deadzone) {
-            camera_pitch_delta = -right_y * camera_speed; // Inverted Y
-        }
-    }
-
-    // Mouse camera control
-    if (input_state.action_camera) {
-        // Action Camera: Always mouse-look (like GW2)
-        const mouse_delta = rl.getMouseDelta();
-        camera_rotation = mouse_delta.x * 0.003;
-        camera_pitch_delta = -mouse_delta.y * 0.003; // Inverted Y
-    } else if (rl.isMouseButtonDown(.right)) {
-        // Traditional: Right-click to mouse-look
-        const mouse_delta = rl.getMouseDelta();
-        camera_rotation = mouse_delta.x * 0.003;
-        camera_pitch_delta = -mouse_delta.y * 0.003; // Inverted Y
-    }
-
-    // Mouse wheel zoom
-    const wheel = rl.getMouseWheelMove();
-    if (wheel != 0.0) {
-        input_state.camera_distance -= wheel * 20.0;
-        // Clamp zoom distance
-        input_state.camera_distance = @max(50.0, @min(400.0, input_state.camera_distance));
-    }
-
-    // Apply camera rotation
-    input_state.camera_angle += camera_rotation;
-
-    // Apply camera pitch with limits
-    input_state.camera_pitch += camera_pitch_delta;
-    // Clamp pitch: 0.1 (nearly horizontal) to 1.4 (nearly straight down)
-    input_state.camera_pitch = @max(0.1, @min(1.4, input_state.camera_pitch));
-
-    // NOTE: Camera position is now updated every frame in updateCamera()
-    // using interpolated player position for smooth visuals
+    // NOTE: Camera rotation/pitch are now updated every frame in pollInput()
+    // This prevents jitter from tick-rate vs frame-rate mismatch
 
     // Return movement intent for movement system to process
     return MovementIntent{
@@ -403,7 +436,7 @@ pub fn handleInput(
     };
 }
 
-fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityId, skill_index: u8, rng: *std.Random) void {
+fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityId, skill_index: u8, rng: *std.Random, vfx_manager: *@import("vfx.zig").VFXManager) void {
     if (skill_index >= player.skill_bar.len) return;
 
     if (player.skill_bar[skill_index] == null) {
@@ -428,7 +461,7 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityI
         }
     }
 
-    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng);
+    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng, vfx_manager);
 }
 
 // Update camera to follow player (called every frame for smooth interpolation)

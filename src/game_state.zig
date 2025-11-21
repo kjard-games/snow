@@ -11,6 +11,8 @@ const combat = @import("combat.zig");
 const skills = @import("skills.zig");
 const movement = @import("movement.zig");
 const entity = @import("entity.zig");
+const auto_attack = @import("auto_attack.zig");
+const vfx = @import("vfx.zig");
 
 const print = std.debug.print;
 
@@ -53,6 +55,9 @@ pub const GameState = struct {
     // Tick-based game loop state
     tick_accumulator: f32 = 0.0,
     current_tick: u64 = 0,
+
+    // Visual effects
+    vfx_manager: vfx.VFXManager,
 
     pub fn init() GameState {
         var id_gen = EntityIdGenerator{};
@@ -221,6 +226,7 @@ pub const GameState = struct {
             .rng = rng,
             .combat_state = .active,
             .entity_id_gen = id_gen,
+            .vfx_manager = vfx.VFXManager.init(),
         };
     }
 
@@ -289,11 +295,14 @@ pub const GameState = struct {
             const player = self.getPlayer();
 
             // Get player movement intent from input and apply it
-            const player_movement = input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state);
+            const player_movement = input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state, &self.vfx_manager);
             movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC);
 
             // Update AI for non-player entities
-            ai.updateAI(&self.entities, self.controlled_entity_id, TICK_RATE_SEC, &self.ai_states, &random_state);
+            ai.updateAI(&self.entities, self.controlled_entity_id, TICK_RATE_SEC, &self.ai_states, &random_state, &self.vfx_manager);
+
+            // Update auto-attacks for all entities
+            auto_attack.updateAutoAttacks(&self.entities, TICK_RATE_SEC, &random_state, &self.vfx_manager);
 
             // Finish any completed casts
             self.finishCasts(&random_state);
@@ -301,6 +310,16 @@ pub const GameState = struct {
             // Check for victory/defeat
             self.checkCombatStatus();
         }
+
+        // Update visual effects (every tick)
+        var entity_positions: [MAX_ENTITIES]vfx.EntityPosition = undefined;
+        for (self.entities, 0..) |ent, i| {
+            entity_positions[i] = vfx.EntityPosition{
+                .id = ent.id,
+                .position = ent.position,
+            };
+        }
+        self.vfx_manager.update(TICK_RATE_SEC, &entity_positions);
     }
 
     pub fn checkCombatStatus(self: *GameState) void {
@@ -356,7 +375,7 @@ pub const GameState = struct {
                 }
 
                 if (target_valid) {
-                    combat.executeSkill(ent, skill.?, target, ent.casting_skill_index, rng);
+                    combat.executeSkill(ent, skill.?, target, ent.casting_skill_index, rng, &self.vfx_manager);
                 }
                 ent.cast_target_id = null;
             }
@@ -373,7 +392,7 @@ pub const GameState = struct {
         const player_render_pos = player.getInterpolatedPosition(alpha);
         input.updateCamera(&self.camera, player_render_pos, self.input_state);
 
-        render.draw(player, &self.entities, self.selected_target, self.camera, alpha);
+        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager);
     }
 
     pub fn drawUI(self: *const GameState) void {

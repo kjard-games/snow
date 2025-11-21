@@ -82,6 +82,11 @@ pub const Character = struct {
     cast_time_remaining: f32 = 0.0, // seconds remaining on current cast
     cast_target_id: ?EntityId = null, // Target entity ID for cast completion
 
+    // Auto-attack state (Guild Wars style)
+    is_auto_attacking: bool = false, // Whether auto-attack loop is active
+    auto_attack_timer: f32 = 0.0, // Time until next auto-attack
+    auto_attack_target_id: ?EntityId = null, // Current auto-attack target
+
     // Active chills (debuffs) on this character
     active_chills: [MAX_ACTIVE_CONDITIONS]?skills.ActiveChill = [_]?skills.ActiveChill{null} ** MAX_ACTIVE_CONDITIONS,
     active_chill_count: u8 = 0,
@@ -377,5 +382,53 @@ pub const Character = struct {
             self.is_casting = false;
             self.cast_time_remaining = 0;
         }
+    }
+
+    // === AUTO-ATTACK SYSTEM (Guild Wars style) ===
+
+    /// Start auto-attacking a target (spacebar default in GW1)
+    pub fn startAutoAttack(self: *Character, target_id: EntityId) void {
+        self.is_auto_attacking = true;
+        self.auto_attack_target_id = target_id;
+        // Reset timer to attack immediately
+        self.auto_attack_timer = 0.0;
+    }
+
+    /// Stop auto-attacking
+    pub fn stopAutoAttack(self: *Character) void {
+        self.is_auto_attacking = false;
+        self.auto_attack_target_id = null;
+    }
+
+    /// Get the attack interval for this character's equipped weapon
+    pub fn getAttackInterval(self: Character) f32 {
+        // Use main hand weapon if equipped, otherwise default
+        if (self.main_hand) |weapon| {
+            return weapon.attack_interval;
+        }
+        // Default unarmed attack speed
+        return 2.0;
+    }
+
+    /// Calculate auto-attack damage based on weapon and attributes
+    pub fn getAutoAttackDamage(self: Character) f32 {
+        var base_damage: f32 = 5.0; // Unarmed damage
+
+        if (self.main_hand) |weapon| {
+            base_damage = weapon.damage;
+        }
+
+        // TODO: Apply attribute bonuses (like GW1's weapon mastery)
+        // TODO: Apply buffs/debuffs
+
+        return base_damage;
+    }
+
+    /// Get auto-attack range
+    pub fn getAutoAttackRange(self: Character) f32 {
+        if (self.main_hand) |weapon| {
+            return weapon.range;
+        }
+        return 50.0; // Default melee range
     }
 };

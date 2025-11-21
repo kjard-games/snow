@@ -14,6 +14,11 @@ pub const Equipment = struct {
     armor: f32 = 0.0,
     speed_modifier: f32 = 1.0,
     range: f32 = 50.0, // melee range
+
+    // Auto-attack timing (Guild Wars style)
+    // Base attack interval in seconds (like GW1's weapon attack speed)
+    attack_interval: f32 = 1.5, // seconds between auto-attacks
+    is_ranged: bool = false, // Determines if attacks are projectile-based
 };
 
 // Equipment definitions
@@ -24,6 +29,8 @@ pub const BigShovel = Equipment{
     .armor = 5.0,
     .speed_modifier = 0.8,
     .range = 80.0,
+    .attack_interval = 1.75, // Slow but powerful (like GW1 hammer)
+    .is_ranged = false,
 };
 
 pub const IceScraper = Equipment{
@@ -33,6 +40,8 @@ pub const IceScraper = Equipment{
     .armor = 2.0,
     .speed_modifier = 1.2,
     .range = 60.0,
+    .attack_interval = 1.33, // Fast attacks (like GW1 sword)
+    .is_ranged = false,
 };
 
 pub const SaucerSled = Equipment{
@@ -42,6 +51,8 @@ pub const SaucerSled = Equipment{
     .armor = 15.0,
     .speed_modifier = 0.9,
     .range = 40.0,
+    .attack_interval = 2.0, // Shield doesn't attack
+    .is_ranged = false,
 };
 
 pub const LacrosseStick = Equipment{
@@ -51,6 +62,8 @@ pub const LacrosseStick = Equipment{
     .armor = 2.0,
     .speed_modifier = 1.1,
     .range = 80.0,
+    .attack_interval = 2.0, // Ranged weapon timing (like GW1 bow)
+    .is_ranged = true,
 };
 
 pub const Toboggan = Equipment{
@@ -60,4 +73,6 @@ pub const Toboggan = Equipment{
     .armor = 20.0,
     .speed_modifier = 0.8,
     .range = 40.0,
+    .attack_interval = 2.5, // Very slow defensive weapon
+    .is_ranged = false,
 };

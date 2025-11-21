@@ -1,7 +1,9 @@
 const std = @import("std");
+const rl = @import("raylib");
 const character = @import("character.zig");
 const skills = @import("skills.zig");
 const entity_types = @import("entity.zig");
+const vfx = @import("vfx.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
@@ -21,7 +23,7 @@ pub const CastResult = enum {
     already_casting,
 };
 
-pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_id: ?EntityId, rng: *std.Random) CastResult {
+pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_id: ?EntityId, rng: *std.Random, vfx_manager: *vfx.VFXManager) CastResult {
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
 
@@ -64,7 +66,7 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
 
     // If instant cast, execute immediately
     if (skill.activation_time_ms == 0) {
-        executeSkill(caster, skill, target, skill_index, rng);
+        executeSkill(caster, skill, target, skill_index, rng, vfx_manager);
         caster.cast_target_id = null; // Clear target
         return .success;
     }
@@ -72,7 +74,7 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     return .casting_started;
 }
 
-pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random) void {
+pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager) void {
     // Set cooldown
     caster.skill_cooldowns[skill_index] = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
 
@@ -108,6 +110,8 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             // 50% miss chance
             const rand = rng.intRangeAtMost(u8, 0, 99);
             if (rand < 50) {
+                // Spawn miss indicator
+                vfx_manager.spawnDamageNumber(0, tgt.position, .miss);
                 print("{s} missed {s} due to Frost Eyes!\n", .{ caster.name, tgt.name });
                 return;
             }
@@ -128,9 +132,17 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             return;
         }
 
+        // Spawn projectile visual (skill is always "ranged" for now, instant travel)
+        const color = if (caster.is_enemy) rl.Color.red else rl.Color.sky_blue;
+        vfx_manager.spawnProjectile(caster.position, tgt.position, caster.id, tgt.id, true, color);
+
         // Deal damage
         if (final_damage > 0) {
             tgt.takeDamage(final_damage);
+
+            // Spawn damage number
+            vfx_manager.spawnDamageNumber(final_damage, tgt.position, .damage);
+
             print("{s} used {s} on {s} for {d:.1} damage! ({d:.1}/{d:.1} HP)\n", .{
                 caster.name,
                 skill.name,
@@ -161,6 +173,11 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             }
 
             tgt.warmth = @min(tgt.max_warmth, tgt.warmth + healing_amount);
+
+            // Spawn heal effect and number
+            vfx_manager.spawnHeal(tgt.position);
+            vfx_manager.spawnDamageNumber(healing_amount, tgt.position, .heal);
+
             print("{s} healed {s} for {d:.1}! ({d:.1}/{d:.1} HP)\n", .{
                 caster.name,
                 tgt.name,
@@ -208,6 +225,11 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         // Self-targeted skill
         if (skill.healing > 0) {
             caster.warmth = @min(caster.max_warmth, caster.warmth + skill.healing);
+
+            // Spawn heal effect
+            vfx_manager.spawnHeal(caster.position);
+            vfx_manager.spawnDamageNumber(skill.healing, caster.position, .heal);
+
             print("{s} healed self for {d:.1}!\n", .{ caster.name, skill.healing });
         }
 
