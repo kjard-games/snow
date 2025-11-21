@@ -22,6 +22,14 @@ pub const InputState = struct {
     last_click_time: f32 = 0.0, // For double-click detection
     last_click_target: ?EntityId = null, // For double-click on enemies
     action_camera: bool = false, // GW2 Action Camera mode
+
+    // Input buffering (sampled every frame at 60fps, consumed every tick at 20Hz)
+    // This prevents missing inputs that happen between ticks
+    buffered_tab_forward: bool = false,
+    buffered_tab_backward: bool = false,
+    buffered_click_entity: ?EntityId = null,
+    buffered_click_terrain: ?rl.Vector3 = null,
+    buffered_skills: [8]bool = [_]bool{false} ** 8, // Skill buttons 1-8
 };
 
 // Input Command - Represents player input for ONE tick
@@ -42,11 +50,114 @@ pub const InputCommand = struct {
     tick: u64 = 0,
 };
 
+// pollInput - Called EVERY FRAME (60fps) to capture all inputs
+// Buffers inputs for consumption by handleInput() at tick rate (20Hz)
+pub fn pollInput(
+    entities: []const Character,
+    camera: *const rl.Camera,
+    input_state: *InputState,
+) void {
+    // === TAB TARGETING (buffered) ===
+    var cycle_forward = false;
+    var cycle_backward = false;
+
+    if (rl.isGamepadAvailable(0)) {
+        if (rl.isGamepadButtonPressed(0, .right_trigger_2)) cycle_forward = true;
+        if (rl.isGamepadButtonPressed(0, .left_trigger_2)) cycle_backward = true;
+    }
+
+    if (rl.isKeyDown(.left_shift) and rl.isKeyPressed(.tab)) {
+        cycle_backward = true;
+    } else if (rl.isKeyPressed(.tab)) {
+        cycle_forward = true;
+    }
+
+    if (cycle_forward) input_state.buffered_tab_forward = true;
+    if (cycle_backward) input_state.buffered_tab_backward = true;
+
+    // === SKILL BUTTON PRESSES (buffered) ===
+    if (rl.isGamepadAvailable(0)) {
+        if (rl.isGamepadButtonPressed(0, .right_face_down)) input_state.buffered_skills[0] = true;
+        if (rl.isGamepadButtonPressed(0, .right_face_right)) input_state.buffered_skills[1] = true;
+        if (rl.isGamepadButtonPressed(0, .right_face_left)) input_state.buffered_skills[2] = true;
+        if (rl.isGamepadButtonPressed(0, .right_face_up)) input_state.buffered_skills[3] = true;
+        if (rl.isGamepadButtonPressed(0, .right_trigger_1)) input_state.buffered_skills[4] = true;
+        if (rl.isGamepadButtonPressed(0, .left_trigger_1)) input_state.buffered_skills[5] = true;
+    }
+
+    if (rl.isKeyPressed(.one)) input_state.buffered_skills[0] = true;
+    if (rl.isKeyPressed(.two)) input_state.buffered_skills[1] = true;
+    if (rl.isKeyPressed(.three)) input_state.buffered_skills[2] = true;
+    if (rl.isKeyPressed(.four)) input_state.buffered_skills[3] = true;
+    if (rl.isKeyPressed(.five)) input_state.buffered_skills[4] = true;
+    if (rl.isKeyPressed(.six)) input_state.buffered_skills[5] = true;
+    if (rl.isKeyPressed(.seven)) input_state.buffered_skills[6] = true;
+    if (rl.isKeyPressed(.eight)) input_state.buffered_skills[7] = true;
+
+    // === CLICK-TO-TARGET & CLICK-TO-MOVE (buffered) ===
+    if (rl.isMouseButtonPressed(.left)) {
+        const mouse_pos = rl.getMousePosition();
+        const ray = rl.getScreenToWorldRay(mouse_pos, camera.*);
+
+        // First, check if we clicked on an entity
+        var clicked_entity: ?EntityId = null;
+        var closest_distance: f32 = std.math.inf(f32);
+
+        for (entities, 0..) |entity, i| {
+            // Skip the player
+            if (i == 0) continue;
+
+            // Ray-sphere intersection test
+            const to_sphere = rl.Vector3{
+                .x = entity.position.x - ray.position.x,
+                .y = entity.position.y - ray.position.y,
+                .z = entity.position.z - ray.position.z,
+            };
+
+            const t_ca = to_sphere.x * ray.direction.x + to_sphere.y * ray.direction.y + to_sphere.z * ray.direction.z;
+            if (t_ca < 0.0) continue; // Sphere is behind ray
+
+            const d_squared = (to_sphere.x * to_sphere.x + to_sphere.y * to_sphere.y + to_sphere.z * to_sphere.z) - (t_ca * t_ca);
+            const radius_squared = entity.radius * entity.radius;
+
+            if (d_squared <= radius_squared) {
+                const t_hc = @sqrt(radius_squared - d_squared);
+                const t = t_ca - t_hc;
+
+                if (t < closest_distance) {
+                    closest_distance = t;
+                    clicked_entity = entity.id;
+                }
+            }
+        }
+
+        if (clicked_entity) |entity_id| {
+            // Clicked on an entity - buffer it
+            input_state.buffered_click_entity = entity_id;
+        } else {
+            // Clicked on terrain - buffer click-to-move
+            if (ray.direction.y != 0.0) {
+                const t = -ray.position.y / ray.direction.y;
+                if (t > 0.0) {
+                    const hit_point = rl.Vector3{
+                        .x = ray.position.x + ray.direction.x * t,
+                        .y = 0.0,
+                        .z = ray.position.z + ray.direction.z * t,
+                    };
+                    input_state.buffered_click_terrain = hit_point;
+                }
+            }
+        }
+    }
+}
+
+// handleInput - Called EVERY TICK (20Hz) to process game logic
+// Consumes buffered inputs and applies them to game state
 pub fn handleInput(
     player: *Character,
     entities: []Character,
     selected_target: *?EntityId,
-    camera: *rl.Camera,
+    _: *rl.Camera,
     input_state: *InputState,
     rng: *std.Random,
 ) MovementIntent {
@@ -57,41 +168,13 @@ pub fn handleInput(
         input_state.shift_held = false;
     }
 
-    // === SKILL USAGE ===
-    // Face buttons for skills (1-4)
-    if (rl.isGamepadAvailable(0)) {
-        if (rl.isGamepadButtonPressed(0, .right_face_down)) { // A button
-            useSkill(player, entities, selected_target.*, 0, rng);
+    // === SKILL USAGE (from buffered inputs) ===
+    for (input_state.buffered_skills, 0..) |pressed, i| {
+        if (pressed) {
+            useSkill(player, entities, selected_target.*, @intCast(i), rng);
+            input_state.buffered_skills[i] = false; // Consume the input
         }
-        if (rl.isGamepadButtonPressed(0, .right_face_right)) { // B button
-            useSkill(player, entities, selected_target.*, 1, rng);
-        }
-        if (rl.isGamepadButtonPressed(0, .right_face_left)) { // X button
-            useSkill(player, entities, selected_target.*, 2, rng);
-        }
-        if (rl.isGamepadButtonPressed(0, .right_face_up)) { // Y button
-            useSkill(player, entities, selected_target.*, 3, rng);
-        }
-
-        // Shoulder buttons for skills 5-8
-        if (rl.isGamepadButtonPressed(0, .right_trigger_1)) { // RB
-            useSkill(player, entities, selected_target.*, 4, rng);
-        }
-        if (rl.isGamepadButtonPressed(0, .left_trigger_1)) { // LB
-            useSkill(player, entities, selected_target.*, 5, rng);
-        }
-        // Could use trigger pulls for skills 6-7
     }
-
-    // Keyboard skill usage (1-8 keys)
-    if (rl.isKeyPressed(.one)) useSkill(player, entities, selected_target.*, 0, rng);
-    if (rl.isKeyPressed(.two)) useSkill(player, entities, selected_target.*, 1, rng);
-    if (rl.isKeyPressed(.three)) useSkill(player, entities, selected_target.*, 2, rng);
-    if (rl.isKeyPressed(.four)) useSkill(player, entities, selected_target.*, 3, rng);
-    if (rl.isKeyPressed(.five)) useSkill(player, entities, selected_target.*, 4, rng);
-    if (rl.isKeyPressed(.six)) useSkill(player, entities, selected_target.*, 5, rng);
-    if (rl.isKeyPressed(.seven)) useSkill(player, entities, selected_target.*, 6, rng);
-    if (rl.isKeyPressed(.eight)) useSkill(player, entities, selected_target.*, 7, rng);
 
     // Skill selection (for UI/highlighting)
     if (rl.isKeyPressed(.q)) {
@@ -101,29 +184,15 @@ pub fn handleInput(
         player.selected_skill = (player.selected_skill + 1) % 8;
     }
 
-    // === TARGET CYCLING ===
-    // Gamepad shoulder buttons (first-class)
-    var cycle_forward = false;
-    var cycle_backward = false;
-
-    if (rl.isGamepadAvailable(0)) {
-        if (rl.isGamepadButtonPressed(0, .right_trigger_2)) cycle_forward = true;
-        if (rl.isGamepadButtonPressed(0, .left_trigger_2)) cycle_backward = true;
-    }
-
-    // Keyboard Tab/Shift+Tab (secondary)
-    if (rl.isKeyDown(.left_shift) and rl.isKeyPressed(.tab)) {
-        cycle_backward = true;
-    } else if (rl.isKeyPressed(.tab)) {
-        cycle_forward = true;
-    }
-
-    if (cycle_backward) {
+    // === TARGET CYCLING (from buffered inputs) ===
+    if (input_state.buffered_tab_backward) {
         print("Cycling backward\n", .{});
         selected_target.* = targeting.cycleTarget(entities, selected_target.*, false);
-    } else if (cycle_forward) {
+        input_state.buffered_tab_backward = false; // Consume the input
+    } else if (input_state.buffered_tab_forward) {
         print("Cycling forward\n", .{});
         selected_target.* = targeting.cycleTarget(entities, selected_target.*, true);
+        input_state.buffered_tab_forward = false; // Consume the input
     }
 
     // === MOVEMENT SYSTEM ===
@@ -216,94 +285,41 @@ pub fn handleInput(
         }
     }
 
-    // === CLICK-TO-TARGET & CLICK-TO-MOVE SYSTEM ===
-    // Left click for targeting entities or moving
-    // In Action Camera: left-click still works for targeting/movement
-    if (rl.isMouseButtonPressed(.left)) {
-        const mouse_pos = rl.getMousePosition();
-        const ray = rl.getScreenToWorldRay(mouse_pos, camera.*);
-
-        // First, check if we clicked on an entity
-        var clicked_entity: ?EntityId = null;
-        var closest_distance: f32 = std.math.inf(f32);
-
-        for (entities, 0..) |entity, i| {
-            // Skip the player
-            if (i == 0) continue;
-
-            // Ray-sphere intersection test
-            const to_sphere = rl.Vector3{
-                .x = entity.position.x - ray.position.x,
-                .y = entity.position.y - ray.position.y,
-                .z = entity.position.z - ray.position.z,
-            };
-
-            const t_ca = to_sphere.x * ray.direction.x + to_sphere.y * ray.direction.y + to_sphere.z * ray.direction.z;
-            if (t_ca < 0.0) continue; // Sphere is behind ray
-
-            const d_squared = (to_sphere.x * to_sphere.x + to_sphere.y * to_sphere.y + to_sphere.z * to_sphere.z) - (t_ca * t_ca);
-            const radius_squared = entity.radius * entity.radius;
-
-            if (d_squared <= radius_squared) {
-                const t_hc = @sqrt(radius_squared - d_squared);
-                const t = t_ca - t_hc;
-
-                if (t < closest_distance) {
-                    closest_distance = t;
-                    clicked_entity = entity.id; // Use EntityId instead of array index
-                }
-            }
-        }
-
+    // === CLICK-TO-TARGET & CLICK-TO-MOVE (from buffered inputs) ===
+    if (input_state.buffered_click_entity) |entity_id| {
         // Check for double-click on same target
         const current_time = @as(f32, @floatCast(rl.getTime()));
-        const is_double_click = if (clicked_entity) |ce| blk: {
-            if (input_state.last_click_target) |lct| {
-                break :blk (current_time - input_state.last_click_time) < 0.3 and ce == lct;
-            }
-            break :blk false;
+        const is_double_click = if (input_state.last_click_target) |lct| blk: {
+            break :blk (current_time - input_state.last_click_time) < 0.3 and entity_id == lct;
         } else false;
 
-        if (clicked_entity) |entity_id| {
-            // Clicked on an entity - target it
-            selected_target.* = entity_id;
-            print("Targeted entity ID {d}\n", .{entity_id});
+        // Clicked on an entity - target it
+        selected_target.* = entity_id;
+        print("Targeted entity ID {d}\n", .{entity_id});
 
-            if (is_double_click) {
-                // Double-click: move to range and attack
-                // Find entity by ID to get position
-                for (entities) |e| {
-                    if (e.id == entity_id) {
-                        input_state.move_target = e.position;
-                        print("Double-click: move to target and attack\n", .{});
-                        break;
-                    }
+        if (is_double_click) {
+            // Double-click: move to range and attack
+            // Find entity by ID to get position
+            for (entities) |e| {
+                if (e.id == entity_id) {
+                    input_state.move_target = e.position;
+                    print("Double-click: move to target and attack\n", .{});
+                    break;
                 }
             }
-
-            input_state.last_click_target = entity_id;
-        } else {
-            // Clicked on terrain - click-to-move
-            // Raycast to ground plane (y = 0)
-            if (ray.direction.y != 0.0) {
-                const t = -ray.position.y / ray.direction.y;
-                if (t > 0.0) {
-                    const hit_point = rl.Vector3{
-                        .x = ray.position.x + ray.direction.x * t,
-                        .y = 0.0,
-                        .z = ray.position.z + ray.direction.z * t,
-                    };
-
-                    input_state.move_target = hit_point;
-                    input_state.autorun = false;
-                    print("Click-to-move target: ({d:.1}, {d:.1})\n", .{ hit_point.x, hit_point.z });
-                }
-            }
-
-            input_state.last_click_target = null;
         }
 
+        input_state.last_click_target = entity_id;
         input_state.last_click_time = current_time;
+        input_state.buffered_click_entity = null; // Consume the input
+    } else if (input_state.buffered_click_terrain) |hit_point| {
+        // Clicked on terrain - click-to-move
+        input_state.move_target = hit_point;
+        input_state.autorun = false;
+        input_state.last_click_target = null;
+        input_state.last_click_time = @as(f32, @floatCast(rl.getTime()));
+        print("Click-to-move target: ({d:.1}, {d:.1})\n", .{ hit_point.x, hit_point.z });
+        input_state.buffered_click_terrain = null; // Consume the input
     }
 
     // === CAMERA SYSTEM ===

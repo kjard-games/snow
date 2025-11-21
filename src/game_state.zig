@@ -251,6 +251,10 @@ pub const GameState = struct {
     pub fn update(self: *GameState) void {
         const frame_time = rl.getFrameTime();
 
+        // Poll input EVERY FRAME (60fps) to buffer all inputs
+        // This prevents missing rapid inputs like Tab presses between ticks
+        input.pollInput(&self.entities, &self.camera, &self.input_state);
+
         // Accumulate time for tick loop
         self.tick_accumulator += frame_time;
 
