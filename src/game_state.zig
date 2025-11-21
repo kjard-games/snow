@@ -8,6 +8,8 @@ const ai = @import("ai.zig");
 const render = @import("render.zig");
 const ui = @import("ui.zig");
 const combat = @import("combat.zig");
+const skills = @import("skills.zig");
+const movement = @import("movement.zig");
 
 const print = std.debug.print;
 
@@ -75,68 +77,91 @@ pub const GameState = struct {
         print("Player {s} initialized with school: {s}, position: {s}\n", .{ player.name, @tagName(player_school), @tagName(player_position) });
         print("Loaded {d} skills into skill bar\n", .{skill_count});
 
-        const entities = [_]Character{
+        // Create 2v2 setup: Player + Ally vs 2 Enemies
+        // All entities have proper school+position combos and use position skills
+        var entities = [_]Character{
+            // Ally: Waldorf Thermos (Support/Healer) - same school as player for synergy
             Character{
-                .position = .{ .x = -100, .y = 0, .z = -100 },
-                .radius = 18,
-                .color = .red,
-                .name = "Enemy Dummy",
-                .warmth = 50,
-                .max_warmth = 50,
-                .is_enemy = true,
-                .school = .public_school,
-                .player_position = .fielder,
-                .energy = School.public_school.getMaxEnergy(),
-                .max_energy = School.public_school.getMaxEnergy(),
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .position = .{ .x = 100, .y = 0, .z = -100 },
+                .position = .{ .x = 60, .y = 0, .z = 20 },
                 .radius = 18,
                 .color = .green,
-                .name = "Friendly Dummy",
-                .warmth = 50,
-                .max_warmth = 50,
+                .name = "Ally Healer",
+                .warmth = 100,
+                .max_warmth = 100,
                 .is_enemy = false,
-                .school = .montessori,
+                .school = .waldorf, // Rhythm school - good for support
                 .player_position = .thermos,
-                .energy = School.montessori.getMaxEnergy(),
-                .max_energy = School.montessori.getMaxEnergy(),
+                .energy = School.waldorf.getMaxEnergy(),
+                .max_energy = School.waldorf.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
+            // Enemy 1: Public School Pitcher (Pure Damage)
             Character{
-                .position = .{ .x = 0, .y = 0, .z = -150 },
+                .position = .{ .x = -80, .y = 0, .z = -120 },
                 .radius = 18,
                 .color = .red,
-                .name = "Enemy Dummy 2",
-                .warmth = 50,
-                .max_warmth = 50,
+                .name = "Enemy Ranger",
+                .warmth = 100,
+                .max_warmth = 100,
                 .is_enemy = true,
-                .school = .homeschool,
-                .player_position = .shoveler,
-                .energy = School.homeschool.getMaxEnergy(),
-                .max_energy = School.homeschool.getMaxEnergy(),
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .position = .{ .x = 150, .y = 0, .z = -100 },
-                .radius = 18,
-                .color = .red,
-                .name = "Enemy Dummy 3",
-                .warmth = 50,
-                .max_warmth = 50,
-                .is_enemy = true,
-                .school = .public_school,
+                .school = .public_school, // Grit/aggression
                 .player_position = .pitcher,
                 .energy = School.public_school.getMaxEnergy(),
                 .max_energy = School.public_school.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
+            // Enemy 2: Homeschool Animator (Burst Damage + Disruption)
+            Character{
+                .position = .{ .x = 80, .y = 0, .z = -120 },
+                .radius = 18,
+                .color = .red,
+                .name = "Enemy Caster",
+                .warmth = 100,
+                .max_warmth = 100,
+                .is_enemy = true,
+                .school = .homeschool, // Sacrifice/power
+                .player_position = .animator,
+                .energy = School.homeschool.getMaxEnergy(),
+                .max_energy = School.homeschool.getMaxEnergy(),
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            // Empty slot
+            Character{
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 0,
+                .color = .black,
+                .name = "Empty",
+                .warmth = 0,
+                .max_warmth = 1,
+                .is_enemy = false,
+                .is_dead = true,
+                .school = .waldorf,
+                .player_position = .animator,
+                .energy = 0,
+                .max_energy = 1,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
         };
+
+        // Load skills from position definitions for all entities
+        for (&entities, 0..) |*ent, i| {
+            if (i >= 3) break; // Skip empty slot
+            const ent_skills = ent.player_position.getSkills();
+            const ent_skill_count = @min(ent_skills.len, character.MAX_SKILLS);
+            for (0..ent_skill_count) |skill_idx| {
+                ent.skill_bar[skill_idx] = &ent_skills[skill_idx];
+            }
+            print("Loaded {d} skills for {s} ({s}/{s})\n", .{
+                ent_skill_count,
+                ent.name,
+                @tagName(ent.school),
+                @tagName(ent.player_position),
+            });
+        }
 
         // Initialize RNG with current time as seed
         const rng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
@@ -169,7 +194,12 @@ pub const GameState = struct {
             .input_state = input.InputState{
                 .action_camera = use_action_camera,
             },
-            .ai_states = [_]AIState{.{}} ** MAX_ENTITIES,
+            .ai_states = [_]AIState{
+                .{ .role = .support }, // Ally Thermos - healer/support
+                .{ .role = .damage_dealer }, // Enemy Pitcher - ranged DPS
+                .{ .role = .disruptor }, // Enemy Animator - burst/control
+                .{}, // Empty slot
+            },
             .rng = rng,
             .combat_state = .active,
         };
@@ -193,7 +223,11 @@ pub const GameState = struct {
         // Handle input and AI with RNG (only if combat is active)
         var random_state = self.rng.random();
         if (self.combat_state == .active) {
-            input.handleInput(&self.player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state);
+            // Get player movement intent from input and apply it
+            const player_movement = input.handleInput(&self.player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state);
+            movement.applyMovement(&self.player, player_movement, &self.entities, null, null);
+
+            // Update AI (which now handles its own movement internally)
             ai.updateAI(&self.entities, &self.player, self.delta_time, &self.ai_states, &random_state);
 
             // Finish any completed casts

@@ -106,10 +106,37 @@ pub const Character = struct {
     }
 
     pub fn distanceTo(self: Character, other: Character) f32 {
-        const dx = other.position.x - self.position.x;
-        const dy = other.position.y - self.position.y;
-        const dz = other.position.z - self.position.z;
+        const dx = self.position.x - other.position.x;
+        const dy = self.position.y - other.position.y;
+        const dz = self.position.z - other.position.z;
         return @sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /// Check if this character overlaps with another (for collision detection)
+    pub fn overlaps(self: Character, other: Character) bool {
+        const distance = self.distanceTo(other);
+        const min_distance = self.radius + other.radius;
+        return distance < min_distance;
+    }
+
+    /// Push this character away from another to resolve overlap
+    pub fn resolveCollision(self: *Character, other: Character) void {
+        const dx = self.position.x - other.position.x;
+        const dz = self.position.z - other.position.z;
+        const distance = @sqrt(dx * dx + dz * dz);
+
+        if (distance < 0.1) return; // Avoid division by zero
+
+        const min_distance = self.radius + other.radius;
+        if (distance < min_distance) {
+            // Push away to maintain minimum distance
+            const overlap = min_distance - distance;
+            const push_x = (dx / distance) * overlap;
+            const push_z = (dz / distance) * overlap;
+
+            self.position.x += push_x;
+            self.position.z += push_z;
+        }
     }
 
     pub fn updateEnergy(self: *Character, delta_time: f32) void {

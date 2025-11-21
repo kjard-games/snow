@@ -3,9 +3,11 @@ const rl = @import("raylib");
 const character = @import("character.zig");
 const targeting = @import("targeting.zig");
 const combat = @import("combat.zig");
+const movement = @import("movement.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
+const MovementIntent = movement.MovementIntent;
 const print = std.debug.print;
 
 pub const InputState = struct {
@@ -27,7 +29,7 @@ pub fn handleInput(
     camera: *rl.Camera,
     input_state: *InputState,
     rng: *std.Random,
-) void {
+) MovementIntent {
     // Track Shift key state
     if (rl.isKeyPressed(.left_shift)) {
         input_state.shift_held = true;
@@ -117,8 +119,7 @@ pub fn handleInput(
         print("Quick turn 180°\n", .{});
     }
 
-    // Gamepad is first-class: left stick controls movement
-    const move_speed = 3.0;
+    // Gather movement input
     var move_x: f32 = 0.0;
     var move_z: f32 = 0.0;
 
@@ -163,45 +164,8 @@ pub fn handleInput(
         move_z -= 1.0;
     }
 
-    // Apply movement relative to camera angle
-    if (move_x != 0.0 or move_z != 0.0) {
-        // Normalize diagonal movement
-        const magnitude = @sqrt(move_x * move_x + move_z * move_z);
-        const norm_x = move_x / magnitude;
-        const norm_z = move_z / magnitude;
-
-        // Calculate movement speed with penalties
-        // Guild Wars style: strafe = minor penalty, backward = major penalty
-        var speed_multiplier: f32 = 1.0;
-
-        // Determine if moving backward (relative to camera forward direction)
-        const forward_component = norm_z; // Positive = backward, negative = forward
-        const lateral_component = @abs(norm_x);
-
-        if (forward_component > 0.7) {
-            // Moving primarily backward
-            speed_multiplier = 0.6; // 40% speed penalty
-        } else if (lateral_component > 0.7) {
-            // Moving primarily sideways (strafe)
-            speed_multiplier = 0.85; // 15% speed penalty
-        } else if (forward_component > 0.3 and lateral_component > 0.3) {
-            // Diagonal backward movement
-            speed_multiplier = 0.75; // 25% speed penalty
-        }
-
-        // Rotate movement by camera angle
-        // Camera looks from behind the player, so we rotate the input by the camera angle
-        const cos_angle = @cos(input_state.camera_angle);
-        const sin_angle = @sin(input_state.camera_angle);
-        const rotated_x = norm_x * cos_angle + norm_z * sin_angle;
-        const rotated_z = -norm_x * sin_angle + norm_z * cos_angle;
-
-        player.position.x += rotated_x * move_speed * speed_multiplier;
-        player.position.z += rotated_z * move_speed * speed_multiplier;
-    }
-
-    // === CLICK-TO-MOVE (process after manual movement) ===
-    // Move toward click target if set
+    // === CLICK-TO-MOVE ===
+    // Check if we should use click-to-move instead
     if (input_state.move_target) |target| {
         const dx = target.x - player.position.x;
         const dz = target.z - player.position.z;
@@ -214,11 +178,16 @@ pub fn handleInput(
         } else {
             // Move toward target (only if no manual input occurred)
             if (move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
-                // Apply movement directly in world space (no camera rotation needed)
+                // Calculate world-space movement direction
+                // Then convert to local space for MovementIntent
                 const move_dir_x = dx / distance;
                 const move_dir_z = dz / distance;
-                player.position.x += move_dir_x * move_speed;
-                player.position.z += move_dir_z * move_speed;
+
+                // Convert world movement to local space (inverse of camera rotation)
+                const cos_angle = @cos(input_state.camera_angle);
+                const sin_angle = @sin(input_state.camera_angle);
+                move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
+                move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
             } else {
                 // Manual input cancels click-to-move
                 input_state.move_target = null;
@@ -400,6 +369,14 @@ pub fn handleInput(
         .x = player.position.x + target_offset_x,
         .y = player.position.y + target_offset_y,
         .z = player.position.z,
+    };
+
+    // Return movement intent for movement system to process
+    return MovementIntent{
+        .local_x = move_x,
+        .local_z = move_z,
+        .facing_angle = input_state.camera_angle,
+        .apply_penalties = true,
     };
 }
 

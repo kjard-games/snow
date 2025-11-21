@@ -15,7 +15,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     rl.drawGrid(20, 50);
 
     // Draw entities
-    for (entities, 0..) |ent, i| {
+    for (entities) |ent| {
         // Skip dead entities
         if (!ent.isAlive()) continue;
 
@@ -23,11 +23,6 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         const color = if (ent.is_dead) rl.Color.gray else ent.color;
         rl.drawSphere(ent.position, ent.radius, color);
         rl.drawSphereWires(ent.position, ent.radius, 8, 8, .black);
-
-        // Debug: print entity positions
-        if (i == 0) {
-            print("Character 0 at ({d:.1}, {d:.1}, {d:.1})\n", .{ ent.position.x, ent.position.y, ent.position.z });
-        }
     }
 
     // Draw player
