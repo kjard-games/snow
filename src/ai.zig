@@ -62,12 +62,8 @@ fn selectDamageSkill(caster: *Character, target: *Character, _: *std.Random) ?u8
     if (target.is_casting) {
         for (caster.skill_bar, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
-                if (std.mem.eql(u8, skill.name, "Interrupt Shot") or
-                    std.mem.eql(u8, skill.name, "Disrupting Throw"))
-                {
-                    if (caster.canUseSkill(@intCast(idx))) {
-                        return @intCast(idx);
-                    }
+                if (skill.interrupts and caster.canUseSkill(@intCast(idx))) {
+                    return @intCast(idx);
                 }
             }
         }
@@ -153,13 +149,9 @@ fn selectDisruptorSkill(caster: *Character, target: *Character, rng: *std.Random
     if (target.is_casting) {
         for (caster.skill_bar, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
-                if (std.mem.eql(u8, skill.name, "Interrupt Shot") or
-                    std.mem.eql(u8, skill.name, "Disrupting Throw") or
-                    std.mem.eql(u8, skill.name, "Dazing Blow"))
-                {
-                    if (caster.canUseSkill(@intCast(idx))) {
-                        return @intCast(idx);
-                    }
+                // Prefer interrupt skills, but also use daze-applying skills
+                if ((skill.interrupts or skill.chills.len > 0) and caster.canUseSkill(@intCast(idx))) {
+                    return @intCast(idx);
                 }
             }
         }

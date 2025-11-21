@@ -21,6 +21,13 @@ pub const MAX_RECENT_SKILLS: usize = 5;
 pub const MAX_GRIT_STACKS: u8 = 5;
 pub const MAX_RHYTHM_CHARGE: u8 = 10;
 
+// Compile-time safety: ensure MAX_SKILLS fits in u8 for skill indexing
+comptime {
+    if (MAX_SKILLS > 255) {
+        @compileError("MAX_SKILLS must fit in u8 for skill bar indexing");
+    }
+}
+
 pub const Character = struct {
     id: EntityId, // Unique identifier for this entity (stable across ticks)
     position: rl.Vector3, // Current tick position (authoritative)
@@ -105,7 +112,13 @@ pub const Character = struct {
     }
 
     pub fn takeDamage(self: *Character, damage: f32) void {
-        self.warmth = @max(0, self.warmth - damage);
+        // Clamp warmth to 0 minimum (avoid negative health)
+        if (damage >= self.warmth) {
+            self.warmth = 0.0;
+        } else {
+            self.warmth -= damage;
+        }
+
         if (self.warmth <= 0) {
             self.is_dead = true;
             // Death interrupts casting
@@ -219,20 +232,16 @@ pub const Character = struct {
 
     pub fn updateConditions(self: *Character, delta_time_ms: u32) void {
         // Update active chills (debuffs), removing expired ones
+        // Use swap-with-last pattern for efficient removal (order doesn't matter for conditions)
         var i: usize = 0;
         while (i < self.active_chill_count) {
             if (self.active_chills[i]) |*chill| {
                 if (chill.time_remaining_ms <= delta_time_ms) {
-                    // Chill expired, remove it
-                    self.active_chills[i] = null;
-                    // Compact the array
-                    var j = i;
-                    while (j < self.active_chill_count - 1) : (j += 1) {
-                        self.active_chills[j] = self.active_chills[j + 1];
-                    }
-                    self.active_chills[self.active_chill_count - 1] = null;
+                    // Chill expired, remove it by swapping with last element
                     self.active_chill_count -= 1;
-                    // Don't increment i since we shifted
+                    self.active_chills[i] = self.active_chills[self.active_chill_count];
+                    self.active_chills[self.active_chill_count] = null;
+                    // Don't increment i since we need to check the swapped element
                 } else {
                     chill.time_remaining_ms -= delta_time_ms;
                     i += 1;
@@ -247,16 +256,11 @@ pub const Character = struct {
         while (i < self.active_cozy_count) {
             if (self.active_cozies[i]) |*cozy| {
                 if (cozy.time_remaining_ms <= delta_time_ms) {
-                    // Cozy expired, remove it
-                    self.active_cozies[i] = null;
-                    // Compact the array
-                    var j = i;
-                    while (j < self.active_cozy_count - 1) : (j += 1) {
-                        self.active_cozies[j] = self.active_cozies[j + 1];
-                    }
-                    self.active_cozies[self.active_cozy_count - 1] = null;
+                    // Cozy expired, remove it by swapping with last element
                     self.active_cozy_count -= 1;
-                    // Don't increment i since we shifted
+                    self.active_cozies[i] = self.active_cozies[self.active_cozy_count];
+                    self.active_cozies[self.active_cozy_count] = null;
+                    // Don't increment i since we need to check the swapped element
                 } else {
                     cozy.time_remaining_ms -= delta_time_ms;
                     i += 1;

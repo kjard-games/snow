@@ -100,6 +100,7 @@ pub const Skill = struct {
     // Special properties
     unblockable: bool = false,
     armor_penetration: f32 = 0.0, // percentage (0.0 to 1.0)
+    interrupts: bool = false, // Does this skill interrupt target's casting?
 };
 
 // Example snowball-themed skills
@@ -308,7 +309,7 @@ pub const INTERRUPT_SHOT = Skill{
     .recharge_time_ms = 10000, // 10 seconds
     .damage = 15.0,
     .cast_range = 200.0,
-    // Special: interrupts on hit (handled in combat.zig)
+    .interrupts = true,
 };
 
 const dazed_chill = [_]ChillEffect{.{
@@ -336,7 +337,7 @@ pub const DISRUPTING_THROW = Skill{
     .recharge_time_ms = 20000, // 20 seconds - powerful interrupt
     .damage = 5.0,
     .cast_range = 250.0,
-    // Special: interrupts on hit AND applies dazed
+    .interrupts = true,
     .chills = &dazed_chill,
 };
 

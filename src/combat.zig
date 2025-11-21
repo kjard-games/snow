@@ -146,10 +146,8 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             }
         }
 
-        // Check for interrupt skills (by name - cleaner than adding a flag)
-        const is_interrupt_skill = std.mem.eql(u8, skill.name, "Interrupt Shot") or
-            std.mem.eql(u8, skill.name, "Disrupting Throw");
-        if (is_interrupt_skill) {
+        // Check for interrupt skills
+        if (skill.interrupts) {
             tgt.interrupt();
         }
 

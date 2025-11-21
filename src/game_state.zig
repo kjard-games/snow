@@ -180,7 +180,9 @@ pub const GameState = struct {
         }
 
         // Initialize RNG with current time as seed
-        const rng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+        const timestamp = std.time.timestamp();
+        const seed: u64 = @bitCast(timestamp); // Convert i64 to u64 safely
+        const rng = std.Random.DefaultPrng.init(seed);
 
         // Check if gamepad is available and default to Action Camera if so
         const has_gamepad = rl.isGamepadAvailable(0);

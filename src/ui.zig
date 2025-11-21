@@ -8,6 +8,11 @@ const Character = character.Character;
 const InputState = input.InputState;
 const EntityId = entity_types.EntityId;
 
+// Helper to convert float coordinates to integer screen positions
+inline fn toI32(val: f32) i32 {
+    return @intFromFloat(val);
+}
+
 pub fn drawUI(player: *const Character, entities: []const Character, selected_target: ?EntityId, input_state: InputState, camera: rl.Camera) void {
     _ = camera; // Suppress unused parameter warning
 
@@ -107,27 +112,31 @@ pub fn drawUI(player: *const Character, entities: []const Character, selected_ta
 }
 
 fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f32) void {
+    const xi = toI32(x);
+    const yi = toI32(y);
+    const sizei = toI32(size);
+
     // Draw skill slot background
     const bg_color = if (player.skill_cooldowns[index] > 0)
         rl.Color{ .r = 40, .g = 40, .b = 40, .a = 200 }
     else
         rl.Color{ .r = 0, .g = 0, .b = 0, .a = 100 };
-    rl.drawRectangle(@intFromFloat(x), @intFromFloat(y), @intFromFloat(size), @intFromFloat(size), bg_color);
+    rl.drawRectangle(xi, yi, sizei, sizei, bg_color);
 
     // Draw border - highlight if currently casting this skill
     const is_casting_this = player.is_casting and player.casting_skill_index == index;
     const final_border = if (is_casting_this) rl.Color.orange else rl.Color.white;
-    rl.drawRectangleLines(@intFromFloat(x), @intFromFloat(y), @intFromFloat(size), @intFromFloat(size), final_border);
+    rl.drawRectangleLines(xi, yi, sizei, sizei, final_border);
 
     // Draw skill number
     var num_buf: [8]u8 = undefined;
     const num_text = std.fmt.bufPrintZ(&num_buf, "{}", .{index + 1}) catch unreachable;
-    rl.drawText(num_text, @intFromFloat(x + 2), @intFromFloat(y + 2), 10, .white);
+    rl.drawText(num_text, xi + 2, yi + 2, 10, .white);
 
     // Draw skill name if available
     if (player.skill_bar[index]) |skill| {
         const name_color = if (player.skill_cooldowns[index] > 0) rl.Color.dark_gray else rl.Color.yellow;
-        rl.drawText(skill.name, @intFromFloat(x + 2), @intFromFloat(y + 25), 6, name_color);
+        rl.drawText(skill.name, xi + 2, yi + 25, 6, name_color);
 
         // Draw cooldown overlay
         if (player.skill_cooldowns[index] > 0) {
@@ -135,19 +144,19 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
             const cooldown_progress = player.skill_cooldowns[index] / cooldown_total;
             const overlay_height = size * cooldown_progress;
 
-            rl.drawRectangle(@intFromFloat(x), @intFromFloat(y + (size - overlay_height)), @intFromFloat(size), @intFromFloat(overlay_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 150 });
+            rl.drawRectangle(xi, toI32(y + (size - overlay_height)), sizei, toI32(overlay_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 150 });
 
             // Draw cooldown time
             var cd_buf: [16]u8 = undefined;
             const cd_text = std.fmt.bufPrintZ(&cd_buf, "{d:.1}", .{player.skill_cooldowns[index]}) catch unreachable;
-            rl.drawText(cd_text, @intFromFloat(x + 10), @intFromFloat(y + 15), 12, .red);
+            rl.drawText(cd_text, xi + 10, yi + 15, 12, .red);
         }
 
         // Draw energy cost
         var cost_buf: [8]u8 = undefined;
         const cost_text = std.fmt.bufPrintZ(&cost_buf, "{d}", .{skill.energy_cost}) catch unreachable;
         const cost_color = if (player.energy >= skill.energy_cost) rl.Color.sky_blue else rl.Color.red;
-        rl.drawText(cost_text, @intFromFloat(x + size - 15), @intFromFloat(y + 2), 10, cost_color);
+        rl.drawText(cost_text, xi + sizei - 15, yi + 2, 10, cost_color);
     }
 }
 
@@ -157,8 +166,11 @@ fn drawWarmthOrb(player: *const Character, x: f32, y: f32, width: f32, height: f
     const center_y = y + height / 2.0;
     const radius = @min(width, height) / 2.0;
 
+    const center_xi = toI32(center_x);
+    const center_yi = toI32(center_y);
+
     // Draw orb border
-    rl.drawCircleLines(@intFromFloat(center_x), @intFromFloat(center_y), radius, .white);
+    rl.drawCircleLines(center_xi, center_yi, radius, .white);
 
     // Calculate fill percentage (drains from bottom to top)
     const fill_percent = player.warmth / player.max_warmth;
@@ -168,17 +180,17 @@ fn drawWarmthOrb(player: *const Character, x: f32, y: f32, width: f32, height: f
     const health_color = rl.Color{ .r = 200, .g = 0, .b = 0, .a = 255 }; // Red
 
     // Draw full circle
-    rl.drawCircle(@intFromFloat(center_x), @intFromFloat(center_y), radius - 2, health_color);
+    rl.drawCircle(center_xi, center_yi, radius - 2, health_color);
 
     // Cover the empty portion with a black rectangle from top
     if (fill_percent < 1.0) {
         const empty_height = (1.0 - fill_percent) * (radius * 2.0);
         const rect_y = center_y - radius;
-        rl.drawRectangle(@intFromFloat(center_x - radius), @intFromFloat(rect_y), @intFromFloat(radius * 2.0), @intFromFloat(empty_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 255 });
+        rl.drawRectangle(toI32(center_x - radius), toI32(rect_y), toI32(radius * 2.0), toI32(empty_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 255 });
     }
 
     // Redraw border to clean up edges
-    rl.drawCircleLines(@intFromFloat(center_x), @intFromFloat(center_y), radius, .white);
+    rl.drawCircleLines(center_xi, center_yi, radius, .white);
 
     // Draw warmth text below orb
     var warmth_buf: [32]u8 = undefined;
@@ -189,20 +201,24 @@ fn drawWarmthOrb(player: *const Character, x: f32, y: f32, width: f32, height: f
     ) catch unreachable;
 
     const text_width = rl.measureText(warmth_text, 12);
-    const text_x: i32 = @intFromFloat(center_x);
-    rl.drawText(warmth_text, text_x - @divTrunc(text_width, 2), @intFromFloat(y + height + 5), 12, .white);
+    rl.drawText(warmth_text, center_xi - @divTrunc(text_width, 2), toI32(y + height + 5), 12, .white);
 }
 
 fn drawEnergyBar(player: *const Character, x: f32, y: f32, width: f32, height: f32) void {
+    const xi = toI32(x);
+    const yi = toI32(y);
+    const widthi = toI32(width);
+    const heighti = toI32(height);
+
     // Draw border
-    rl.drawRectangleLines(@intFromFloat(x), @intFromFloat(y), @intFromFloat(width), @intFromFloat(height), .white);
+    rl.drawRectangleLines(xi, yi, widthi, heighti, .white);
 
     // Calculate fill
     const fill_percent = @as(f32, @floatFromInt(player.energy)) / @as(f32, @floatFromInt(player.max_energy));
     const fill_width = (width - 4) * fill_percent;
 
     // Draw energy fill (blue)
-    rl.drawRectangle(@intFromFloat(x + 2), @intFromFloat(y + 2), @intFromFloat(fill_width), @intFromFloat(height - 4), rl.Color{ .r = 0, .g = 100, .b = 255, .a = 255 });
+    rl.drawRectangle(xi + 2, yi + 2, toI32(fill_width), heighti - 4, rl.Color{ .r = 0, .g = 100, .b = 255, .a = 255 });
 
     // Draw energy text
     var energy_buf: [32]u8 = undefined;
@@ -213,31 +229,35 @@ fn drawEnergyBar(player: *const Character, x: f32, y: f32, width: f32, height: f
     ) catch unreachable;
 
     const text_width = rl.measureText(energy_text, 10);
-    const text_x: i32 = @intFromFloat(x + width / 2.0);
-    rl.drawText(energy_text, text_x - @divTrunc(text_width, 2), @intFromFloat(y + 2), 10, .white);
+    rl.drawText(energy_text, toI32(x + width / 2.0) - @divTrunc(text_width, 2), yi + 2, 10, .white);
 }
 
 fn drawConditionIcons(player: *const Character, x: f32, y: f32, icon_size: f32, spacing: f32) void {
+    const yi = toI32(y);
+    const sizei = toI32(icon_size);
+
     // Draw buffs (cozies) - first row
     var buff_x = x;
     for (player.active_cozies[0..player.active_cozy_count]) |maybe_cozy| {
         if (maybe_cozy) |cozy| {
+            const buff_xi = toI32(buff_x);
+
             // Draw buff icon background
-            rl.drawRectangle(@intFromFloat(buff_x), @intFromFloat(y), @intFromFloat(icon_size), @intFromFloat(icon_size), rl.Color{ .r = 0, .g = 100, .b = 0, .a = 200 });
-            rl.drawRectangleLines(@intFromFloat(buff_x), @intFromFloat(y), @intFromFloat(icon_size), @intFromFloat(icon_size), .green);
+            rl.drawRectangle(buff_xi, yi, sizei, sizei, rl.Color{ .r = 0, .g = 100, .b = 0, .a = 200 });
+            rl.drawRectangleLines(buff_xi, yi, sizei, sizei, .green);
 
             // Draw first letter of buff name
             const name = @tagName(cozy.cozy);
             var letter_buf: [2]u8 = undefined;
             letter_buf[0] = std.ascii.toUpper(name[0]);
             letter_buf[1] = 0;
-            rl.drawText(@ptrCast(&letter_buf), @intFromFloat(buff_x + 5), @intFromFloat(y + 5), 12, .white);
+            rl.drawText(@ptrCast(&letter_buf), buff_xi + 5, yi + 5, 12, .white);
 
             // Draw time remaining
             const seconds = cozy.time_remaining_ms / 1000;
             var time_buf: [8]u8 = undefined;
             const time_text = std.fmt.bufPrintZ(&time_buf, "{d}", .{seconds}) catch unreachable;
-            rl.drawText(time_text, @intFromFloat(buff_x + 2), @intFromFloat(y + icon_size - 10), 8, .white);
+            rl.drawText(time_text, buff_xi + 2, toI32(y + icon_size - 10), 8, .white);
 
             buff_x += icon_size + spacing;
         }
@@ -246,24 +266,28 @@ fn drawConditionIcons(player: *const Character, x: f32, y: f32, icon_size: f32, 
     // Draw debuffs (chills) - second row
     var debuff_x = x;
     const debuff_y = y + icon_size + spacing;
+    const debuff_yi = toI32(debuff_y);
+
     for (player.active_chills[0..player.active_chill_count]) |maybe_chill| {
         if (maybe_chill) |chill| {
+            const debuff_xi = toI32(debuff_x);
+
             // Draw debuff icon background
-            rl.drawRectangle(@intFromFloat(debuff_x), @intFromFloat(debuff_y), @intFromFloat(icon_size), @intFromFloat(icon_size), rl.Color{ .r = 100, .g = 0, .b = 0, .a = 200 });
-            rl.drawRectangleLines(@intFromFloat(debuff_x), @intFromFloat(debuff_y), @intFromFloat(icon_size), @intFromFloat(icon_size), .red);
+            rl.drawRectangle(debuff_xi, debuff_yi, sizei, sizei, rl.Color{ .r = 100, .g = 0, .b = 0, .a = 200 });
+            rl.drawRectangleLines(debuff_xi, debuff_yi, sizei, sizei, .red);
 
             // Draw first letter of debuff name
             const name = @tagName(chill.chill);
             var letter_buf: [2]u8 = undefined;
             letter_buf[0] = std.ascii.toUpper(name[0]);
             letter_buf[1] = 0;
-            rl.drawText(@ptrCast(&letter_buf), @intFromFloat(debuff_x + 5), @intFromFloat(debuff_y + 5), 12, .white);
+            rl.drawText(@ptrCast(&letter_buf), debuff_xi + 5, debuff_yi + 5, 12, .white);
 
             // Draw time remaining
             const seconds = chill.time_remaining_ms / 1000;
             var time_buf: [8]u8 = undefined;
             const time_text = std.fmt.bufPrintZ(&time_buf, "{d}", .{seconds}) catch unreachable;
-            rl.drawText(time_text, @intFromFloat(debuff_x + 2), @intFromFloat(debuff_y + icon_size - 10), 8, .white);
+            rl.drawText(time_text, debuff_xi + 2, toI32(debuff_y + icon_size - 10), 8, .white);
 
             debuff_x += icon_size + spacing;
         }
@@ -298,11 +322,14 @@ fn drawSkillBar(player: *const Character) void {
             const cast_bar_width: f32 = 400;
             const cast_bar_x = (@as(f32, @floatFromInt(screen_width)) - cast_bar_width) / 2.0;
 
-            rl.drawRectangleLines(@intFromFloat(cast_bar_x), @intFromFloat(cast_bar_y), @intFromFloat(cast_bar_width), 20, .white);
-            rl.drawRectangle(@intFromFloat(cast_bar_x + 2), @intFromFloat(cast_bar_y + 2), @intFromFloat((cast_bar_width - 4) * progress), 16, .yellow);
+            const cast_bar_xi = toI32(cast_bar_x);
+            const cast_bar_yi = toI32(cast_bar_y);
+
+            rl.drawRectangleLines(cast_bar_xi, cast_bar_yi, toI32(cast_bar_width), 20, .white);
+            rl.drawRectangle(cast_bar_xi + 2, cast_bar_yi + 2, toI32((cast_bar_width - 4) * progress), 16, .yellow);
 
             // Show skill name being cast
-            rl.drawText(skill.name, @intFromFloat(cast_bar_x + 5), @intFromFloat(cast_bar_y - 20), 14, .white);
+            rl.drawText(skill.name, cast_bar_xi + 5, cast_bar_yi - 20, 14, .white);
         }
     }
 
