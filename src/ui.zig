@@ -124,7 +124,7 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
     rl.drawRectangle(xi, yi, sizei, sizei, bg_color);
 
     // Draw border - highlight if currently casting this skill
-    const is_casting_this = player.is_casting and player.casting_skill_index == index;
+    const is_casting_this = player.cast_state == .activating and player.casting_skill_index == index;
     const final_border = if (is_casting_this) rl.Color.orange else rl.Color.white;
     rl.drawRectangleLines(xi, yi, sizei, sizei, final_border);
 
@@ -312,7 +312,7 @@ fn drawSkillBar(player: *const Character) void {
     const start_y = @as(f32, @floatFromInt(screen_height)) - orb_height - 30;
 
     // Draw casting bar if casting (centered above entire skill bar)
-    if (player.is_casting) {
+    if (player.cast_state == .activating) {
         const casting_skill = player.skill_bar[player.casting_skill_index];
         if (casting_skill) |skill| {
             const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;

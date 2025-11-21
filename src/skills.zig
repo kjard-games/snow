@@ -7,6 +7,36 @@ pub const SkillTarget = enum {
     ground,
 };
 
+// Skill mechanics - determines casting behavior (snowball fight timing!)
+// These describe HOW the skill executes (timing), not WHAT it is (that's SkillType)
+pub const SkillMechanic = enum {
+    windup, // Wind up and release - projectile flies mid-animation (most throw skills)
+    concentrate, // Focus required - effect at end + recovery (complex tricks)
+    shout, // Quick yell - instant, no recovery needed (call skills)
+    shift, // Reposition body - instant, no recovery (stance skills)
+    ready, // Quick preparation - brief setup + recovery (gesture/signet skills)
+    reflex, // Split-second reaction - instant, can't use while busy (future: dodges)
+
+    pub fn hasAftercast(self: SkillMechanic) bool {
+        return switch (self) {
+            .windup, .concentrate, .ready => true,
+            .shout, .shift, .reflex => false,
+        };
+    }
+
+    pub fn canUseWhileCasting(self: SkillMechanic) bool {
+        return switch (self) {
+            .reflex => false, // Can't react while mid-action
+            else => false, // Default: can't use while casting
+        };
+    }
+
+    pub fn executesAtHalfActivation(self: SkillMechanic) bool {
+        return self == .windup; // Snowball leaves hand mid-windup!
+    }
+};
+
+// Thematic skill type (flavor/animation) - kept for visual variety
 pub const SkillType = enum {
     throw, // Attack skills - throwing snowballs
     trick, // Magic-like abilities - special snow powers
@@ -75,11 +105,13 @@ pub const ActiveCozy = struct {
 
 pub const Skill = struct {
     name: [:0]const u8,
-    skill_type: SkillType,
+    skill_type: SkillType, // Thematic type (visual/animation)
+    mechanic: SkillMechanic, // Mechanical type (timing behavior)
     energy_cost: u8 = 5,
 
-    // Timing
+    // Timing (GW1-accurate)
     activation_time_ms: u32 = 0, // 0 = instant
+    aftercast_ms: u32 = 750, // Standard 3/4 second aftercast (0 for instant skills)
     recharge_time_ms: u32 = 2000, // cooldown
     duration_ms: u32 = 0, // for buffs/debuffs (0 = not applicable)
 
@@ -107,8 +139,10 @@ pub const Skill = struct {
 pub const QUICK_TOSS = Skill{
     .name = "Quick Toss",
     .skill_type = .throw,
+    .mechanic = .windup,
     .energy_cost = 3,
     .activation_time_ms = 0, // instant
+    .aftercast_ms = 750, // Standard aftercast
     .recharge_time_ms = 1000, // 1 second
     .damage = 8.0,
     .cast_range = 180.0,
@@ -117,8 +151,10 @@ pub const QUICK_TOSS = Skill{
 pub const POWER_THROW = Skill{
     .name = "Power Throw",
     .skill_type = .throw,
+    .mechanic = .windup, // Attack skills execute at half activation
     .energy_cost = 8,
-    .activation_time_ms = 1500, // 1.5 second wind-up
+    .activation_time_ms = 1500, // 1.5 second wind-up, projectile fires at 750ms
+    .aftercast_ms = 750, // Standard aftercast
     .recharge_time_ms = 5000, // 5 seconds
     .damage = 30.0,
     .cast_range = 250.0,
@@ -134,8 +170,10 @@ const soggy_chill = [_]ChillEffect{.{
 pub const SLUSH_BALL = Skill{
     .name = "Slush Ball",
     .skill_type = .throw,
+    .mechanic = .windup, // Attack skill
     .energy_cost = 6,
-    .activation_time_ms = 750,
+    .activation_time_ms = 750, // Projectile fires at 375ms
+    .aftercast_ms = 750,
     .recharge_time_ms = 8000, // 8 seconds
     .damage = 12.0,
     .cast_range = 200.0,
@@ -151,8 +189,10 @@ const frost_eyes_chill = [_]ChillEffect{.{
 pub const SNOW_IN_FACE = Skill{
     .name = "Snow in Face",
     .skill_type = .trick,
+    .mechanic = .concentrate, // Spell - executes at end of cast
     .energy_cost = 5,
-    .activation_time_ms = 500,
+    .activation_time_ms = 500, // Cast for 500ms
+    .aftercast_ms = 750, // Then 750ms aftercast
     .recharge_time_ms = 12000, // 12 seconds
     .damage = 5.0,
     .cast_range = 150.0,
@@ -168,8 +208,10 @@ const slippery_chill = [_]ChillEffect{.{
 pub const ICE_PATCH = Skill{
     .name = "Ice Patch",
     .skill_type = .trick,
+    .mechanic = .concentrate,
     .energy_cost = 7,
-    .activation_time_ms = 1000,
+    .activation_time_ms = 1000, // 1 second cast
+    .aftercast_ms = 750,
     .recharge_time_ms = 15000, // 15 seconds
     .damage = 3.0,
     .cast_range = 300.0,
@@ -188,8 +230,10 @@ const snowball_shield_cozy = [_]CozyEffect{.{
 pub const DODGE_ROLL = Skill{
     .name = "Dodge Roll",
     .skill_type = .stance,
+    .mechanic = .shift, // Instant, no aftercast
     .energy_cost = 4,
     .activation_time_ms = 0, // instant
+    .aftercast_ms = 0, // No aftercast for stances
     .recharge_time_ms = 8000, // 8 seconds
     .target_type = .self,
     .duration_ms = 2000, // 2 seconds of evade
@@ -205,8 +249,10 @@ const hot_cocoa_cozy = [_]CozyEffect{.{
 pub const WARM_UP = Skill{
     .name = "Warm Up",
     .skill_type = .gesture,
+    .mechanic = .ready, // Signets have cast time + aftercast
     .energy_cost = 0, // gestures are free
-    .activation_time_ms = 0,
+    .activation_time_ms = 0, // But this one is instant
+    .aftercast_ms = 750, // Standard aftercast
     .recharge_time_ms = 20000, // 20 seconds
     .healing = 25.0,
     .target_type = .self,
@@ -216,8 +262,10 @@ pub const WARM_UP = Skill{
 pub const RALLY_CRY = Skill{
     .name = "Rally Cry",
     .skill_type = .call,
+    .mechanic = .shout, // Shouts are instant, no aftercast
     .energy_cost = 10,
     .activation_time_ms = 0,
+    .aftercast_ms = 0, // No aftercast for shouts
     .recharge_time_ms = 30000, // 30 seconds
     .healing = 15.0,
     .target_type = .ally,
@@ -228,8 +276,10 @@ pub const RALLY_CRY = Skill{
 pub const PRECISION_STRIKE = Skill{
     .name = "Precision Strike",
     .skill_type = .throw,
+    .mechanic = .windup, // Attack skill - executes at half activation
     .energy_cost = 7,
-    .activation_time_ms = 1000,
+    .activation_time_ms = 1000, // Projectile fires at 500ms
+    .aftercast_ms = 750,
     .recharge_time_ms = 10000, // 10 seconds
     .damage = 20.0,
     .cast_range = 220.0,
@@ -245,8 +295,10 @@ const bundled_up_cozy = [_]CozyEffect{.{
 pub const BUNDLE_UP = Skill{
     .name = "Bundle Up",
     .skill_type = .stance,
+    .mechanic = .shift, // Instant, no aftercast
     .energy_cost = 5,
     .activation_time_ms = 0,
+    .aftercast_ms = 0,
     .recharge_time_ms = 15000, // 15 seconds
     .target_type = .self,
     .cozies = &bundled_up_cozy,
@@ -261,8 +313,10 @@ const fire_inside_cozy = [_]CozyEffect{.{
 pub const BURNING_RAGE = Skill{
     .name = "Burning Rage",
     .skill_type = .stance,
+    .mechanic = .shift,
     .energy_cost = 6,
     .activation_time_ms = 0,
+    .aftercast_ms = 0,
     .recharge_time_ms = 20000, // 20 seconds
     .target_type = .self,
     .cozies = &fire_inside_cozy,
@@ -277,8 +331,10 @@ const snow_goggles_cozy = [_]CozyEffect{.{
 pub const GOGGLES_ON = Skill{
     .name = "Goggles On",
     .skill_type = .gesture,
+    .mechanic = .ready,
     .energy_cost = 0,
     .activation_time_ms = 0,
+    .aftercast_ms = 750,
     .recharge_time_ms = 25000, // 25 seconds
     .target_type = .self,
     .cozies = &snow_goggles_cozy,
@@ -293,8 +349,10 @@ const sure_footed_cozy = [_]CozyEffect{.{
 pub const SPRINT = Skill{
     .name = "Sprint",
     .skill_type = .stance,
+    .mechanic = .shift,
     .energy_cost = 4,
     .activation_time_ms = 0,
+    .aftercast_ms = 0,
     .recharge_time_ms = 12000, // 12 seconds
     .target_type = .self,
     .cozies = &sure_footed_cozy,
@@ -304,8 +362,10 @@ pub const SPRINT = Skill{
 pub const INTERRUPT_SHOT = Skill{
     .name = "Interrupt Shot",
     .skill_type = .throw,
+    .mechanic = .windup, // Attack - fires at 250ms (half of 500ms)
     .energy_cost = 10,
     .activation_time_ms = 500, // Half second cast
+    .aftercast_ms = 750,
     .recharge_time_ms = 10000, // 10 seconds
     .damage = 15.0,
     .cast_range = 200.0,
@@ -321,8 +381,10 @@ const dazed_chill = [_]ChillEffect{.{
 pub const DAZING_BLOW = Skill{
     .name = "Dazing Blow",
     .skill_type = .throw,
+    .mechanic = .windup,
     .energy_cost = 5,
     .activation_time_ms = 0, // Instant
+    .aftercast_ms = 750,
     .recharge_time_ms = 8000, // 8 seconds
     .damage = 10.0,
     .cast_range = 180.0,
@@ -332,8 +394,10 @@ pub const DAZING_BLOW = Skill{
 pub const DISRUPTING_THROW = Skill{
     .name = "Disrupting Throw",
     .skill_type = .trick,
+    .mechanic = .concentrate, // Spell mechanic but instant for quick interrupt
     .energy_cost = 15,
     .activation_time_ms = 0, // Instant - must be fast to interrupt
+    .aftercast_ms = 750,
     .recharge_time_ms = 20000, // 20 seconds - powerful interrupt
     .damage = 5.0,
     .cast_range = 250.0,

@@ -27,8 +27,8 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
 
-    // Check if already casting
-    if (caster.is_casting) return .already_casting;
+    // Check if already casting or in aftercast
+    if (caster.cast_state != .idle) return .already_casting;
 
     // Check cooldown
     if (caster.skill_cooldowns[skill_index] > 0) return .on_cooldown;

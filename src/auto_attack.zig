@@ -22,8 +22,8 @@ pub fn updateAutoAttacks(entities: []Character, delta_time: f32, rng: *std.Rando
         if (!ent.isAlive()) continue;
         if (!ent.is_auto_attacking) continue;
 
-        // Can't auto-attack while casting
-        if (ent.is_casting) continue;
+        // Can't auto-attack while casting or in aftercast
+        if (ent.isCasting()) continue;
 
         // Update attack timer
         ent.auto_attack_timer -= delta_time;

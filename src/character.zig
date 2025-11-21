@@ -21,6 +21,13 @@ pub const MAX_RECENT_SKILLS: usize = 5;
 pub const MAX_GRIT_STACKS: u8 = 5;
 pub const MAX_RHYTHM_CHARGE: u8 = 10;
 
+// Cast state for GW1-accurate skill timing
+pub const CastState = enum {
+    idle, // Not casting or in aftercast
+    activating, // Currently casting (activation phase)
+    aftercast, // Skill fired, but locked in aftercast animation
+};
+
 // Compile-time safety: ensure MAX_SKILLS fits in u8 for skill indexing
 comptime {
     if (MAX_SKILLS > 255) {
@@ -75,12 +82,18 @@ pub const Character = struct {
     skill_bar: [MAX_SKILLS]?*const Skill,
     selected_skill: u8 = 0,
 
-    // Skill cooldowns and activation tracking
+    // Skill cooldowns and activation tracking (GW1-accurate)
     skill_cooldowns: [MAX_SKILLS]f32 = [_]f32{0.0} ** MAX_SKILLS, // time remaining in seconds
-    is_casting: bool = false,
+
+    // Cast state tracking
+    cast_state: CastState = .idle,
     casting_skill_index: u8 = 0,
-    cast_time_remaining: f32 = 0.0, // seconds remaining on current cast
+    cast_time_remaining: f32 = 0.0, // seconds remaining on current cast phase
+    skill_executed: bool = false, // Has skill effect/projectile been fired?
     cast_target_id: ?EntityId = null, // Target entity ID for cast completion
+
+    // Aftercast tracking
+    aftercast_time_remaining: f32 = 0.0, // seconds remaining in aftercast
 
     // Auto-attack state (Guild Wars style)
     is_auto_attacking: bool = false, // Whether auto-attack loop is active
@@ -127,7 +140,7 @@ pub const Character = struct {
         if (self.warmth <= 0) {
             self.is_dead = true;
             // Death interrupts casting
-            if (self.is_casting) {
+            if (self.cast_state != .idle) {
                 self.cancelCasting();
             }
         }
@@ -135,7 +148,7 @@ pub const Character = struct {
 
     /// Interrupt current cast (from interrupt skills, dazed condition, etc)
     pub fn interrupt(self: *Character) void {
-        if (self.is_casting) {
+        if (self.cast_state == .activating) {
             print("{s}'s cast was interrupted!\n", .{self.name});
             self.cancelCasting();
         }
@@ -225,12 +238,20 @@ pub const Character = struct {
             }
         }
 
-        // Update casting state
-        if (self.is_casting) {
+        // Update casting state (activation phase)
+        if (self.cast_state == .activating) {
             self.cast_time_remaining = @max(0, self.cast_time_remaining - delta_time);
             if (self.cast_time_remaining <= 0) {
-                self.is_casting = false;
                 // Cast is complete - will be executed by game_state.finishCasts()
+                // Don't change state here - game_state handles transition to aftercast
+            }
+        }
+
+        // Update aftercast state
+        if (self.cast_state == .aftercast) {
+            self.aftercast_time_remaining = @max(0, self.aftercast_time_remaining - delta_time);
+            if (self.aftercast_time_remaining <= 0) {
+                self.cast_state = .idle;
             }
         }
     }
@@ -352,7 +373,8 @@ pub const Character = struct {
 
     pub fn canUseSkill(self: Character, skill_index: u8) bool {
         if (skill_index >= MAX_SKILLS) return false;
-        if (self.is_casting) return false;
+        // Can't use skills while casting or in aftercast
+        if (self.cast_state != .idle) return false;
         if (self.skill_cooldowns[skill_index] > 0) return false;
 
         const skill = self.skill_bar[skill_index] orelse return false;
@@ -364,24 +386,31 @@ pub const Character = struct {
     pub fn startCasting(self: *Character, skill_index: u8) void {
         const skill = self.skill_bar[skill_index] orelse return;
 
-        self.is_casting = true;
+        self.cast_state = .activating;
         self.casting_skill_index = skill_index;
         self.cast_time_remaining = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
+        self.skill_executed = false;
 
         // Consume energy immediately
         self.energy -= skill.energy_cost;
     }
 
     pub fn cancelCasting(self: *Character) void {
-        if (self.is_casting) {
+        if (self.cast_state == .activating) {
             // Return partial energy on cancel?
             const skill = self.skill_bar[self.casting_skill_index] orelse return;
             const refund = skill.energy_cost / 2;
             self.energy = @min(self.max_energy, self.energy + refund);
 
-            self.is_casting = false;
+            self.cast_state = .idle;
             self.cast_time_remaining = 0;
+            self.skill_executed = false;
         }
+    }
+
+    /// Check if character is casting (activating or in aftercast)
+    pub fn isCasting(self: Character) bool {
+        return self.cast_state != .idle;
     }
 
     // === AUTO-ATTACK SYSTEM (Guild Wars style) ===

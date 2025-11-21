@@ -71,50 +71,50 @@ pub const Position = enum {
 
 // Pitcher skills - high damage, long range
 const pitcher_skills = [_]Skill{
-    .{ .name = "Fastball", .skill_type = .throw, .energy_cost = 5, .damage = 15.0, .cast_range = 250.0 },
-    .{ .name = "Curveball", .skill_type = .throw, .energy_cost = 7, .damage = 12.0, .cast_range = 200.0 },
-    .{ .name = "Changeup", .skill_type = .throw, .energy_cost = 6, .damage = 10.0, .cast_range = 220.0 },
-    .{ .name = "Knuckleball", .skill_type = .throw, .energy_cost = 8, .damage = 18.0, .cast_range = 230.0 },
+    .{ .name = "Fastball", .skill_type = .throw, .mechanic = .windup, .energy_cost = 5, .damage = 15.0, .cast_range = 250.0, .activation_time_ms = 750, .aftercast_ms = 750 },
+    .{ .name = "Curveball", .skill_type = .throw, .mechanic = .windup, .energy_cost = 7, .damage = 12.0, .cast_range = 200.0, .activation_time_ms = 1000, .aftercast_ms = 750 },
+    .{ .name = "Changeup", .skill_type = .throw, .mechanic = .windup, .energy_cost = 6, .damage = 10.0, .cast_range = 220.0, .activation_time_ms = 500, .aftercast_ms = 750 },
+    .{ .name = "Knuckleball", .skill_type = .throw, .mechanic = .windup, .energy_cost = 8, .damage = 18.0, .cast_range = 230.0, .activation_time_ms = 1500, .aftercast_ms = 750 },
 };
 
 // Fielder skills - balanced
 const fielder_skills = [_]Skill{
-    .{ .name = "Diving Catch", .skill_type = .throw, .energy_cost = 4, .damage = 8.0, .cast_range = 150.0 },
-    .{ .name = "Quick Throw", .skill_type = .throw, .energy_cost = 3, .damage = 10.0, .cast_range = 180.0 },
-    .{ .name = "Scoop", .skill_type = .throw, .energy_cost = 5, .damage = 12.0, .cast_range = 160.0 },
-    .{ .name = "Long Toss", .skill_type = .throw, .energy_cost = 7, .damage = 14.0, .cast_range = 280.0 },
+    .{ .name = "Diving Catch", .skill_type = .throw, .mechanic = .windup, .energy_cost = 4, .damage = 8.0, .cast_range = 150.0, .activation_time_ms = 500, .aftercast_ms = 750 },
+    .{ .name = "Quick Throw", .skill_type = .throw, .mechanic = .windup, .energy_cost = 3, .damage = 10.0, .cast_range = 180.0, .activation_time_ms = 250, .aftercast_ms = 750 },
+    .{ .name = "Scoop", .skill_type = .throw, .mechanic = .windup, .energy_cost = 5, .damage = 12.0, .cast_range = 160.0, .activation_time_ms = 750, .aftercast_ms = 750 },
+    .{ .name = "Long Toss", .skill_type = .throw, .mechanic = .windup, .energy_cost = 7, .damage = 14.0, .cast_range = 280.0, .activation_time_ms = 1000, .aftercast_ms = 750 },
 };
 
 // Sledder skills - close range, high damage
 const sledder_skills = [_]Skill{
-    .{ .name = "Downhill Rush", .skill_type = .throw, .energy_cost = 8, .damage = 20.0, .cast_range = 100.0 },
-    .{ .name = "Snow Spray", .skill_type = .throw, .energy_cost = 6, .damage = 8.0, .cast_range = 120.0 },
-    .{ .name = "Jump", .skill_type = .throw, .energy_cost = 5, .damage = 12.0, .cast_range = 150.0 },
-    .{ .name = "Drift Turn", .skill_type = .throw, .energy_cost = 7, .damage = 15.0, .cast_range = 110.0 },
+    .{ .name = "Downhill Rush", .skill_type = .throw, .mechanic = .windup, .energy_cost = 8, .damage = 20.0, .cast_range = 100.0, .activation_time_ms = 1000, .aftercast_ms = 750 },
+    .{ .name = "Snow Spray", .skill_type = .throw, .mechanic = .windup, .energy_cost = 6, .damage = 8.0, .cast_range = 120.0, .activation_time_ms = 500, .aftercast_ms = 750 },
+    .{ .name = "Jump", .skill_type = .throw, .mechanic = .windup, .energy_cost = 5, .damage = 12.0, .cast_range = 150.0, .activation_time_ms = 750, .aftercast_ms = 750 },
+    .{ .name = "Drift Turn", .skill_type = .throw, .mechanic = .windup, .energy_cost = 7, .damage = 15.0, .cast_range = 110.0, .activation_time_ms = 500, .aftercast_ms = 750 },
 };
 
 // Shoveler skills - defensive, moderate damage
 const shoveler_skills = [_]Skill{
-    .{ .name = "Dig In", .skill_type = .stance, .energy_cost = 4, .damage = 6.0, .cast_range = 140.0 },
-    .{ .name = "Wall Up", .skill_type = .stance, .energy_cost = 6, .damage = 5.0, .cast_range = 100.0 },
-    .{ .name = "Shovel Toss", .skill_type = .throw, .energy_cost = 5, .damage = 13.0, .cast_range = 170.0 },
-    .{ .name = "Pack Snow", .skill_type = .throw, .energy_cost = 7, .damage = 11.0, .cast_range = 160.0 },
+    .{ .name = "Dig In", .skill_type = .stance, .mechanic = .shift, .energy_cost = 4, .damage = 6.0, .cast_range = 140.0, .activation_time_ms = 0, .aftercast_ms = 0 },
+    .{ .name = "Wall Up", .skill_type = .stance, .mechanic = .shift, .energy_cost = 6, .damage = 5.0, .cast_range = 100.0, .activation_time_ms = 0, .aftercast_ms = 0 },
+    .{ .name = "Shovel Toss", .skill_type = .throw, .mechanic = .windup, .energy_cost = 5, .damage = 13.0, .cast_range = 170.0, .activation_time_ms = 750, .aftercast_ms = 750 },
+    .{ .name = "Pack Snow", .skill_type = .throw, .mechanic = .windup, .energy_cost = 7, .damage = 11.0, .cast_range = 160.0, .activation_time_ms = 1000, .aftercast_ms = 750 },
 };
 
 // Animator skills - summons (Calvin & Hobbes grotesque snowmen)
 // TODO: Implement proper summon mechanics
 const animator_skills = [_]Skill{
-    .{ .name = "Deranged Snowman", .skill_type = .trick, .energy_cost = 10, .damage = 8.0, .cast_range = 200.0 },
-    .{ .name = "Snow Family", .skill_type = .trick, .energy_cost = 8, .damage = 12.0, .cast_range = 220.0 },
-    .{ .name = "Abomination", .skill_type = .trick, .energy_cost = 15, .damage = 25.0, .cast_range = 180.0 },
-    .{ .name = "Snowman Sentinel", .skill_type = .trick, .energy_cost = 12, .damage = 15.0, .cast_range = 240.0 },
+    .{ .name = "Deranged Snowman", .skill_type = .trick, .mechanic = .concentrate, .energy_cost = 10, .damage = 8.0, .cast_range = 200.0, .activation_time_ms = 2000, .aftercast_ms = 750 },
+    .{ .name = "Snow Family", .skill_type = .trick, .mechanic = .concentrate, .energy_cost = 8, .damage = 12.0, .cast_range = 220.0, .activation_time_ms = 1500, .aftercast_ms = 750 },
+    .{ .name = "Abomination", .skill_type = .trick, .mechanic = .concentrate, .energy_cost = 15, .damage = 25.0, .cast_range = 180.0, .activation_time_ms = 3000, .aftercast_ms = 750 },
+    .{ .name = "Snowman Sentinel", .skill_type = .trick, .mechanic = .concentrate, .energy_cost = 12, .damage = 15.0, .cast_range = 240.0, .activation_time_ms = 2000, .aftercast_ms = 750 },
 };
 
 // Thermos skills - healer/support (hot cocoa themed)
 // TODO: Implement proper healing and buff mechanics
 const thermos_skills = [_]Skill{
-    .{ .name = "Share Cocoa", .skill_type = .gesture, .energy_cost = 5, .healing = 20.0, .cast_range = 150.0, .target_type = .ally },
-    .{ .name = "Hand Warmers", .skill_type = .gesture, .energy_cost = 4, .cast_range = 180.0, .target_type = .ally },
-    .{ .name = "Extra Scarf", .skill_type = .gesture, .energy_cost = 6, .cast_range = 160.0, .target_type = .ally },
-    .{ .name = "Cocoa Break", .skill_type = .call, .energy_cost = 10, .healing = 15.0, .cast_range = 200.0, .target_type = .ally, .aoe_type = .area, .aoe_radius = 150.0 },
+    .{ .name = "Share Cocoa", .skill_type = .gesture, .mechanic = .ready, .energy_cost = 5, .healing = 20.0, .cast_range = 150.0, .target_type = .ally, .activation_time_ms = 1000, .aftercast_ms = 750 },
+    .{ .name = "Hand Warmers", .skill_type = .gesture, .mechanic = .ready, .energy_cost = 4, .cast_range = 180.0, .target_type = .ally, .activation_time_ms = 750, .aftercast_ms = 750 },
+    .{ .name = "Extra Scarf", .skill_type = .gesture, .mechanic = .ready, .energy_cost = 6, .cast_range = 160.0, .target_type = .ally, .activation_time_ms = 1000, .aftercast_ms = 750 },
+    .{ .name = "Cocoa Break", .skill_type = .call, .mechanic = .shout, .energy_cost = 10, .healing = 15.0, .cast_range = 200.0, .target_type = .ally, .aoe_type = .area, .aoe_radius = 150.0, .activation_time_ms = 0, .aftercast_ms = 0 },
 };

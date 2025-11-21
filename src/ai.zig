@@ -59,7 +59,7 @@ fn selectSkillWithBehaviorTree(
 // Damage dealer: prioritize high damage, use interrupts on casting targets
 fn selectDamageSkill(caster: *Character, target: *Character, _: *std.Random) ?u8 {
     // Check if target is casting - use interrupt if available
-    if (target.is_casting) {
+    if (target.cast_state == .activating) {
         for (caster.skill_bar, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.interrupts and caster.canUseSkill(@intCast(idx))) {
@@ -146,7 +146,7 @@ fn selectSupportSkill(caster: *Character, all_entities: []Character, _: *std.Ran
 fn selectDisruptorSkill(caster: *Character, target: *Character, rng: *std.Random) ?u8 {
 
     // Always interrupt if target is casting
-    if (target.is_casting) {
+    if (target.cast_state == .activating) {
         for (caster.skill_bar, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 // Prefer interrupt skills, but also use daze-applying skills

@@ -355,30 +355,65 @@ pub const GameState = struct {
     fn finishCasts(self: *GameState, rng: *std.Random) void {
         // Check cast completions for ALL entities (including player!)
         for (&self.entities) |*ent| {
-            if (ent.is_casting and ent.cast_time_remaining <= 0) {
-                const skill = ent.skill_bar[ent.casting_skill_index];
-                var target: ?*Character = null;
-                var target_valid = false;
+            if (ent.cast_state == .activating) {
+                const skill = ent.skill_bar[ent.casting_skill_index] orelse continue;
 
-                if (ent.cast_target_id) |target_id| {
-                    // Look up target by ID (could be player or another entity)
-                    target = self.getEntityById(target_id);
-                    if (target) |tgt| {
-                        if (tgt.isAlive()) {
-                            target_valid = true;
-                        } else {
-                            print("{s}'s target died during cast!\n", .{ent.name});
-                        }
+                // Check for attack skills that execute at half activation
+                const half_activation_time = @as(f32, @floatFromInt(skill.activation_time_ms)) / 2000.0;
+                const total_activation_time = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
+
+                // Execute attack skills at half activation time
+                if (skill.mechanic.executesAtHalfActivation() and !ent.skill_executed) {
+                    const time_elapsed = total_activation_time - ent.cast_time_remaining;
+                    if (time_elapsed >= half_activation_time) {
+                        self.executeSkillEffect(ent, skill, rng);
+                        ent.skill_executed = true;
                     }
-                } else if (skill.?.target_type == .self) {
-                    target_valid = true;
                 }
 
-                if (target_valid) {
-                    combat.executeSkill(ent, skill.?, target, ent.casting_skill_index, rng, &self.vfx_manager);
+                // Check if activation phase is complete
+                if (ent.cast_time_remaining <= 0) {
+                    // Execute non-attack skills at end of activation
+                    if (!skill.mechanic.executesAtHalfActivation() and !ent.skill_executed) {
+                        self.executeSkillEffect(ent, skill, rng);
+                        ent.skill_executed = true;
+                    }
+
+                    // Transition to aftercast if skill has one
+                    if (skill.mechanic.hasAftercast()) {
+                        ent.cast_state = .aftercast;
+                        ent.aftercast_time_remaining = @as(f32, @floatFromInt(skill.aftercast_ms)) / 1000.0;
+                    } else {
+                        ent.cast_state = .idle;
+                    }
+
+                    ent.cast_target_id = null;
+                    ent.skill_executed = false;
                 }
-                ent.cast_target_id = null;
             }
+        }
+    }
+
+    fn executeSkillEffect(self: *GameState, ent: *Character, skill: *const Skill, rng: *std.Random) void {
+        var target: ?*Character = null;
+        var target_valid = false;
+
+        if (ent.cast_target_id) |target_id| {
+            // Look up target by ID (could be player or another entity)
+            target = self.getEntityById(target_id);
+            if (target) |tgt| {
+                if (tgt.isAlive()) {
+                    target_valid = true;
+                } else {
+                    print("{s}'s target died during cast!\n", .{ent.name});
+                }
+            }
+        } else if (skill.target_type == .self) {
+            target_valid = true;
+        }
+
+        if (target_valid) {
+            combat.executeSkill(ent, skill, target, ent.casting_skill_index, rng, &self.vfx_manager);
         }
     }
 
