@@ -16,8 +16,12 @@ pub fn draw(player: Entity, entities: []const Entity, selected_target: ?usize, c
 
     // Draw entities
     for (entities, 0..) |ent, i| {
+        // Skip dead entities
+        if (!ent.isAlive()) continue;
+
         // Draw entity as sphere
-        rl.drawSphere(ent.position, ent.radius, ent.color);
+        const color = if (ent.is_dead) rl.Color.gray else ent.color;
+        rl.drawSphere(ent.position, ent.radius, color);
         rl.drawSphereWires(ent.position, ent.radius, 8, 8, .black);
 
         // Debug: print entity positions
@@ -37,7 +41,8 @@ pub fn draw(player: Entity, entities: []const Entity, selected_target: ?usize, c
     }
 
     // Draw player
-    rl.drawSphere(player.position, player.radius, player.color);
+    const player_color = if (player.is_dead) rl.Color.gray else player.color;
+    rl.drawSphere(player.position, player.radius, player_color);
     rl.drawSphereWires(player.position, player.radius, 8, 8, .black);
 
     // TODO: Fix player name drawing - getWorldToScreen causing crashes
@@ -52,22 +57,27 @@ pub fn draw(player: Entity, entities: []const Entity, selected_target: ?usize, c
 
     // Draw target selection indicator
     if (selected_target) |target_index| {
-        const target = entities[target_index];
+        if (target_index < entities.len) {
+            const target = entities[target_index];
 
-        // Draw selection ring around target
-        const ring_pos = rl.Vector3{
-            .x = target.position.x,
-            .y = target.position.y,
-            .z = target.position.z,
-        };
-        rl.drawCylinder(ring_pos, target.radius + 5, target.radius + 5, 2, 16, .yellow);
+            // Skip if target is dead
+            if (!target.isAlive()) return;
 
-        // Draw selection arrow above target
-        const arrow_pos = rl.Vector3{
-            .x = target.position.x,
-            .y = target.position.y + target.radius + 15,
-            .z = target.position.z,
-        };
-        rl.drawCube(arrow_pos, 5, 5, 5, .yellow);
+            // Draw selection ring around target
+            const ring_pos = rl.Vector3{
+                .x = target.position.x,
+                .y = target.position.y,
+                .z = target.position.z,
+            };
+            rl.drawCylinder(ring_pos, target.radius + 5, target.radius + 5, 2, 16, .yellow);
+
+            // Draw selection arrow above target
+            const arrow_pos = rl.Vector3{
+                .x = target.position.x,
+                .y = target.position.y + target.radius + 15,
+                .z = target.position.z,
+            };
+            rl.drawCube(arrow_pos, 5, 5, 5, .yellow);
+        }
     }
 }

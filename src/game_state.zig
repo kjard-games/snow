@@ -6,11 +6,13 @@ const position = @import("position.zig");
 const input = @import("input.zig");
 const render = @import("render.zig");
 const ui = @import("ui.zig");
+const ai = @import("ai.zig");
 
 const Entity = entity.Entity;
 const School = school.School;
 const Position = position.Position;
 const Skill = entity.Skill;
+const AIState = ai.AIState;
 const print = std.debug.print;
 
 pub const GameState = struct {
@@ -20,6 +22,7 @@ pub const GameState = struct {
     camera: rl.Camera,
     delta_time: f32,
     input_state: input.InputState,
+    ai_states: [4]AIState,
 
     pub fn init() GameState {
         // Initialize player with school and position
@@ -131,14 +134,21 @@ pub const GameState = struct {
             },
             .delta_time = 0.0,
             .input_state = .{},
+            .ai_states = [_]AIState{.{}} ** 4,
         };
     }
 
     pub fn update(self: *GameState) void {
         self.delta_time = rl.getFrameTime();
 
-        // Update energy regeneration
+        // Update energy regeneration for all entities
         self.player.updateEnergy(self.delta_time);
+        for (&self.entities) |*ent| {
+            ent.updateEnergy(self.delta_time);
+        }
+
+        // Update AI
+        ai.updateAI(&self.entities, self.player, self.delta_time, &self.ai_states);
 
         // Handle input
         input.handleInput(&self.player, &self.entities, &self.selected_target, &self.camera, &self.input_state);

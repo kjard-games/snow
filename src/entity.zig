@@ -47,6 +47,27 @@ pub const Entity = struct {
     skill_bar: [8]?*const Skill,
     selected_skill: u8 = 0,
 
+    // Death state
+    is_dead: bool = false,
+
+    pub fn isAlive(self: Entity) bool {
+        return !self.is_dead and self.health > 0;
+    }
+
+    pub fn takeDamage(self: *Entity, damage: f32) void {
+        self.health = @max(0, self.health - damage);
+        if (self.health <= 0) {
+            self.is_dead = true;
+        }
+    }
+
+    pub fn distanceTo(self: Entity, other: Entity) f32 {
+        const dx = other.position.x - self.position.x;
+        const dy = other.position.y - self.position.y;
+        const dz = other.position.z - self.position.z;
+        return @sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
     pub fn updateEnergy(self: *Entity, delta_time: f32) void {
         // Passive energy regeneration based on school
         const regen = self.school.getEnergyRegen() * delta_time;

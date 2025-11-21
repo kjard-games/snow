@@ -2,6 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 const entity = @import("entity.zig");
 const targeting = @import("targeting.zig");
+const combat = @import("combat.zig");
 
 const Entity = entity.Entity;
 const Skill = entity.Skill;
@@ -15,7 +16,7 @@ pub const InputState = struct {
 
 pub fn handleInput(
     player: *Entity,
-    entities: []const Entity,
+    entities: []Entity,
     selected_target: *?usize,
     camera: *rl.Camera,
     input_state: *InputState,
@@ -31,37 +32,37 @@ pub fn handleInput(
     // Face buttons for skills (1-4)
     if (rl.isGamepadAvailable(0)) {
         if (rl.isGamepadButtonPressed(0, .right_face_down)) { // A button
-            useSkill(player, 0);
+            useSkill(player, entities, selected_target.*, 0);
         }
         if (rl.isGamepadButtonPressed(0, .right_face_right)) { // B button
-            useSkill(player, 1);
+            useSkill(player, entities, selected_target.*, 1);
         }
         if (rl.isGamepadButtonPressed(0, .right_face_left)) { // X button
-            useSkill(player, 2);
+            useSkill(player, entities, selected_target.*, 2);
         }
         if (rl.isGamepadButtonPressed(0, .right_face_up)) { // Y button
-            useSkill(player, 3);
+            useSkill(player, entities, selected_target.*, 3);
         }
 
         // Shoulder buttons for skills 5-8
         if (rl.isGamepadButtonPressed(0, .right_trigger_1)) { // RB
-            useSkill(player, 4);
+            useSkill(player, entities, selected_target.*, 4);
         }
         if (rl.isGamepadButtonPressed(0, .left_trigger_1)) { // LB
-            useSkill(player, 5);
+            useSkill(player, entities, selected_target.*, 5);
         }
         // Could use trigger pulls for skills 6-7
     }
 
     // Keyboard skill usage (1-8 keys)
-    if (rl.isKeyPressed(.one)) useSkill(player, 0);
-    if (rl.isKeyPressed(.two)) useSkill(player, 1);
-    if (rl.isKeyPressed(.three)) useSkill(player, 2);
-    if (rl.isKeyPressed(.four)) useSkill(player, 3);
-    if (rl.isKeyPressed(.five)) useSkill(player, 4);
-    if (rl.isKeyPressed(.six)) useSkill(player, 5);
-    if (rl.isKeyPressed(.seven)) useSkill(player, 6);
-    if (rl.isKeyPressed(.eight)) useSkill(player, 7);
+    if (rl.isKeyPressed(.one)) useSkill(player, entities, selected_target.*, 0);
+    if (rl.isKeyPressed(.two)) useSkill(player, entities, selected_target.*, 1);
+    if (rl.isKeyPressed(.three)) useSkill(player, entities, selected_target.*, 2);
+    if (rl.isKeyPressed(.four)) useSkill(player, entities, selected_target.*, 3);
+    if (rl.isKeyPressed(.five)) useSkill(player, entities, selected_target.*, 4);
+    if (rl.isKeyPressed(.six)) useSkill(player, entities, selected_target.*, 5);
+    if (rl.isKeyPressed(.seven)) useSkill(player, entities, selected_target.*, 6);
+    if (rl.isKeyPressed(.eight)) useSkill(player, entities, selected_target.*, 7);
 
     // Skill selection (for UI/highlighting)
     if (rl.isKeyPressed(.q)) {
@@ -168,14 +169,21 @@ pub fn handleInput(
     camera.target = player.position;
 }
 
-fn useSkill(player: *Entity, skill_index: u8) void {
+fn useSkill(player: *Entity, entities: []Entity, selected_target: ?usize, skill_index: u8) void {
     if (skill_index >= player.skill_bar.len) return;
 
-    if (player.skill_bar[skill_index]) |skill| {
-        print("Using skill: {s}\n", .{skill.name});
-        // TODO: Check energy cost and consume
-        // TODO: Apply background-specific effects
-    } else {
+    const skill = player.skill_bar[skill_index] orelse {
         print("No skill in slot {d}\n", .{skill_index});
+        return;
+    };
+
+    // Get target entity
+    var target: ?*Entity = null;
+    if (selected_target) |idx| {
+        if (idx < entities.len) {
+            target = &entities[idx];
+        }
     }
+
+    _ = combat.castSkill(player, skill, target);
 }

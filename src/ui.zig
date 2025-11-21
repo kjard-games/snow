@@ -57,6 +57,9 @@ pub fn drawUI(player: Entity, entities: []const Entity, selected_target: ?usize,
 
     // Draw health bars in 2D overlay
     for (entities) |ent| {
+        // Skip dead entities
+        if (!ent.isAlive()) continue;
+
         const health_percentage = ent.health / ent.max_health;
         const health_bar_width = 40;
         const health_bar_height = 4;
@@ -89,7 +92,7 @@ pub fn drawUI(player: Entity, entities: []const Entity, selected_target: ?usize,
                     .width = health_bar_width * health_percentage,
                     .height = health_bar_height,
                 },
-                if (ent.is_enemy) .red else .green,
+                if (ent.is_dead) rl.Color.gray else if (ent.is_enemy) rl.Color.red else rl.Color.green,
             );
         }
     }
