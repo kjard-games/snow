@@ -46,23 +46,23 @@ pub fn drawUI(player: Character, entities: []const Character, selected_target: ?
         const target_type_text = if (target.is_enemy) "Enemy" else "Ally";
         rl.drawText(target_type_text, 10, 270, 14, .light_gray);
 
-        var health_buf: [32]u8 = undefined;
-        const health_text = std.fmt.bufPrintZ(
-            &health_buf,
+        var warmth_buf: [32]u8 = undefined;
+        const warmth_text = std.fmt.bufPrintZ(
+            &warmth_buf,
             "Health: {d:.0}/{d:.0}",
-            .{ target.health, target.max_health },
+            .{ target.warmth, target.max_warmth },
         ) catch "Health: ???";
-        rl.drawText(health_text, 10, 250, 14, .light_gray);
+        rl.drawText(warmth_text, 10, 250, 14, .light_gray);
     }
 
-    // Draw health bars in 2D overlay
+    // Draw warmth bars in 2D overlay
     for (entities) |ent| {
         // Skip dead entities
         if (!ent.isAlive()) continue;
 
-        const health_percentage = ent.health / ent.max_health;
-        const health_bar_width = 40;
-        const health_bar_height = 4;
+        const warmth_percentage = ent.warmth / ent.max_warmth;
+        const warmth_bar_width = 40;
+        const warmth_bar_height = 4;
 
         // Convert 3D position to 2D screen coordinates
         const screen_pos = rl.getWorldToScreen(ent.position, camera);
@@ -74,23 +74,23 @@ pub fn drawUI(player: Character, entities: []const Character, selected_target: ?
             screen_pos.y >= 0 and screen_pos.y < screen_height and
             std.math.isFinite(screen_pos.x) and std.math.isFinite(screen_pos.y))
         {
-            const health_bar_pos = rl.Rectangle{
-                .x = screen_pos.x - health_bar_width / 2,
+            const warmth_bar_pos = rl.Rectangle{
+                .x = screen_pos.x - warmth_bar_width / 2,
                 .y = screen_pos.y - 30,
-                .width = health_bar_width,
-                .height = health_bar_height,
+                .width = warmth_bar_width,
+                .height = warmth_bar_height,
             };
 
             // Health bar background
-            rl.drawRectangleRec(health_bar_pos, .black);
+            rl.drawRectangleRec(warmth_bar_pos, .black);
 
             // Health bar fill
             rl.drawRectangleRec(
                 rl.Rectangle{
-                    .x = health_bar_pos.x,
-                    .y = health_bar_pos.y,
-                    .width = health_bar_width * health_percentage,
-                    .height = health_bar_height,
+                    .x = warmth_bar_pos.x,
+                    .y = warmth_bar_pos.y,
+                    .width = warmth_bar_width * warmth_percentage,
+                    .height = warmth_bar_height,
                 },
                 if (ent.is_dead) rl.Color.gray else if (ent.is_enemy) rl.Color.red else rl.Color.green,
             );

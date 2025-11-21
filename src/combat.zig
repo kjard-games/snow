@@ -53,8 +53,8 @@ pub fn castSkill(caster: *Character, skill: *const Skill, target: ?*Character) C
         skill.name,
         tgt.name,
         final_damage,
-        tgt.health,
-        tgt.max_health,
+        tgt.warmth,
+        tgt.max_warmth,
     });
 
     return .success;

@@ -13,7 +13,7 @@ pub const School = enum {
             .private_school => 2.0, // Allowance: steady passive regen
             .public_school => 0.0, // Grit: no passive regen, combat only
             .montessori => 1.0, // Balanced regen
-            .homeschool => 0.5, // Low regen, can sacrifice health
+            .homeschool => 0.5, // Low regen, can sacrifice warmth
             .waldorf => 1.5, // Rhythm: moderate regen
         };
     }
@@ -23,7 +23,7 @@ pub const School = enum {
             .private_school => 30, // High energy pool
             .public_school => 20, // Lower pool, gains from combat
             .montessori => 25, // Balanced
-            .homeschool => 25, // Can convert health
+            .homeschool => 25, // Can convert warmth
             .waldorf => 25, // Rhythm-based
         };
     }

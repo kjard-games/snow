@@ -13,8 +13,8 @@ pub const Character = struct {
     radius: f32,
     color: rl.Color,
     name: [:0]const u8,
-    health: f32,
-    max_health: f32,
+    warmth: f32,
+    max_warmth: f32,
     is_enemy: bool,
 
     // Skill system components
@@ -32,7 +32,7 @@ pub const Character = struct {
     grit_stacks: u8 = 0, // Every 5 stacks = free skill
     max_grit_stacks: u8 = 5,
 
-    // Homeschool: Health-to-Energy conversion (cooldown tracker)
+    // Homeschool: Warmth-to-Energy conversion (cooldown tracker)
     sacrifice_cooldown: f32 = 0.0, // seconds until can sacrifice again
 
     // Waldorf: Rhythm timing
@@ -51,12 +51,12 @@ pub const Character = struct {
     is_dead: bool = false,
 
     pub fn isAlive(self: Character) bool {
-        return !self.is_dead and self.health > 0;
+        return !self.is_dead and self.warmth > 0;
     }
 
     pub fn takeDamage(self: *Character, damage: f32) void {
-        self.health = @max(0, self.health - damage);
-        if (self.health <= 0) {
+        self.warmth = @max(0, self.warmth - damage);
+        if (self.warmth <= 0) {
             self.is_dead = true;
         }
     }
