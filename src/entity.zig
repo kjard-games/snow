@@ -1,10 +1,10 @@
 const std = @import("std");
 const rl = @import("raylib");
-const background = @import("background.zig");
+const school = @import("school.zig");
 const position = @import("position.zig");
 const skills = @import("skills.zig");
 
-pub const Background = background.Background;
+pub const School = school.School;
 pub const Position = position.Position;
 pub const Skill = skills.Skill;
 
@@ -18,7 +18,7 @@ pub const Entity = struct {
     is_enemy: bool,
 
     // Skill system components
-    background: Background,
+    school: School,
     player_position: Position,
 
     // Universal primary resource
@@ -48,13 +48,13 @@ pub const Entity = struct {
     selected_skill: u8 = 0,
 
     pub fn updateEnergy(self: *Entity, delta_time: f32) void {
-        // Passive energy regeneration based on background
-        const regen = self.background.getEnergyRegen() * delta_time;
+        // Passive energy regeneration based on school
+        const regen = self.school.getEnergyRegen() * delta_time;
         const new_energy = @min(self.max_energy, @as(u8, @intFromFloat(@as(f32, @floatFromInt(self.energy)) + regen)));
         self.energy = new_energy;
 
-        // Update background-specific mechanics
-        switch (self.background) {
+        // Update school-specific mechanics
+        switch (self.school) {
             .private_school => {
                 // Private school has steady regen (already handled above)
             },

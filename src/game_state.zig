@@ -1,14 +1,14 @@
 const std = @import("std");
 const rl = @import("raylib");
 const entity = @import("entity.zig");
-const background = @import("background.zig");
+const school = @import("school.zig");
 const position = @import("position.zig");
 const input = @import("input.zig");
 const render = @import("render.zig");
 const ui = @import("ui.zig");
 
 const Entity = entity.Entity;
-const Background = background.Background;
+const School = school.School;
 const Position = position.Position;
 const Skill = entity.Skill;
 const print = std.debug.print;
@@ -22,9 +22,9 @@ pub const GameState = struct {
     input_state: input.InputState,
 
     pub fn init() GameState {
-        // Initialize player with background and position
-        const player_background = Background.waldorf;
-        const player_position = Position.waldorf;
+        // Initialize player with school and position
+        const player_school = School.waldorf;
+        const player_position = Position.summoner;
 
         var player = Entity{
             .position = .{ .x = 0, .y = 0, .z = 0 },
@@ -36,10 +36,10 @@ pub const GameState = struct {
             .is_enemy = false,
 
             // Skill system components
-            .background = player_background,
+            .school = player_school,
             .player_position = player_position,
-            .energy = player_background.getMaxEnergy(),
-            .max_energy = player_background.getMaxEnergy(),
+            .energy = player_school.getMaxEnergy(),
+            .max_energy = player_school.getMaxEnergy(),
             .skill_bar = [_]?*const Skill{null} ** 8,
             .selected_skill = 0,
         };
@@ -52,7 +52,7 @@ pub const GameState = struct {
             player.skill_bar[i] = &position_skills[i];
         }
 
-        print("Player {s} initialized with background: {s}, position: {s}\n", .{ player.name, @tagName(player_background), @tagName(player_position) });
+        print("Player {s} initialized with school: {s}, position: {s}\n", .{ player.name, @tagName(player_school), @tagName(player_position) });
         print("Loaded {d} skills into skill bar\n", .{skill_count});
 
         const entities = [_]Entity{
@@ -64,10 +64,10 @@ pub const GameState = struct {
                 .health = 50,
                 .max_health = 50,
                 .is_enemy = true,
-                .background = .public_school,
+                .school = .public_school,
                 .player_position = .fielder,
-                .energy = Background.public_school.getMaxEnergy(),
-                .max_energy = Background.public_school.getMaxEnergy(),
+                .energy = School.public_school.getMaxEnergy(),
+                .max_energy = School.public_school.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** 8,
                 .selected_skill = 0,
             },
@@ -79,10 +79,10 @@ pub const GameState = struct {
                 .health = 50,
                 .max_health = 50,
                 .is_enemy = false,
-                .background = .montessori,
-                .player_position = .runner,
-                .energy = Background.montessori.getMaxEnergy(),
-                .max_energy = Background.montessori.getMaxEnergy(),
+                .school = .montessori,
+                .player_position = .skater,
+                .energy = School.montessori.getMaxEnergy(),
+                .max_energy = School.montessori.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** 8,
                 .selected_skill = 0,
             },
@@ -94,10 +94,10 @@ pub const GameState = struct {
                 .health = 50,
                 .max_health = 50,
                 .is_enemy = true,
-                .background = .homeschool,
-                .player_position = .digger,
-                .energy = Background.homeschool.getMaxEnergy(),
-                .max_energy = Background.homeschool.getMaxEnergy(),
+                .school = .homeschool,
+                .player_position = .shoveler,
+                .energy = School.homeschool.getMaxEnergy(),
+                .max_energy = School.homeschool.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** 8,
                 .selected_skill = 0,
             },
@@ -109,10 +109,10 @@ pub const GameState = struct {
                 .health = 50,
                 .max_health = 50,
                 .is_enemy = true,
-                .background = .public_school,
+                .school = .public_school,
                 .player_position = .pitcher,
-                .energy = Background.public_school.getMaxEnergy(),
-                .max_energy = Background.public_school.getMaxEnergy(),
+                .energy = School.public_school.getMaxEnergy(),
+                .max_energy = School.public_school.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** 8,
                 .selected_skill = 0,
             },

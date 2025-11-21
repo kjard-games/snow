@@ -7,20 +7,20 @@ pub const Position = enum {
     pitcher,
     fielder,
     sledder,
-    digger,
-    runner,
-    catcher,
-    waldorf,
+    shoveler,
+    skater,
+    goalie,
+    summoner,
 
     pub fn getSkills(self: Position) []const Skill {
         return switch (self) {
             .pitcher => &pitcher_skills,
             .fielder => &fielder_skills,
             .sledder => &sledder_skills,
-            .digger => &digger_skills,
-            .runner => &runner_skills,
-            .catcher => &catcher_skills,
-            .waldorf => &waldorf_skills,
+            .shoveler => &shoveler_skills,
+            .skater => &skater_skills,
+            .goalie => &goalie_skills,
+            .summoner => &summoner_skills,
         };
     }
 };
@@ -30,53 +30,53 @@ const pitcher_skills = [_]Skill{
     .{ .name = "Fastball" },
     .{ .name = "Curveball" },
     .{ .name = "Changeup" },
-    .{ .name = "Slider" },
+    .{ .name = "Knuckleball" },
 };
 
 // Fielder skills
 const fielder_skills = [_]Skill{
-    .{ .name = "Catch" },
-    .{ .name = "Throw" },
-    .{ .name = "Dive" },
+    .{ .name = "Diving Catch" },
+    .{ .name = "Quick Throw" },
     .{ .name = "Scoop" },
+    .{ .name = "Long Toss" },
 };
 
 // Sledder skills
 const sledder_skills = [_]Skill{
-    .{ .name = "Push" },
-    .{ .name = "Brake" },
-    .{ .name = "Drift" },
-    .{ .name = "Boost" },
-};
-
-// Digger skills
-const digger_skills = [_]Skill{
-    .{ .name = "Dig" },
-    .{ .name = "Excavate" },
-    .{ .name = "Tunnel" },
-    .{ .name = "Fortify" },
-};
-
-// Runner skills
-const runner_skills = [_]Skill{
-    .{ .name = "Sprint" },
-    .{ .name = "Slide" },
+    .{ .name = "Downhill Rush" },
+    .{ .name = "Snow Spray" },
     .{ .name = "Jump" },
-    .{ .name = "Dash" },
+    .{ .name = "Drift Turn" },
 };
 
-// Catcher skills
-const catcher_skills = [_]Skill{
-    .{ .name = "Frame" },
-    .{ .name = "Block" },
-    .{ .name = "Throw Out" },
-    .{ .name = "Signal" },
+// Shoveler skills
+const shoveler_skills = [_]Skill{
+    .{ .name = "Dig In" },
+    .{ .name = "Wall Up" },
+    .{ .name = "Shovel Toss" },
+    .{ .name = "Pack Snow" },
 };
 
-// Waldorf skills
-const waldorf_skills = [_]Skill{
-    .{ .name = "Forbidden Lore" },
-    .{ .name = "Dark Pact" },
-    .{ .name = "Blood Magic" },
-    .{ .name = "Soul Drain" },
+// Skater skills
+const skater_skills = [_]Skill{
+    .{ .name = "Speed Burst" },
+    .{ .name = "Crossover" },
+    .{ .name = "Stop-and-Go" },
+    .{ .name = "Breakaway" },
+};
+
+// Goalie skills
+const goalie_skills = [_]Skill{
+    .{ .name = "Glove Save" },
+    .{ .name = "Blocker" },
+    .{ .name = "Butterfly" },
+    .{ .name = "Poke Check" },
+};
+
+// Summoner skills
+const summoner_skills = [_]Skill{
+    .{ .name = "Call Snowman" },
+    .{ .name = "Frost Servant" },
+    .{ .name = "Ice Golem" },
+    .{ .name = "Winter's Army" },
 };

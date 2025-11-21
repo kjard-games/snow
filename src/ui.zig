@@ -137,7 +137,7 @@ fn drawSkillBar(player: Entity) void {
     const resource_y = start_y + skill_bar_height + 15;
 
     // Primary resource bar (Universal Energy)
-    const resource_name = switch (player.background) {
+    const resource_name = switch (player.school) {
         .private_school => "Allowance",
         .public_school => "Grit",
         .montessori => "Focus",
@@ -153,7 +153,7 @@ fn drawSkillBar(player: Entity) void {
 
     // Secondary mechanic display
     const secondary_y = resource_y + 20;
-    const secondary_name = switch (player.background) {
+    const secondary_name = switch (player.school) {
         .private_school => "Steady Income",
         .public_school => "Grit Stacks",
         .montessori => "Variety Bonus",
@@ -162,10 +162,10 @@ fn drawSkillBar(player: Entity) void {
     };
     rl.drawText(secondary_name, @intFromFloat(start_x), @intFromFloat(secondary_y), 12, .light_gray);
 
-    // Display background-specific secondary state
-    switch (player.background) {
+    // Display school-specific secondary state
+    switch (player.school) {
         .private_school => {
-            const regen = player.background.getEnergyRegen();
+            const regen = player.school.getEnergyRegen();
             var regen_buf: [32]u8 = undefined;
             const regen_text = std.fmt.bufPrintZ(&regen_buf, "+{d:.1}/sec", .{regen}) catch "?";
             rl.drawText(regen_text, @intFromFloat(start_x + 110), @intFromFloat(secondary_y), 12, .green);
@@ -197,7 +197,7 @@ fn drawSkillBar(player: Entity) void {
         },
     }
 
-    // Draw background info
-    const background_name = @tagName(player.background);
-    rl.drawText(background_name, 10, @intFromFloat(secondary_y + 20), 12, .light_gray);
+    // Draw school info
+    const school_name = @tagName(player.school);
+    rl.drawText(school_name, 10, @intFromFloat(secondary_y + 20), 12, .light_gray);
 }

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const Background = enum {
+pub const School = enum {
     private_school,
     public_school,
     montessori,
@@ -8,7 +8,7 @@ pub const Background = enum {
     waldorf,
 
     // Energy generation rates and mechanics
-    pub fn getEnergyRegen(self: Background) f32 {
+    pub fn getEnergyRegen(self: School) f32 {
         return switch (self) {
             .private_school => 2.0, // Allowance: steady passive regen
             .public_school => 0.0, // Grit: no passive regen, combat only
@@ -18,7 +18,7 @@ pub const Background = enum {
         };
     }
 
-    pub fn getMaxEnergy(self: Background) u8 {
+    pub fn getMaxEnergy(self: School) u8 {
         return switch (self) {
             .private_school => 30, // High energy pool
             .public_school => 20, // Lower pool, gains from combat
@@ -28,7 +28,7 @@ pub const Background = enum {
         };
     }
 
-    pub fn getResourceName(self: Background) [:0]const u8 {
+    pub fn getResourceName(self: School) [:0]const u8 {
         return switch (self) {
             .private_school => "Allowance",
             .public_school => "Grit",
@@ -38,7 +38,7 @@ pub const Background = enum {
         };
     }
 
-    pub fn getSecondaryMechanicName(self: Background) [:0]const u8 {
+    pub fn getSecondaryMechanicName(self: School) [:0]const u8 {
         return switch (self) {
             .private_school => "Steady Income",
             .public_school => "Grit Stacks",
