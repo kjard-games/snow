@@ -13,6 +13,7 @@ const movement = @import("movement.zig");
 const entity = @import("entity.zig");
 const auto_attack = @import("auto_attack.zig");
 const vfx = @import("vfx.zig");
+const terrain = @import("terrain.zig");
 
 const print = std.debug.print;
 
@@ -24,6 +25,7 @@ const Skill = character.Skill;
 const AIState = ai.AIState;
 const EntityId = entity.EntityId;
 const EntityIdGenerator = entity.EntityIdGenerator;
+const TerrainGrid = terrain.TerrainGrid;
 
 // Game configuration constants
 pub const MAX_ENTITIES: usize = 8; // 4v4 combat (4 allies + 4 enemies)
@@ -59,7 +61,11 @@ pub const GameState = struct {
     // Visual effects
     vfx_manager: vfx.VFXManager,
 
-    pub fn init() GameState {
+    // Terrain system
+    terrain_grid: TerrainGrid,
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) !GameState {
         var id_gen = EntityIdGenerator{};
 
         // Initialize RNG with current time as seed (needed for random team generation)
@@ -319,6 +325,27 @@ pub const GameState = struct {
             print("Keyboard/Mouse mode - Action Camera disabled by default\n", .{});
         }
 
+        // Initialize terrain grid
+        // Create a 20x20 grid with 50 unit cells, covering 1000x1000 world space
+        // Centered around the battlefield (offset by -500, -500)
+        const terrain_grid = TerrainGrid.init(
+            allocator,
+            20, // width
+            20, // height
+            50.0, // grid_size (each cell is 50 units)
+            -500.0, // world_offset_x
+            -500.0, // world_offset_z
+        ) catch |err| {
+            print("Failed to initialize terrain grid: {}\n", .{err});
+            @panic("Terrain initialization failed");
+        };
+
+        print("=== TERRAIN SYSTEM INITIALIZED ===\n", .{});
+        print("Grid: 20x20 cells (50 units each)\n", .{});
+        print("Coverage: 1000x1000 world units\n", .{});
+        print("Snow accumulation: Active\n", .{});
+        print("==================================\n\n", .{});
+
         return GameState{
             .entities = entities,
             .controlled_entity_id = player_entity_id,
@@ -347,7 +374,13 @@ pub const GameState = struct {
             .combat_state = .active,
             .entity_id_gen = id_gen,
             .vfx_manager = vfx.VFXManager.init(),
+            .terrain_grid = terrain_grid,
+            .allocator = allocator,
         };
+    }
+
+    pub fn deinit(self: *GameState) void {
+        self.terrain_grid.deinit();
     }
 
     // Entity lookup helpers for tab-targeting
@@ -421,11 +454,11 @@ pub const GameState = struct {
 
             // Only apply movement if not casting (GW1 rule: can't move while casting)
             if (player.cast_state == .idle) {
-                movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC);
+                movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC, &self.terrain_grid);
             }
 
             // Update AI for non-player entities
-            ai.updateAI(&self.entities, self.controlled_entity_id, TICK_RATE_SEC, &self.ai_states, &random_state, &self.vfx_manager);
+            ai.updateAI(&self.entities, self.controlled_entity_id, TICK_RATE_SEC, &self.ai_states, &random_state, &self.vfx_manager, &self.terrain_grid);
 
             // Update auto-attacks for all entities
             auto_attack.updateAutoAttacks(&self.entities, TICK_RATE_SEC, &random_state, &self.vfx_manager);
@@ -436,6 +469,26 @@ pub const GameState = struct {
             // Check for victory/defeat
             self.checkCombatStatus();
         }
+
+        // Apply terrain traffic from entity movement (packs snow down over time)
+        for (self.entities) |ent| {
+            if (ent.isAlive()) {
+                // Check if entity moved this tick
+                const moved_distance = @sqrt(
+                    (ent.position.x - ent.previous_position.x) * (ent.position.x - ent.previous_position.x) +
+                        (ent.position.z - ent.previous_position.z) * (ent.position.z - ent.previous_position.z),
+                );
+
+                // Apply traffic proportional to distance moved (more movement = more packing)
+                if (moved_distance > 0.1) {
+                    const traffic_amount = moved_distance / 100.0; // Normalize to 0-1 range
+                    self.terrain_grid.applyMovementTraffic(ent.position.x, ent.position.z, traffic_amount);
+                }
+            }
+        }
+
+        // Update terrain (snow accumulation)
+        self.terrain_grid.update(TICK_RATE_SEC);
 
         // Update visual effects (every tick)
         var entity_positions: [MAX_ENTITIES]vfx.EntityPosition = undefined;
@@ -553,7 +606,7 @@ pub const GameState = struct {
         const player_render_pos = player.getInterpolatedPosition(alpha);
         input.updateCamera(&self.camera, player_render_pos, self.input_state);
 
-        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager);
+        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid);
     }
 
     pub fn drawUI(self: *GameState) void {

@@ -831,6 +831,7 @@ pub fn updateAI(
     ai_states: []AIState,
     rng: *std.Random,
     vfx_manager: *@import("vfx.zig").VFXManager,
+    terrain_grid: *const @import("terrain.zig").TerrainGrid,
 ) void {
     // Find the controlled player entity
     var player_ent: ?*Character = null;
@@ -908,7 +909,7 @@ pub fn updateAI(
         if (ent.cast_state == .idle) {
             // Calculate and apply formation-aware movement every tick
             const move_intent = calculateFormationMovementIntent(&ctx);
-            movement.applyMovement(ent, move_intent, entities, null, null, delta_time);
+            movement.applyMovement(ent, move_intent, entities, null, null, delta_time, terrain_grid);
         }
 
         // Update skill casting timer

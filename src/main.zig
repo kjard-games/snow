@@ -1,9 +1,10 @@
+const std = @import("std");
 const rl = @import("raylib");
 const game_state = @import("game_state.zig");
 
 const GameState = game_state.GameState;
 
-pub fn main() void {
+pub fn main() !void {
     const screenWidth = 1280;
     const screenHeight = 720;
 
@@ -21,7 +22,13 @@ pub fn main() void {
     const target_fps = if (monitor_refresh > 0) monitor_refresh else 60;
     rl.setTargetFPS(target_fps);
 
-    var state = GameState.init();
+    // Initialize allocator for terrain system
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var state = try GameState.init(allocator);
+    defer state.deinit();
 
     while (!rl.windowShouldClose()) {
         // Toggle fullscreen with F11

@@ -35,6 +35,7 @@ pub const MovementIntent = struct {
 };
 
 /// Apply movement to a character with collision detection (tick-based)
+/// terrain_grid: Optional terrain grid for terrain-based speed modifiers
 pub fn applyMovement(
     entity: *Character,
     intent: MovementIntent,
@@ -42,6 +43,7 @@ pub fn applyMovement(
     player: ?*Character,
     entity_index: ?usize,
     delta_time: f32, // Time since last tick (e.g., 0.05 seconds for 20Hz)
+    terrain_grid: ?*const @import("terrain.zig").TerrainGrid,
 ) void {
     // Skip if no movement
     if (intent.local_x == 0.0 and intent.local_z == 0.0) return;
@@ -73,6 +75,12 @@ pub fn applyMovement(
 
     // Apply warmth-based speed multipliers (freezing, slippery, sure_footed)
     speed_multiplier *= entity.getMovementSpeedMultiplier();
+
+    // Apply terrain-based speed modifiers (snow depth, packing state)
+    if (terrain_grid) |grid| {
+        const terrain_modifier = grid.getMovementSpeedAt(entity.position.x, entity.position.z);
+        speed_multiplier *= terrain_modifier;
+    }
 
     // Rotate movement by facing angle to world space
     const cos_angle = @cos(intent.facing_angle);

@@ -4,9 +4,11 @@ const character = @import("character.zig");
 const entity_types = @import("entity.zig");
 const vfx = @import("vfx.zig");
 const palette = @import("color_palette.zig");
+const terrain = @import("terrain.zig");
 
 const Character = character.Character;
 const EntityId = entity_types.EntityId;
+const TerrainGrid = terrain.TerrainGrid;
 const print = std.debug.print;
 
 // Helper to convert float coordinates to integer screen positions
@@ -17,29 +19,121 @@ inline fn toScreenPos(pos: rl.Vector2) struct { x: i32, y: i32 } {
     };
 }
 
-pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager) void {
+// Draw the terrain grid with 3D snow depth
+fn drawTerrainGrid(grid: *const TerrainGrid) void {
+    var z: usize = 0;
+    while (z < grid.height) : (z += 1) {
+        var x: usize = 0;
+        while (x < grid.width) : (x += 1) {
+            const index = z * grid.width + x;
+            const cell = grid.cells[index];
+            const world_pos = grid.gridToWorld(x, z);
+
+            const tile_size = grid.grid_size;
+            const color = cell.type.getColor();
+            const snow_height = cell.type.getSnowHeight();
+
+            // Draw ground base (dark gray ground underneath snow)
+            const ground_color = rl.Color{ .r = 80, .g = 80, .b = 80, .a = 255 };
+            rl.drawCube(
+                rl.Vector3{ .x = world_pos.x, .y = -2.0, .z = world_pos.z },
+                tile_size,
+                4.0, // Ground thickness
+                tile_size,
+                ground_color,
+            );
+
+            // Draw snow layer with actual height
+            if (snow_height > 0.5) {
+                // Snow cube positioned so its top is at snow_height/2 and bottom at y=0
+                const snow_y = snow_height / 2.0;
+                rl.drawCube(
+                    rl.Vector3{ .x = world_pos.x, .y = snow_y, .z = world_pos.z },
+                    tile_size - 1.0, // Slightly smaller to show gaps between cells
+                    snow_height, // Height based on snow depth
+                    tile_size - 1.0,
+                    color,
+                );
+
+                // Draw top surface highlight (slightly brighter for depth perception)
+                var top_color = color;
+                top_color.r = @min(255, @as(u16, top_color.r) + 15);
+                top_color.g = @min(255, @as(u16, top_color.g) + 15);
+                top_color.b = @min(255, @as(u16, top_color.b) + 15);
+
+                rl.drawCube(
+                    rl.Vector3{ .x = world_pos.x, .y = snow_height + 0.1, .z = world_pos.z },
+                    tile_size - 1.0,
+                    0.2, // Thin top layer
+                    tile_size - 1.0,
+                    top_color,
+                );
+
+                // Draw subtle border on snow edges (darker for contrast)
+                var border_color = color;
+                border_color.r = @as(u8, @intFromFloat(@as(f32, @floatFromInt(border_color.r)) * 0.6));
+                border_color.g = @as(u8, @intFromFloat(@as(f32, @floatFromInt(border_color.g)) * 0.6));
+                border_color.b = @as(u8, @intFromFloat(@as(f32, @floatFromInt(border_color.b)) * 0.6));
+
+                rl.drawCubeWires(
+                    rl.Vector3{ .x = world_pos.x, .y = snow_y, .z = world_pos.z },
+                    tile_size - 1.0,
+                    snow_height,
+                    tile_size - 1.0,
+                    border_color,
+                );
+            } else {
+                // For cleared/icy ground (minimal snow), just draw a thin layer
+                rl.drawCube(
+                    rl.Vector3{ .x = world_pos.x, .y = 0.5, .z = world_pos.z },
+                    tile_size - 1.0,
+                    1.0,
+                    tile_size - 1.0,
+                    color,
+                );
+            }
+        }
+    }
+}
+
+pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager, terrain_grid: *const @import("terrain.zig").TerrainGrid) void {
     rl.clearBackground(.dark_gray);
 
     // === 3D RENDERING ===
     rl.beginMode3D(camera);
 
-    // Draw ground plane
-    rl.drawGrid(20, 50);
+    // Draw terrain grid with 3D snow depth
+    drawTerrainGrid(terrain_grid);
 
-    // Draw entities (interpolated for smooth movement)
+    // Draw entities (interpolated for smooth movement, adjusted for snow depth)
     for (entities) |ent| {
         // Skip dead entities
         if (!ent.isAlive()) continue;
 
-        // Draw entity as sphere at interpolated position
-        const render_pos = ent.getInterpolatedPosition(interpolation_alpha);
+        // Get interpolated position
+        var render_pos = ent.getInterpolatedPosition(interpolation_alpha);
+
+        // Adjust Y position based on terrain sink depth (characters sink into snow)
+        const sink_depth = terrain_grid.getSinkDepthAt(render_pos.x, render_pos.z);
+        const snow_height = terrain_grid.getSnowHeightAt(render_pos.x, render_pos.z);
+
+        // Character's center should be at: snow_surface - sink_depth + radius
+        // Snow surface is at snow_height, character sinks sink_depth into it
+        render_pos.y = snow_height - sink_depth + ent.radius;
+
         const color = if (ent.is_dead) palette.TEAM.DEAD else ent.color;
         rl.drawSphere(render_pos, ent.radius, color);
         rl.drawSphereWires(render_pos, ent.radius, 8, 8, .black);
     }
 
-    // Draw player (interpolated)
-    const player_render_pos = player.*.getInterpolatedPosition(interpolation_alpha);
+    // Draw player (interpolated, adjusted for snow depth)
+    var player_render_pos = player.*.getInterpolatedPosition(interpolation_alpha);
+
+    // Adjust player Y position based on terrain
+    const player_sink_depth = terrain_grid.getSinkDepthAt(player_render_pos.x, player_render_pos.z);
+    const player_snow_height = terrain_grid.getSnowHeightAt(player_render_pos.x, player_render_pos.z);
+    player_render_pos.y = player_snow_height - player_sink_depth + player.*.radius;
+
     const player_color = if (player.*.is_dead) palette.TEAM.DEAD else player.*.color;
     rl.drawSphere(player_render_pos, player.*.radius, player_color);
     rl.drawSphereWires(player_render_pos, player.*.radius, 8, 8, .black);
@@ -90,7 +184,12 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     for (entities) |ent| {
         if (!ent.isAlive()) continue;
 
-        const render_pos = ent.getInterpolatedPosition(interpolation_alpha);
+        var render_pos = ent.getInterpolatedPosition(interpolation_alpha);
+
+        // Adjust for terrain depth (same as entity rendering)
+        const sink_depth = terrain_grid.getSinkDepthAt(render_pos.x, render_pos.z);
+        const snow_height = terrain_grid.getSnowHeightAt(render_pos.x, render_pos.z);
+        render_pos.y = snow_height - sink_depth + ent.radius;
 
         // Position above entity
         const ui_3d_pos = rl.Vector3{
@@ -148,6 +247,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     }
 
     // Draw player floating UI (same style)
+    // Note: player_render_pos is already adjusted for terrain in the 3D section above
     const player_ui_3d_pos = rl.Vector3{
         .x = player_render_pos.x,
         .y = player_render_pos.y + player.*.radius + 10,
