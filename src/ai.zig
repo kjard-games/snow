@@ -326,7 +326,87 @@ pub const Conditions = struct {
         const health_pct = ctx.self.warmth / ctx.self.max_warmth;
         return if (health_pct < HEALING.CRITICAL_THRESHOLD) .success else .failure;
     }
+
+    // Check if it's a good time to use terrain skill
+    pub fn shouldUseTerrainSkill(ctx: *BehaviorContext) NodeStatus {
+        // Use terrain skills opportunistically (20% chance when off cooldown)
+        const roll = ctx.rng.intRangeAtMost(u32, 0, 100);
+        return if (roll < 20) .success else .failure;
+    }
 };
+
+// Helper functions for terrain skill placement
+fn findBestAllyClumpLocation(ctx: *BehaviorContext) ?rl.Vector3 {
+    // Find center of wounded allies
+    var center = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
+    var wounded_count: usize = 0;
+
+    for (ctx.allies[0..ctx.allies_count]) |ally| {
+        const health_pct = ally.warmth / ally.max_warmth;
+        if (health_pct < HEALING.LOW_THRESHOLD) {
+            center.x += ally.position.x;
+            center.z += ally.position.z;
+            wounded_count += 1;
+        }
+    }
+
+    if (wounded_count > 0) {
+        center.x /= @as(f32, @floatFromInt(wounded_count));
+        center.z /= @as(f32, @floatFromInt(wounded_count));
+        return center;
+    }
+
+    // Fallback: place near self
+    return ctx.self.position;
+}
+
+fn findBestEnemyClumpLocation(ctx: *BehaviorContext) ?rl.Vector3 {
+    // Find center of enemy clump (most enemies within radius)
+    if (ctx.enemies_count == 0) return null;
+
+    var best_pos = ctx.enemies[0].position;
+    var best_count: usize = 0;
+
+    // Check each enemy as potential center
+    for (ctx.enemies[0..ctx.enemies_count]) |center_enemy| {
+        var nearby_count: usize = 0;
+
+        // Count enemies within AoE radius (80 units)
+        for (ctx.enemies[0..ctx.enemies_count]) |other_enemy| {
+            const dx = center_enemy.position.x - other_enemy.position.x;
+            const dz = center_enemy.position.z - other_enemy.position.z;
+            const dist = @sqrt(dx * dx + dz * dz);
+
+            if (dist < 80.0) {
+                nearby_count += 1;
+            }
+        }
+
+        if (nearby_count > best_count) {
+            best_count = nearby_count;
+            best_pos = center_enemy.position;
+        }
+    }
+
+    return best_pos;
+}
+
+fn findBestUtilityTerrainLocation(ctx: *BehaviorContext) ?rl.Vector3 {
+    // Place terrain between self and enemy center for tactical advantage
+    if (ctx.enemies_count == 0) return ctx.self.position;
+
+    const enemy_center = ctx.formation_anchors.enemy_center;
+
+    // Place 60% of the way toward enemies (creates buffer zone)
+    const dx = enemy_center.x - ctx.self.position.x;
+    const dz = enemy_center.z - ctx.self.position.z;
+
+    return rl.Vector3{
+        .x = ctx.self.position.x + dx * 0.6,
+        .y = 0,
+        .z = ctx.self.position.z + dz * 0.6,
+    };
+}
 
 // Actions (can return success/failure/running)
 pub const Actions = struct {
@@ -387,6 +467,67 @@ pub const Actions = struct {
         return .failure;
     }
 
+    // Cast terrain skill at strategic location
+    pub fn castTerrainSkill(ctx: *BehaviorContext) NodeStatus {
+        // Find a terrain skill
+        for (ctx.self.skill_bar, 0..) |maybe_skill, idx| {
+            if (maybe_skill) |skill| {
+                if (skill.terrain_effect.shape != .none and ctx.self.canUseSkill(@intCast(idx))) {
+                    const terrain_effect = skill.terrain_effect;
+
+                    // Determine best target location
+                    const target_pos = if (terrain_effect.heals_allies)
+                        // Healing terrain: place near wounded allies
+                        findBestAllyClumpLocation(ctx)
+                    else if (terrain_effect.damages_enemies)
+                        // Damaging terrain: place on enemy clumps
+                        findBestEnemyClumpLocation(ctx)
+                    else
+                        // Utility terrain: place between self and enemies
+                        findBestUtilityTerrainLocation(ctx);
+
+                    if (target_pos) |pos| {
+                        // Create temporary ground target
+                        var ground_target = Character{
+                            .id = 0,
+                            .position = pos,
+                            .previous_position = pos,
+                            .radius = 0,
+                            .color = .blue,
+                            .name = "Ground",
+                            .warmth = 100,
+                            .max_warmth = 100,
+                            .is_enemy = false,
+                            .school = .private_school,
+                            .player_position = .pitcher,
+                            .energy = 0,
+                            .max_energy = 0,
+                            .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                            .selected_skill = 0,
+                        };
+
+                        const result = combat.tryStartCast(
+                            ctx.self,
+                            @intCast(idx),
+                            &ground_target,
+                            null,
+                            ctx.rng,
+                            ctx.vfx_manager,
+                            @constCast(ctx.terrain_grid),
+                        );
+
+                        if (result == .success or result == .casting_started) {
+                            ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown * 2.0; // Longer CD for terrain
+                            return .success;
+                        }
+                    }
+                }
+            }
+        }
+
+        return .failure;
+    }
+
     // Cast healing skill on lowest health ally
     pub fn castHeal(ctx: *BehaviorContext) NodeStatus {
         var lowest_health_pct: f32 = 1.0;
@@ -443,7 +584,7 @@ pub const SkillDecision = struct {
 // ROLE-SPECIFIC BEHAVIOR TREES
 // ============================================================================
 
-// Damage Dealer: Interrupt > Damage > Move to target
+// Damage Dealer: Interrupt > Terrain (opportunistic) > Damage > Move to target
 const DamageDealerTree = Selector(&[_]BehaviorNodeFn{
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
@@ -452,13 +593,18 @@ const DamageDealerTree = Selector(&[_]BehaviorNodeFn{
     }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
+        Conditions.shouldUseTerrainSkill,
+        Actions.castTerrainSkill,
+    }),
+    Sequence(&[_]BehaviorNodeFn{
+        Conditions.canCastSkill,
         Conditions.targetInRange,
         Actions.castDamageSkill,
     }),
     Actions.moveToTarget,
 });
 
-// Support: Heal allies > Buff > Damage
+// Support: Heal allies > Healing Terrain > Buff/Terrain > Damage > Move
 const SupportTree = Selector(&[_]BehaviorNodeFn{
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
@@ -467,18 +613,33 @@ const SupportTree = Selector(&[_]BehaviorNodeFn{
     }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
+        Conditions.allyNeedsHealing,
+        Actions.castTerrainSkill, // Try healing terrain if heal fails
+    }),
+    Sequence(&[_]BehaviorNodeFn{
+        Conditions.canCastSkill,
+        Conditions.shouldUseTerrainSkill,
+        Actions.castTerrainSkill,
+    }),
+    Sequence(&[_]BehaviorNodeFn{
+        Conditions.canCastSkill,
         Conditions.targetInRange,
         Actions.castDamageSkill,
     }),
     Actions.moveToTarget,
 });
 
-// Disruptor: Always interrupt > Debuff > Damage
+// Disruptor: Always interrupt > Terrain (opportunistic) > Debuff > Damage
 const DisruptorTree = Selector(&[_]BehaviorNodeFn{
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
         Conditions.targetCasting,
         Actions.castInterrupt,
+    }),
+    Sequence(&[_]BehaviorNodeFn{
+        Conditions.canCastSkill,
+        Conditions.shouldUseTerrainSkill,
+        Actions.castTerrainSkill,
     }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,

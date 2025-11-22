@@ -275,21 +275,87 @@ pub const GameState = struct {
             ent.energy = ent.school.getMaxEnergy();
             ent.max_energy = ent.school.getMaxEnergy();
 
-            // Load skills: First 4 from position, last 4 from school
+            // Load skills: Random 3 from position, 1 guaranteed terrain skill, random 4 from school
             const position_skills = ent.player_position.getSkills();
             const school_skills = ent.school.getSkills();
 
-            const position_skill_count = @min(position_skills.len, 4);
-            const school_skill_count = @min(school_skills.len, 4);
+            // Slot 4 FIRST: Guarantee at least 1 terrain skill
+            var terrain_skill_loaded = false;
+            var guaranteed_terrain_idx: ?usize = null;
 
-            // Slots 1-4: Position-specific skills
-            for (0..position_skill_count) |skill_idx| {
-                ent.skill_bar[skill_idx] = &position_skills[skill_idx];
+            // Find all terrain skills
+            for (position_skills, 0..) |skill, skill_idx| {
+                if (skill.terrain_effect.shape != .none) {
+                    // Pick a random terrain skill
+                    if (random.boolean()) {
+                        guaranteed_terrain_idx = skill_idx;
+                    } else if (guaranteed_terrain_idx == null) {
+                        guaranteed_terrain_idx = skill_idx; // First one as fallback
+                    }
+                }
             }
 
-            // Slots 5-8: School-specific skills
-            for (0..school_skill_count) |skill_idx| {
-                ent.skill_bar[4 + skill_idx] = &school_skills[skill_idx];
+            if (guaranteed_terrain_idx) |terrain_idx| {
+                ent.skill_bar[3] = &position_skills[terrain_idx];
+                terrain_skill_loaded = true;
+            }
+
+            // Slots 1-3: Randomly pick 3 position skills (excluding the guaranteed terrain skill)
+            var selected_count: usize = 0;
+            var attempts: usize = 0;
+            const max_attempts = position_skills.len * 3; // Avoid infinite loop
+
+            while (selected_count < 3 and attempts < max_attempts) : (attempts += 1) {
+                if (position_skills.len == 0) break;
+
+                const random_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
+
+                // Skip if this is the guaranteed terrain skill slot
+                if (terrain_skill_loaded and random_idx == guaranteed_terrain_idx.?) continue;
+
+                // Check if already loaded in slots 0-2
+                var already_loaded = false;
+                for (0..selected_count) |check_idx| {
+                    if (ent.skill_bar[check_idx] == &position_skills[random_idx]) {
+                        already_loaded = true;
+                        break;
+                    }
+                }
+
+                if (!already_loaded) {
+                    ent.skill_bar[selected_count] = &position_skills[random_idx];
+                    selected_count += 1;
+                }
+            }
+
+            // Fallback: if no terrain skill found, fill slot 4 with random position skill
+            if (!terrain_skill_loaded and position_skills.len > 0) {
+                const fallback_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
+                ent.skill_bar[3] = &position_skills[fallback_idx];
+            }
+
+            // Slots 5-8: Randomly pick 4 school skills
+            selected_count = 0;
+            attempts = 0;
+
+            while (selected_count < 4 and attempts < max_attempts) : (attempts += 1) {
+                if (school_skills.len == 0) break;
+
+                const random_idx = random.intRangeAtMost(usize, 0, school_skills.len - 1);
+
+                // Check if already loaded in slots 4-7
+                var already_loaded = false;
+                for (0..selected_count) |check_idx| {
+                    if (ent.skill_bar[4 + check_idx] == &school_skills[random_idx]) {
+                        already_loaded = true;
+                        break;
+                    }
+                }
+
+                if (!already_loaded) {
+                    ent.skill_bar[4 + selected_count] = &school_skills[random_idx];
+                    selected_count += 1;
+                }
             }
 
             // Count how many skills were loaded
