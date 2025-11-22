@@ -13,7 +13,10 @@ pub fn main() !void {
     defer rl.closeWindow();
 
     // Initialize outline shader
-    render.initOutlineShader(screenWidth, screenHeight);
+    render.initOutlineShader(screenWidth, screenHeight) catch |err| {
+        std.log.err("Failed to initialize outline shader: {}", .{err});
+        return err;
+    };
     defer render.deinitOutlineShader();
 
     // Enable window resizing and toggling fullscreen
@@ -29,11 +32,17 @@ pub fn main() !void {
 
     // Initialize allocator for terrain system
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+    defer {
+        const deinit_status = gpa.deinit();
+        if (deinit_status == .leak) {
+            std.log.err("Memory leak detected!", .{});
+        }
+    }
     const allocator = gpa.allocator();
 
-    var state = try GameState.init(allocator);
-    defer state.deinit();
+    const state = try GameState.init(allocator);
+    var mutable_state = state;
+    defer mutable_state.deinit();
 
     while (!rl.windowShouldClose()) {
         // Toggle fullscreen with F11
@@ -41,12 +50,12 @@ pub fn main() !void {
             rl.toggleFullscreen();
         }
 
-        state.update();
+        mutable_state.update();
 
         rl.beginDrawing();
         defer rl.endDrawing();
 
-        state.draw();
-        state.drawUI(); // Note: drawUI now takes *GameState (mutable) for input_state updates
+        mutable_state.draw();
+        mutable_state.drawUI();
     }
 }

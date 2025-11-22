@@ -24,6 +24,8 @@ pub const CastResult = enum {
     already_casting,
 };
 
+/// Attempt to start casting a skill. Performs all pre-cast checks (energy, range, cooldown, etc.)
+/// Returns the result indicating success, failure reason, or that casting has started.
 pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_id: ?EntityId, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) CastResult {
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
@@ -79,6 +81,8 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     return .casting_started;
 }
 
+/// Execute a skill's effects (damage, healing, conditions, terrain). Called after cast completes.
+/// Applies all modifiers from caster and target conditions (buffs/debuffs).
 pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) void {
     // Set cooldown
     caster.skill_cooldowns[skill_index] = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;

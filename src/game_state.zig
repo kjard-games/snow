@@ -43,6 +43,8 @@ pub const CombatState = enum {
     defeat,
 };
 
+/// Core game state managing all entities, combat systems, and game loop timing.
+/// Uses fixed-timestep update (20Hz) with interpolated rendering for smooth visuals.
 pub const GameState = struct {
     entities: [MAX_ENTITIES]Character, // All entities including player
     controlled_entity_id: EntityId, // Which entity the local player controls
@@ -123,6 +125,8 @@ pub const GameState = struct {
         }
     }
 
+    /// Initialize a new game state with a 4v4 team setup.
+    /// Randomly generates character builds and equipment loadouts.
     pub fn init(allocator: std.mem.Allocator) !GameState {
         var id_gen = EntityIdGenerator{};
 
@@ -528,6 +532,7 @@ pub const GameState = struct {
         };
     }
 
+    /// Clean up allocated resources. Must be called before GameState goes out of scope.
     pub fn deinit(self: *GameState) void {
         self.terrain_grid.deinit();
     }
@@ -558,6 +563,8 @@ pub const GameState = struct {
         return self.getEntityByIdConst(self.controlled_entity_id).?;
     }
 
+    /// Main update loop. Accumulates frame time and processes fixed-timestep ticks at 20Hz.
+    /// Input is polled every frame (60fps) but game logic runs at 20fps for determinism.
     pub fn update(self: *GameState) void {
         const frame_time = rl.getFrameTime();
 
@@ -746,6 +753,7 @@ pub const GameState = struct {
         }
     }
 
+    /// Render the game world with interpolated positions for smooth visuals between ticks.
     pub fn draw(self: *GameState) void {
         // Calculate interpolation alpha for smooth rendering between ticks
         // alpha = 0.0 means just after a tick, alpha = 1.0 means about to tick
@@ -759,6 +767,7 @@ pub const GameState = struct {
         render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid);
     }
 
+    /// Render UI elements (skill bars, target info, etc.) on top of the 3D scene.
     pub fn drawUI(self: *GameState) void {
         const player = self.getPlayerConst();
         ui.drawUI(player, &self.entities, self.selected_target, &self.input_state, self.camera);

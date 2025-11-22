@@ -9,7 +9,40 @@ const terrain = @import("terrain.zig");
 const Character = character.Character;
 const EntityId = entity_types.EntityId;
 const TerrainGrid = terrain.TerrainGrid;
-const print = std.debug.print;
+
+// Rendering constants - organized by category for clarity
+const skybox = struct {
+    const radius: f32 = 3000.0;
+    const top_offset: f32 = 500.0;
+    const horizon_offset: f32 = -200.0;
+};
+
+const mountain = struct {
+    const distance: f32 = 2500.0;
+    const base_height: f32 = 300.0;
+    const height_variation: f32 = 150.0;
+    const count: usize = 8;
+};
+
+const terrain_rendering = struct {
+    const base_y: f32 = -30.0;
+};
+
+const ui = struct {
+    const element_offset_y: f32 = 10.0;
+    const bar_width: i32 = 80;
+    const bar_height: i32 = 8;
+};
+
+const selection = struct {
+    const ring_offset: f32 = 5.0;
+    const arrow_offset: f32 = 15.0;
+    const arrow_size: f32 = 5.0;
+};
+
+const outline = struct {
+    const thickness: f32 = 3.0;
+};
 
 // Team outline shader system
 pub var outline_render_texture: ?rl.RenderTexture2D = null;
@@ -17,15 +50,16 @@ pub var outline_shader: ?rl.Shader = null;
 var resolution_loc: i32 = 0;
 var thickness_loc: i32 = 0;
 
-pub fn initOutlineShader(screen_width: i32, screen_height: i32) void {
-    outline_render_texture = rl.loadRenderTexture(screen_width, screen_height) catch {
-        print("Failed to load outline render texture\n", .{});
-        return;
-    };
-    outline_shader = rl.loadShader("shaders/outline.vs", "shaders/team_outline.fs") catch {
-        print("Failed to load outline shader\n", .{});
-        return;
-    };
+/// Initialize the outline shader system for team-based silhouette rendering.
+/// Returns an error if shader resources fail to load.
+pub fn initOutlineShader(screen_width: i32, screen_height: i32) !void {
+    outline_render_texture = try rl.loadRenderTexture(screen_width, screen_height);
+    errdefer {
+        if (outline_render_texture) |tex| rl.unloadRenderTexture(tex);
+        outline_render_texture = null;
+    }
+
+    outline_shader = try rl.loadShader("shaders/outline.vs", "shaders/team_outline.fs");
 
     if (outline_shader) |shader| {
         resolution_loc = rl.getShaderLocation(shader, "resolution");
@@ -37,6 +71,7 @@ pub fn initOutlineShader(screen_width: i32, screen_height: i32) void {
     }
 }
 
+/// Clean up outline shader resources. Safe to call multiple times.
 pub fn deinitOutlineShader() void {
     if (outline_render_texture) |tex| {
         rl.unloadRenderTexture(tex);
@@ -56,18 +91,16 @@ inline fn toScreenPos(pos: rl.Vector2) struct { x: i32, y: i32 } {
     };
 }
 
-// Draw a simple atmospheric skybox (winter sky with gradient)
+/// Draw a simple atmospheric skybox with winter sky gradient and distant mountains.
 fn drawSkybox(camera: rl.Camera) void {
-    // Draw a large sphere around the camera for sky gradient
-    // Top: darker blue-gray winter sky
-    // Horizon: lighter blue-white
+    // Sky color gradient: darker blue-gray at top, lighter blue-white at horizon
     const sky_top = rl.Color{ .r = 120, .g = 140, .b = 180, .a = 255 };
     const sky_horizon = rl.Color{ .r = 200, .g = 210, .b = 230, .a = 255 };
 
     // Draw back hemisphere (top of sky)
     rl.drawSphereEx(
-        rl.Vector3{ .x = camera.position.x, .y = camera.position.y + 500, .z = camera.position.z },
-        3000.0, // Large sphere
+        rl.Vector3{ .x = camera.position.x, .y = camera.position.y + skybox.top_offset, .z = camera.position.z },
+        skybox.radius,
         16, // Lower poly count for performance
         16,
         sky_top,
@@ -75,23 +108,22 @@ fn drawSkybox(camera: rl.Camera) void {
 
     // Draw horizon ring
     rl.drawSphereEx(
-        rl.Vector3{ .x = camera.position.x, .y = camera.position.y - 200, .z = camera.position.z },
-        3000.0,
+        rl.Vector3{ .x = camera.position.x, .y = camera.position.y + skybox.horizon_offset, .z = camera.position.z },
+        skybox.radius,
         16,
         8,
         sky_horizon,
     );
 
-    // Add some distant mountain silhouettes (simple shapes using cylinders)
+    // Add distant mountain silhouettes
     const mountain_color = rl.Color{ .r = 90, .g = 100, .b = 120, .a = 200 };
 
-    // Draw a few distant peaks around the horizon
-    for (0..8) |i| {
-        const angle = @as(f32, @floatFromInt(i)) * 3.14159 * 2.0 / 8.0;
-        const distance = 2500.0;
-        const height = 300.0 + @sin(angle * 3.0) * 150.0;
-        const peak_x = camera.position.x + @cos(angle) * distance;
-        const peak_z = camera.position.z + @sin(angle) * distance;
+    // Draw peaks around the horizon
+    for (0..mountain.count) |i| {
+        const angle = @as(f32, @floatFromInt(i)) * std.math.pi * 2.0 / @as(f32, @floatFromInt(mountain.count));
+        const height = mountain.base_height + @sin(angle * 3.0) * mountain.height_variation;
+        const peak_x = camera.position.x + @cos(angle) * mountain.distance;
+        const peak_z = camera.position.z + @sin(angle) * mountain.distance;
 
         // Draw tapered mountain using cylinder (top radius smaller than bottom)
         rl.drawCylinder(
@@ -105,7 +137,7 @@ fn drawSkybox(camera: rl.Camera) void {
     }
 }
 
-// Draw the terrain grid with 3D snow depth and elevation
+/// Draw the terrain grid with 3D snow depth and elevation.
 fn drawTerrainGrid(grid: *const TerrainGrid) void {
     var z: usize = 0;
     while (z < grid.height) : (z += 1) {
@@ -122,9 +154,8 @@ fn drawTerrainGrid(grid: *const TerrainGrid) void {
 
             // Draw ground base (dark gray/brown ground underneath snow)
             // Ground extends from elevation down to a fixed base level
-            const ground_base_y = -30.0; // Base level for all terrain
-            const ground_thickness = elevation - ground_base_y;
-            const ground_center_y = ground_base_y + ground_thickness / 2.0;
+            const ground_thickness = elevation - terrain_rendering.base_y;
+            const ground_center_y = terrain_rendering.base_y + ground_thickness / 2.0;
 
             const ground_color = rl.Color{ .r = 80, .g = 70, .b = 60, .a = 255 };
             rl.drawCube(
@@ -188,7 +219,7 @@ fn drawTerrainGrid(grid: *const TerrainGrid) void {
     }
 }
 
-// Helper function to draw a character's body (split color - left/right hemispheres)
+/// Draw a character's body with split hemispheres showing school and position colors.
 fn drawCharacterBody(render_pos: rl.Vector3, radius: f32, school_color: rl.Color, position_color: rl.Color, is_dead: bool) void {
     if (is_dead) {
         rl.drawSphere(render_pos, radius, palette.TEAM.DEAD);
@@ -211,6 +242,8 @@ fn drawCharacterBody(render_pos: rl.Vector3, radius: f32, school_color: rl.Color
     }
 }
 
+/// Main 3D rendering function. Draws the game world with interpolated positions for smooth visuals.
+/// Uses interpolation_alpha (0.0-1.0) to smoothly render between fixed-timestep game logic updates.
 pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager, terrain_grid: *const @import("terrain.zig").TerrainGrid) void {
     rl.clearBackground(rl.Color{ .r = 180, .g = 200, .b = 220, .a = 255 }); // Soft winter sky color
 
@@ -283,15 +316,15 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
                 const target_snow_height = terrain_grid.getSnowHeightAt(target_render_pos.x, target_render_pos.z);
                 target_render_pos.y = target_elevation + target_snow_height - target_sink_depth + tgt.radius;
 
-                rl.drawCylinder(target_render_pos, tgt.radius + 5, tgt.radius + 5, 2, 16, palette.TEAM.SELECTION);
+                rl.drawCylinder(target_render_pos, tgt.radius + selection.ring_offset, tgt.radius + selection.ring_offset, 2, 16, palette.TEAM.SELECTION);
 
                 // Draw selection arrow above target
                 const arrow_pos = rl.Vector3{
                     .x = target_render_pos.x,
-                    .y = target_render_pos.y + tgt.radius + 15,
+                    .y = target_render_pos.y + tgt.radius + selection.arrow_offset,
                     .z = target_render_pos.z,
                 };
-                rl.drawCube(arrow_pos, 5, 5, 5, palette.TEAM.SELECTION);
+                rl.drawCube(arrow_pos, selection.arrow_size, selection.arrow_size, selection.arrow_size, palette.TEAM.SELECTION);
             }
         }
     }
@@ -339,8 +372,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         rl.endTextureMode();
 
         // Apply outline shader and draw to screen
-        const thickness: f32 = 3.0;
-        rl.setShaderValue(shader, thickness_loc, &thickness, rl.ShaderUniformDataType.float);
+        rl.setShaderValue(shader, thickness_loc, &outline.thickness, rl.ShaderUniformDataType.float);
 
         rl.beginShaderMode(shader);
         rl.drawTextureRec(
@@ -376,7 +408,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         // Position above entity
         const ui_3d_pos = rl.Vector3{
             .x = render_pos.x,
-            .y = render_pos.y + ent.radius + 10,
+            .y = render_pos.y + ent.radius + ui.element_offset_y,
             .z = render_pos.z,
         };
         const ui_2d_pos = rl.getWorldToScreen(ui_3d_pos, camera);
@@ -394,22 +426,20 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
             current_y += 12;
 
             // Health bar
-            const bar_width: i32 = 80;
-            const bar_height: i32 = 8;
-            const bar_x = screen_pos.x - @divTrunc(bar_width, 2);
+            const bar_x = screen_pos.x - @divTrunc(ui.bar_width, 2);
 
             // Background
-            rl.drawRectangle(bar_x, current_y, bar_width, bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
+            rl.drawRectangle(bar_x, current_y, ui.bar_width, ui.bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
 
             // Health fill
             const health_percent = ent.warmth / ent.max_warmth;
-            const fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(bar_width - 2)) * health_percent));
+            const fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(ui.bar_width - 2)) * health_percent));
             const health_color = if (ent.is_enemy) rl.Color.red else rl.Color.green;
-            rl.drawRectangle(bar_x + 1, current_y + 1, fill_width, bar_height - 2, health_color);
+            rl.drawRectangle(bar_x + 1, current_y + 1, fill_width, ui.bar_height - 2, health_color);
 
             // Border
-            rl.drawRectangleLines(bar_x, current_y, bar_width, bar_height, .white);
-            current_y += bar_height + 2;
+            rl.drawRectangleLines(bar_x, current_y, ui.bar_width, ui.bar_height, .white);
+            current_y += ui.bar_height + 2;
 
             // Cast bar (if casting)
             if (ent.cast_state == .activating) {
@@ -419,10 +449,10 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
                     const progress = 1.0 - (ent.cast_time_remaining / cast_time_total);
 
                     // Cast bar
-                    rl.drawRectangle(bar_x, current_y, bar_width, bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
-                    const cast_fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(bar_width - 2)) * progress));
-                    rl.drawRectangle(bar_x + 1, current_y + 1, cast_fill_width, bar_height - 2, rl.Color.gold);
-                    rl.drawRectangleLines(bar_x, current_y, bar_width, bar_height, .white);
+                    rl.drawRectangle(bar_x, current_y, ui.bar_width, ui.bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
+                    const cast_fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(ui.bar_width - 2)) * progress));
+                    rl.drawRectangle(bar_x + 1, current_y + 1, cast_fill_width, ui.bar_height - 2, rl.Color.gold);
+                    rl.drawRectangleLines(bar_x, current_y, ui.bar_width, ui.bar_height, .white);
                 }
             }
         }
@@ -432,7 +462,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     // Note: player_render_pos is already adjusted for terrain in the 3D section above
     const player_ui_3d_pos = rl.Vector3{
         .x = player_render_pos.x,
-        .y = player_render_pos.y + player.*.radius + 10,
+        .y = player_render_pos.y + player.*.radius + ui.element_offset_y,
         .z = player_render_pos.z,
     };
     const player_ui_2d_pos = rl.getWorldToScreen(player_ui_3d_pos, camera);
@@ -449,16 +479,14 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         current_y += 14;
 
         // Health bar
-        const bar_width: i32 = 80;
-        const bar_height: i32 = 8;
-        const bar_x = screen_pos.x - @divTrunc(bar_width, 2);
+        const bar_x = screen_pos.x - @divTrunc(ui.bar_width, 2);
 
-        rl.drawRectangle(bar_x, current_y, bar_width, bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
+        rl.drawRectangle(bar_x, current_y, ui.bar_width, ui.bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
         const health_percent = player.*.warmth / player.*.max_warmth;
-        const fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(bar_width - 2)) * health_percent));
-        rl.drawRectangle(bar_x + 1, current_y + 1, fill_width, bar_height - 2, rl.Color.green);
-        rl.drawRectangleLines(bar_x, current_y, bar_width, bar_height, .white);
-        current_y += bar_height + 2;
+        const fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(ui.bar_width - 2)) * health_percent));
+        rl.drawRectangle(bar_x + 1, current_y + 1, fill_width, ui.bar_height - 2, rl.Color.green);
+        rl.drawRectangleLines(bar_x, current_y, ui.bar_width, ui.bar_height, .white);
+        current_y += ui.bar_height + 2;
 
         // Cast bar (if casting)
         if (player.*.cast_state == .activating) {
@@ -467,10 +495,10 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
                 const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
                 const progress = 1.0 - (player.*.cast_time_remaining / cast_time_total);
 
-                rl.drawRectangle(bar_x, current_y, bar_width, bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
-                const cast_fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(bar_width - 2)) * progress));
-                rl.drawRectangle(bar_x + 1, current_y + 1, cast_fill_width, bar_height - 2, rl.Color.gold);
-                rl.drawRectangleLines(bar_x, current_y, bar_width, bar_height, .white);
+                rl.drawRectangle(bar_x, current_y, ui.bar_width, ui.bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
+                const cast_fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(ui.bar_width - 2)) * progress));
+                rl.drawRectangle(bar_x + 1, current_y + 1, cast_fill_width, ui.bar_height - 2, rl.Color.gold);
+                rl.drawRectangleLines(bar_x, current_y, ui.bar_width, ui.bar_height, .white);
             }
         }
     }
