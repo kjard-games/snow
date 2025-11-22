@@ -450,7 +450,7 @@ pub const GameState = struct {
             const player = self.getPlayer();
 
             // Get player movement intent from input
-            const player_movement = input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state, &self.vfx_manager);
+            const player_movement = input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state, &self.vfx_manager, &self.terrain_grid);
 
             // Only apply movement if not casting (GW1 rule: can't move while casting)
             if (player.cast_state == .idle) {
@@ -480,8 +480,9 @@ pub const GameState = struct {
                 );
 
                 // Apply traffic proportional to distance moved (more movement = more packing)
+                // Higher multiplier means paths form faster from repeated movement
                 if (moved_distance > 0.1) {
-                    const traffic_amount = moved_distance / 100.0; // Normalize to 0-1 range
+                    const traffic_amount = moved_distance / 50.0; // Increased from /100.0 - packs faster
                     self.terrain_grid.applyMovementTraffic(ent.position.x, ent.position.z, traffic_amount);
                 }
             }
@@ -592,7 +593,7 @@ pub const GameState = struct {
         }
 
         if (target_valid) {
-            combat.executeSkill(ent, skill, target, ent.casting_skill_index, rng, &self.vfx_manager);
+            combat.executeSkill(ent, skill, target, ent.casting_skill_index, rng, &self.vfx_manager, &self.terrain_grid);
         }
     }
 

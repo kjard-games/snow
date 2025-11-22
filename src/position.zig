@@ -206,6 +206,39 @@ const pitcher_skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 3000,
     },
+
+    // 9. TERRAIN: Powder Burst - create deep snow at range
+    .{
+        .name = "Powder Burst",
+        .description = "Throw. Deals 8 damage. Creates deep powder on impact, slowing foes in the area.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 10,
+        .damage = 8.0,
+        .cast_range = 280.0,
+        .target_type = .ground,
+        .aoe_radius = 80.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 15000,
+        .terrain_effect = skills.TerrainEffect.deepSnow(.circle),
+    },
+
+    // 10. TERRAIN: Ice Shot - create icy ground at range
+    .{
+        .name = "Ice Shot",
+        .description = "Throw. Creates an icy patch. Foes on ice move faster but are easier to knock down.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 8,
+        .cast_range = 250.0,
+        .target_type = .ground,
+        .aoe_radius = 70.0,
+        .activation_time_ms = 1250,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 20000,
+        .terrain_effect = skills.TerrainEffect.ice(.circle),
+    },
 };
 
 // ============================================================================
@@ -345,6 +378,38 @@ const fielder_skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 4000,
     },
+
+    // 9. TERRAIN: Quick Clear - instant escape tool
+    .{
+        .name = "Quick Clear",
+        .description = "Stance. Clear snow at your feet. You move 15% faster for 4 seconds.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 5,
+        .cast_range = 0,
+        .target_type = .self,
+        .aoe_radius = 50.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 12000,
+        .terrain_effect = skills.TerrainEffect.cleared(.circle),
+    },
+
+    // 10. TERRAIN: Packed Trail - mobility while moving
+    .{
+        .name = "Packed Trail",
+        .description = "Stance. (8 seconds.) Leave packed snow behind you as you run.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 6,
+        .cast_range = 0,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 15000,
+        .duration_ms = 8000,
+        .terrain_effect = skills.TerrainEffect.packedSnow(.trail),
+    },
 };
 
 // ============================================================================
@@ -482,6 +547,39 @@ const sledder_skills = [_]Skill{
         .recharge_time_ms = 12000,
         .cozies = &sure_footed_cozy,
     },
+
+    // 9. TERRAIN: Sled Carve - leave icy trail during charge
+    .{
+        .name = "Sled Carve",
+        .description = "Stance. (6 seconds.) Leave an icy trail as you move. Foes crossing it slip.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 7,
+        .cast_range = 0,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 18000,
+        .duration_ms = 6000,
+        .terrain_effect = skills.TerrainEffect.ice(.trail),
+    },
+
+    // 10. TERRAIN: Powder Plume - create snow behind target
+    .{
+        .name = "Powder Plume",
+        .description = "Throw. Deals 12 damage. Creates deep powder behind target, cutting off their retreat.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 8,
+        .damage = 12.0,
+        .cast_range = 140.0,
+        .target_type = .enemy,
+        .aoe_radius = 60.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 14000,
+        .terrain_effect = skills.TerrainEffect.deepSnow(.circle),
+    },
 };
 
 // ============================================================================
@@ -606,11 +704,12 @@ const shoveler_skills = [_]Skill{
         .energy_cost = 10,
         .cast_range = 200.0,
         .target_type = .ground,
+        .aoe_radius = 60.0, // Size of ice wall
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 30000,
         .duration_ms = 15000,
-        // TODO: Creates wall terrain
+        .terrain_effect = skills.TerrainEffect.ice(.line),
     },
 
     // 8. Self-heal
@@ -625,6 +724,22 @@ const shoveler_skills = [_]Skill{
         .activation_time_ms = 2000,
         .aftercast_ms = 750,
         .recharge_time_ms = 20000,
+    },
+
+    // 9. TERRAIN: Snow Pile - create defensive mound
+    .{
+        .name = "Snow Pile",
+        .description = "Gesture. Shovel snow into a tall mound. Provides cover for allies.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 8,
+        .cast_range = 160.0,
+        .target_type = .ground,
+        .aoe_radius = 70.0,
+        .activation_time_ms = 2000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .terrain_effect = skills.TerrainEffect.deepSnow(.circle),
     },
 };
 
@@ -763,6 +878,38 @@ const animator_skills = [_]Skill{
         .recharge_time_ms = 12000,
         .chills = &brain_freeze_chill,
         // TODO: Steal 5 energy from target
+    },
+
+    // 9. TERRAIN: Grave Snow - create "graves" for snowman corpses
+    .{
+        .name = "Grave Snow",
+        .description = "Trick. Create deep powder burial mounds. Snowmen built here are stronger.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 12,
+        .cast_range = 220.0,
+        .target_type = .ground,
+        .aoe_radius = 90.0,
+        .activation_time_ms = 2000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 30000,
+        .terrain_effect = skills.TerrainEffect.deepSnow(.circle),
+    },
+
+    // 10. TERRAIN: Frozen Ground - boost snowmen with ice
+    .{
+        .name = "Frozen Ground",
+        .description = "Trick. Freeze the ground. Snowmen on ice attack faster.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 10,
+        .cast_range = 200.0,
+        .target_type = .ground,
+        .aoe_radius = 100.0,
+        .activation_time_ms = 1500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .terrain_effect = skills.TerrainEffect.ice(.circle),
     },
 };
 
@@ -914,5 +1061,39 @@ const thermos_skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 25000,
         .cozies = &snow_goggles_cozy,
+    },
+
+    // 9. TERRAIN: Cocoa Puddle - healing slush zone
+    .{
+        .name = "Cocoa Puddle",
+        .description = "Call. Create a slushy puddle. Allies standing in it are slowly healed.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 10,
+        .healing = 2.0, // Per second while standing in it
+        .cast_range = 180.0,
+        .target_type = .ground,
+        .aoe_radius = 80.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 20000,
+        .duration_ms = 15000,
+        .terrain_effect = skills.TerrainEffect.healingSlush(.circle),
+    },
+
+    // 10. TERRAIN: Warming Circle - remove chills with cleared ground
+    .{
+        .name = "Warming Circle",
+        .description = "Call. Clear snow in an area. Allies inside lose chill conditions.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 8,
+        .cast_range = 200.0,
+        .target_type = .ground,
+        .aoe_radius = 100.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 25000,
+        .terrain_effect = skills.TerrainEffect.cleared(.circle),
     },
 };

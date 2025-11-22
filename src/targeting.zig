@@ -201,6 +201,16 @@ pub fn getNearestEnemy(player: Character, entities: []const Character) ?EntityId
         }
     }
 
+    if (nearest) |id| {
+        // Find name for print
+        for (entities) |ent| {
+            if (ent.id == id) {
+                print("Target: {s} (nearest enemy, {d:.1}m)\n", .{ ent.name, min_dist });
+                break;
+            }
+        }
+    }
+
     return nearest;
 }
 
@@ -223,5 +233,54 @@ pub fn getNearestAlly(player: Character, entities: []const Character) ?EntityId 
         }
     }
 
+    if (nearest) |id| {
+        // Find name for print
+        for (entities) |ent| {
+            if (ent.id == id) {
+                print("Target: {s} (nearest ally, {d:.1}m)\n", .{ ent.name, min_dist });
+                break;
+            }
+        }
+    }
+
     return nearest;
+}
+
+pub fn getLowestHealthAlly(player: Character, entities: []const Character) ?EntityId {
+    var lowest: ?EntityId = null;
+    var min_health_percent: f32 = std.math.floatMax(f32);
+
+    // Include self in the search
+    const self_health_percent = player.warmth / player.max_warmth;
+    if (player.isAlive() and self_health_percent < min_health_percent) {
+        min_health_percent = self_health_percent;
+        lowest = player.id;
+    }
+
+    for (entities) |ent| {
+        if (ent.is_enemy) continue;
+        if (!ent.isAlive()) continue;
+
+        const health_percent = ent.warmth / ent.max_warmth;
+        if (health_percent < min_health_percent) {
+            min_health_percent = health_percent;
+            lowest = ent.id;
+        }
+    }
+
+    if (lowest) |id| {
+        // Find name for print
+        if (id == player.id) {
+            print("Target: {s} (lowest health ally - self, {d:.0}%)\n", .{ player.name, min_health_percent * 100.0 });
+        } else {
+            for (entities) |ent| {
+                if (ent.id == id) {
+                    print("Target: {s} (lowest health ally, {d:.0}%)\n", .{ ent.name, min_health_percent * 100.0 });
+                    break;
+                }
+            }
+        }
+    }
+
+    return lowest;
 }

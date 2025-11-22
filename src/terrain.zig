@@ -59,10 +59,11 @@ pub const TerrainType = enum {
 
     pub fn canBePackedBy(self: TerrainType, traffic_amount: f32) ?TerrainType {
         // Returns what terrain becomes after being walked on
+        // Much easier to pack - repeated movement creates paths quickly
         return switch (self) {
-            .deep_powder => if (traffic_amount > 0.5) .thick_snow else null,
-            .thick_snow => if (traffic_amount > 1.0) .packed_snow else null,
-            .packed_snow => if (traffic_amount > 3.0) .icy_ground else null,
+            .deep_powder => if (traffic_amount > 0.15) .thick_snow else null, // Pack quickly
+            .thick_snow => if (traffic_amount > 0.3) .packed_snow else null, // Pack fairly quickly
+            .packed_snow => if (traffic_amount > 1.0) .icy_ground else null, // Takes more traffic to ice over
             .icy_ground, .cleared_ground, .slushy => null, // Can't pack further
         };
     }
@@ -97,9 +98,11 @@ pub const TerrainCell = struct {
     traffic_accumulator: f32 = 0.0, // Tracks how much this cell has been walked on
     snow_depth: f32 = 1.0, // 0.0 = cleared, 1.0 = normal, 2.0 = deep
     accumulation_timer: f32 = 0.0, // Time until next snow accumulation
+    last_traffic_time: f32 = 0.0, // Time since last traffic (for restoration)
 
     pub fn applyTraffic(self: *TerrainCell, amount: f32) void {
         self.traffic_accumulator += amount;
+        self.last_traffic_time = 0.0; // Reset idle timer when walked on
 
         // Check if terrain should transition to more packed state
         if (self.type.canBePackedBy(self.traffic_accumulator)) |new_type| {
@@ -109,16 +112,22 @@ pub const TerrainCell = struct {
     }
 
     pub fn updateAccumulation(self: *TerrainCell, dt: f32, accumulation_rate: f32) void {
+        self.last_traffic_time += dt;
+
+        // Only accumulate in areas that haven't been walked on recently
+        const idle_threshold = 30.0; // 30 seconds without traffic
+        if (self.last_traffic_time < idle_threshold) return;
+
         if (!self.type.canAccumulateSnow()) return;
 
         self.accumulation_timer += dt;
 
-        // Accumulate snow every N seconds (based on rate)
-        const accumulation_interval = 10.0 / accumulation_rate; // seconds
+        // Accumulate snow MUCH slower (every 60-120 seconds instead of 10)
+        const accumulation_interval = 60.0 / accumulation_rate; // seconds
         if (self.accumulation_timer >= accumulation_interval) {
             self.accumulation_timer = 0.0;
             self.type = self.type.getAccumulatedType();
-            self.snow_depth = @min(2.0, self.snow_depth + 0.1);
+            self.snow_depth = @min(2.0, self.snow_depth + 0.05); // Slower depth increase
         }
     }
 };
@@ -134,7 +143,7 @@ pub const TerrainGrid = struct {
     world_offset_z: f32,
 
     // Snow accumulation settings
-    accumulation_rate: f32 = 1.0, // Multiplier for how fast snow falls (0.0 = off, 1.0 = normal, 2.0 = blizzard)
+    accumulation_rate: f32 = 0.1, // Multiplier for how fast snow falls (0.0 = off, 0.1 = light, 1.0 = heavy, 2.0 = blizzard)
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -255,5 +264,114 @@ pub const TerrainGrid = struct {
             return cell.type.getSnowHeight();
         }
         return 0.0; // Default if out of bounds
+    }
+
+    // === TERRAIN MODIFICATION API (for skills) ===
+
+    // Set terrain type at a specific position (for skill effects)
+    pub fn setTerrainAt(self: *TerrainGrid, world_x: f32, world_z: f32, terrain_type: TerrainType) void {
+        if (self.getCellAt(world_x, world_z)) |cell| {
+            cell.type = terrain_type;
+            cell.traffic_accumulator = 0.0; // Reset traffic
+            cell.last_traffic_time = 0.0; // Mark as recently modified
+        }
+    }
+
+    // Create a circle of terrain (for AoE effects like ice walls, cleared zones)
+    pub fn setTerrainInRadius(
+        self: *TerrainGrid,
+        center_x: f32,
+        center_z: f32,
+        radius: f32,
+        terrain_type: TerrainType,
+    ) void {
+        const radius_sq = radius * radius;
+
+        // Find grid bounds for the circle
+        const min_x = center_x - radius;
+        const max_x = center_x + radius;
+        const min_z = center_z - radius;
+        const max_z = center_z + radius;
+
+        // Get grid coordinates for bounds
+        const min_grid = self.worldToGrid(min_x, min_z);
+        const max_grid = self.worldToGrid(max_x, max_z);
+
+        if (min_grid == null or max_grid == null) return;
+
+        const min_gx = min_grid.?.x;
+        const min_gz = min_grid.?.z;
+        const max_gx = @min(max_grid.?.x + 1, self.width);
+        const max_gz = @min(max_grid.?.z + 1, self.height);
+
+        // Iterate through cells in the bounding box
+        var gz = min_gz;
+        while (gz < max_gz) : (gz += 1) {
+            var gx = min_gx;
+            while (gx < max_gx) : (gx += 1) {
+                const cell_world_pos = self.gridToWorld(gx, gz);
+                const dx = cell_world_pos.x - center_x;
+                const dz = cell_world_pos.z - center_z;
+                const dist_sq = dx * dx + dz * dz;
+
+                // If cell is within radius, modify it
+                if (dist_sq <= radius_sq) {
+                    const index = gz * self.width + gx;
+                    if (index < self.cells.len) {
+                        self.cells[index].type = terrain_type;
+                        self.cells[index].traffic_accumulator = 0.0;
+                        self.cells[index].last_traffic_time = 0.0;
+                    }
+                }
+            }
+        }
+    }
+
+    // Create a rectangular wall of terrain (for ice walls, snow barriers)
+    pub fn setTerrainInRect(
+        self: *TerrainGrid,
+        min_x: f32,
+        min_z: f32,
+        max_x: f32,
+        max_z: f32,
+        terrain_type: TerrainType,
+    ) void {
+        const min_grid = self.worldToGrid(min_x, min_z);
+        const max_grid = self.worldToGrid(max_x, max_z);
+
+        if (min_grid == null or max_grid == null) return;
+
+        const min_gx = min_grid.?.x;
+        const min_gz = min_grid.?.z;
+        const max_gx = @min(max_grid.?.x + 1, self.width);
+        const max_gz = @min(max_grid.?.z + 1, self.height);
+
+        var gz = min_gz;
+        while (gz < max_gz) : (gz += 1) {
+            var gx = min_gx;
+            while (gx < max_gx) : (gx += 1) {
+                const index = gz * self.width + gx;
+                if (index < self.cells.len) {
+                    self.cells[index].type = terrain_type;
+                    self.cells[index].traffic_accumulator = 0.0;
+                    self.cells[index].last_traffic_time = 0.0;
+                }
+            }
+        }
+    }
+
+    // Clear terrain in an area (for explosions, shoveling)
+    pub fn clearTerrainInRadius(self: *TerrainGrid, center_x: f32, center_z: f32, radius: f32) void {
+        self.setTerrainInRadius(center_x, center_z, radius, .cleared_ground);
+    }
+
+    // Create snow pile/wall in an area
+    pub fn createSnowPileInRadius(self: *TerrainGrid, center_x: f32, center_z: f32, radius: f32) void {
+        self.setTerrainInRadius(center_x, center_z, radius, .deep_powder);
+    }
+
+    // Create ice in an area (for ice wall skills)
+    pub fn createIceInRadius(self: *TerrainGrid, center_x: f32, center_z: f32, radius: f32) void {
+        self.setTerrainInRadius(center_x, center_z, radius, .icy_ground);
     }
 };

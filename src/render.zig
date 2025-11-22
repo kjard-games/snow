@@ -156,8 +156,14 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         if (target) |tgt| {
             // Only draw selection indicator if target is alive
             if (tgt.isAlive()) {
-                // Draw selection ring around target (interpolated)
-                const target_render_pos = tgt.getInterpolatedPosition(interpolation_alpha);
+                // Draw selection ring around target (interpolated, adjusted for terrain)
+                var target_render_pos = tgt.getInterpolatedPosition(interpolation_alpha);
+
+                // Adjust for terrain depth (same as entity rendering)
+                const target_sink_depth = terrain_grid.getSinkDepthAt(target_render_pos.x, target_render_pos.z);
+                const target_snow_height = terrain_grid.getSnowHeightAt(target_render_pos.x, target_render_pos.z);
+                target_render_pos.y = target_snow_height - target_sink_depth + tgt.radius;
+
                 rl.drawCylinder(target_render_pos, tgt.radius + 5, tgt.radius + 5, 2, 16, palette.TEAM.SELECTION);
 
                 // Draw selection arrow above target

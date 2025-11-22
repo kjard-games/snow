@@ -87,6 +87,84 @@ pub const CozyEffect = struct {
     stack_intensity: u8 = 1, // some cozy effects stack
 };
 
+// Terrain modification - COMPOSITIONAL SYSTEM
+// Separates WHAT terrain, HOW to apply it, and WHERE
+
+pub const TerrainShape = enum {
+    none, // No terrain modification
+    circle, // Circular area (radius)
+    cone, // Cone from caster toward target
+    line, // Line from caster to target
+    ring, // Ring/donut shape (inner + outer radius)
+    trail, // Left behind as you move (requires duration)
+    square, // Square/rectangle
+    cross, // Plus sign shape
+};
+
+pub const TerrainModifier = enum {
+    replace, // Replace terrain completely (default)
+    add_traffic, // Add traffic to pack down snow faster
+    remove_snow, // Reduce snow depth
+    add_snow, // Increase snow depth
+    freeze, // Convert toward icy
+    melt, // Convert toward slushy
+};
+
+pub const TerrainEffect = struct {
+    terrain_type: ?@import("terrain.zig").TerrainType = null, // What terrain to create (null = no change)
+    shape: TerrainShape = .none, // How to apply it
+    modifier: TerrainModifier = .replace, // How it modifies existing terrain
+
+    // Shape parameters (filled from skill's aoe_radius or other fields)
+    // radius: set from skill.aoe_radius
+    // inner_radius: for rings (stored separately if needed)
+    // width: for lines/trails
+
+    // Special properties
+    heals_allies: bool = false, // Does standing in this terrain heal allies?
+    damages_enemies: bool = false, // Does standing in this terrain damage enemies?
+    blocks_movement: bool = false, // Does this terrain block movement? (future: walls)
+
+    // Helper constructors for common patterns
+    pub fn none() TerrainEffect {
+        return .{};
+    }
+
+    pub fn ice(shape: TerrainShape) TerrainEffect {
+        const TerrainType = @import("terrain.zig").TerrainType;
+        return .{ .terrain_type = TerrainType.icy_ground, .shape = shape };
+    }
+
+    pub fn deepSnow(shape: TerrainShape) TerrainEffect {
+        const TerrainType = @import("terrain.zig").TerrainType;
+        return .{ .terrain_type = TerrainType.deep_powder, .shape = shape };
+    }
+
+    pub fn packedSnow(shape: TerrainShape) TerrainEffect {
+        const TerrainType = @import("terrain.zig").TerrainType;
+        return .{ .terrain_type = TerrainType.packed_snow, .shape = shape };
+    }
+
+    pub fn cleared(shape: TerrainShape) TerrainEffect {
+        const TerrainType = @import("terrain.zig").TerrainType;
+        return .{ .terrain_type = TerrainType.cleared_ground, .shape = shape };
+    }
+
+    pub fn slush(shape: TerrainShape) TerrainEffect {
+        const TerrainType = @import("terrain.zig").TerrainType;
+        return .{ .terrain_type = TerrainType.slushy, .shape = shape };
+    }
+
+    pub fn healingSlush(shape: TerrainShape) TerrainEffect {
+        const TerrainType = @import("terrain.zig").TerrainType;
+        return .{
+            .terrain_type = TerrainType.slushy,
+            .shape = shape,
+            .heals_allies = true,
+        };
+    }
+};
+
 // An active chill (debuff) on a character
 pub const ActiveChill = struct {
     chill: Chill,
@@ -134,6 +212,9 @@ pub const Skill = struct {
     unblockable: bool = false,
     soak: f32 = 0.0, // percentage (0.0 to 1.0) - soaks through padding/layers
     interrupts: bool = false, // Does this skill interrupt target's casting?
+
+    // Terrain modification (for ground-targeted skills) - COMPOSITIONAL
+    terrain_effect: TerrainEffect = .{},
 
     // TODO: Warmth as resource (Homeschool mechanic)
     // Some skills sacrifice warmth for power instead of energy

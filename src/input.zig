@@ -45,6 +45,9 @@ pub const InputState = struct {
     buffered_ally_forward: bool = false,
     buffered_ally_backward: bool = false,
     buffered_self_target: bool = false,
+    buffered_nearest_enemy: bool = false,
+    buffered_nearest_ally: bool = false,
+    buffered_lowest_health_ally: bool = false,
     buffered_click_entity: ?EntityId = null,
     buffered_click_terrain: ?rl.Vector3 = null,
     buffered_skills: [8]bool = [_]bool{false} ** 8, // Skill buttons 1-8
@@ -90,6 +93,9 @@ pub fn pollInput(
     var cycle_allies_forward = false;
     var cycle_allies_backward = false;
     var target_self = false;
+    var target_nearest_enemy = false;
+    var target_nearest_ally = false;
+    var target_lowest_health_ally = false;
 
     // Keyboard targeting
     const ctrl_held = rl.isKeyDown(.left_control) or rl.isKeyDown(.right_control);
@@ -107,6 +113,21 @@ pub fn pollInput(
         }
     }
 
+    // T = target nearest enemy (common MMO binding)
+    if (rl.isKeyPressed(.t)) {
+        target_nearest_enemy = true;
+    }
+
+    // Y = target nearest ally
+    if (rl.isKeyPressed(.y)) {
+        target_nearest_ally = true;
+    }
+
+    // H = target lowest health ally (H for "heal")
+    if (rl.isKeyPressed(.h)) {
+        target_lowest_health_ally = true;
+    }
+
     // F1 = self-target (common MMO binding)
     if (rl.isKeyPressed(.f1)) {
         target_self = true;
@@ -115,6 +136,7 @@ pub fn pollInput(
     // Gamepad targeting
     if (rl.isGamepadAvailable(0)) {
         const l1_held = rl.isGamepadButtonDown(0, .left_trigger_1);
+        const r1_held = rl.isGamepadButtonDown(0, .right_trigger_1);
 
         // R2/L2 = Enemy targeting (default)
         if (rl.isGamepadButtonPressed(0, .right_trigger_2)) {
@@ -138,18 +160,34 @@ pub fn pollInput(
             target_self = true;
         }
 
-        // D-pad Left/Right = quick ally cycling
+        // D-pad Left/Right = quick targeting
         if (rl.isGamepadButtonPressed(0, .left_face_right)) {
-            cycle_allies_forward = true;
+            if (r1_held) {
+                target_nearest_enemy = true; // R1+D-Right = nearest enemy
+            } else {
+                cycle_allies_forward = true; // D-Right = cycle allies forward
+            }
         }
         if (rl.isGamepadButtonPressed(0, .left_face_left)) {
-            cycle_allies_backward = true;
+            if (r1_held) {
+                target_nearest_ally = true; // R1+D-Left = nearest ally
+            } else {
+                cycle_allies_backward = true; // D-Left = cycle allies backward
+            }
+        }
+
+        // R1+D-Down = target lowest health ally
+        if (r1_held and rl.isGamepadButtonPressed(0, .left_face_down)) {
+            target_lowest_health_ally = true;
         }
     }
 
     // Buffer the targeting commands
     if (cycle_enemies_forward) input_state.buffered_tab_forward = true;
     if (cycle_enemies_backward) input_state.buffered_tab_backward = true;
+    if (target_nearest_enemy) input_state.buffered_nearest_enemy = true;
+    if (target_nearest_ally) input_state.buffered_nearest_ally = true;
+    if (target_lowest_health_ally) input_state.buffered_lowest_health_ally = true;
 
     // Store ally cycling and self-target in input state
     input_state.buffered_ally_forward = cycle_allies_forward;
@@ -407,6 +445,7 @@ pub fn handleInput(
     input_state: *InputState,
     rng: *std.Random,
     vfx_manager: *@import("vfx.zig").VFXManager,
+    terrain_grid: *@import("terrain.zig").TerrainGrid,
 ) MovementIntent {
     // Track Shift key state
     if (rl.isKeyPressed(.left_shift)) {
@@ -436,7 +475,7 @@ pub fn handleInput(
     // === SKILL USAGE (from buffered inputs) ===
     for (input_state.buffered_skills, 0..) |pressed, i| {
         if (pressed) {
-            useSkill(player, entities, selected_target.*, @intCast(i), rng, vfx_manager);
+            useSkill(player, entities, selected_target.*, @intCast(i), rng, vfx_manager, terrain_grid);
             input_state.buffered_skills[i] = false; // Consume the input
         }
     }
@@ -480,6 +519,22 @@ pub fn handleInput(
     } else if (input_state.buffered_ally_forward) {
         selected_target.* = targeting.cycleAllies(player.*, entities, selected_target.*, true);
         input_state.buffered_ally_forward = false;
+    }
+
+    // Quick targeting modes
+    if (input_state.buffered_nearest_enemy) {
+        selected_target.* = targeting.getNearestEnemy(player.*, entities);
+        input_state.buffered_nearest_enemy = false;
+    }
+
+    if (input_state.buffered_nearest_ally) {
+        selected_target.* = targeting.getNearestAlly(player.*, entities);
+        input_state.buffered_nearest_ally = false;
+    }
+
+    if (input_state.buffered_lowest_health_ally) {
+        selected_target.* = targeting.getLowestHealthAlly(player.*, entities);
+        input_state.buffered_lowest_health_ally = false;
     }
 
     // Self-target
@@ -644,7 +699,7 @@ pub fn handleInput(
                             if (distance <= skill.cast_range) {
                                 // In range! Try to cast the queued skill
                                 print("In range - casting queued skill: {s}\n", .{skill.name});
-                                const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager);
+                                const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager, terrain_grid);
                                 player.clearSkillQueue();
 
                                 if (result == .out_of_range) {
@@ -765,7 +820,7 @@ pub fn handleInput(
     };
 }
 
-fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityId, skill_index: u8, rng: *std.Random, vfx_manager: *@import("vfx.zig").VFXManager) void {
+fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityId, skill_index: u8, rng: *std.Random, vfx_manager: *@import("vfx.zig").VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) void {
     if (skill_index >= player.skill_bar.len) return;
 
     if (player.skill_bar[skill_index] == null) {
@@ -790,7 +845,7 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityI
         }
     }
 
-    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng, vfx_manager);
+    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng, vfx_manager, terrain_grid);
 }
 
 // Update camera to follow player (called every frame for smooth interpolation)

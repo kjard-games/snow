@@ -59,6 +59,7 @@ pub const BehaviorContext = struct {
     delta_time: f32,
     rng: *std.Random,
     vfx_manager: *@import("vfx.zig").VFXManager,
+    terrain_grid: *const @import("terrain.zig").TerrainGrid,
 
     // Cached context data (filled by root node)
     target: ?*Character = null,
@@ -348,6 +349,7 @@ pub const Actions = struct {
                 ctx.target_id,
                 ctx.rng,
                 ctx.vfx_manager,
+                @constCast(ctx.terrain_grid),
             );
 
             if (result == .success or result == .casting_started) {
@@ -372,6 +374,7 @@ pub const Actions = struct {
                         ctx.target_id,
                         ctx.rng,
                         ctx.vfx_manager,
+                        @constCast(ctx.terrain_grid),
                     );
 
                     if (result == .success or result == .casting_started) {
@@ -416,6 +419,7 @@ pub const Actions = struct {
                         heal_target_id,
                         ctx.rng,
                         ctx.vfx_manager,
+                        @constCast(ctx.terrain_grid),
                     );
 
                     if (result == .success or result == .casting_started) {
@@ -889,6 +893,7 @@ pub fn updateAI(
             .delta_time = delta_time,
             .rng = rng,
             .vfx_manager = vfx_manager,
+            .terrain_grid = terrain_grid,
             .target = target,
             .target_id = target_id,
         };

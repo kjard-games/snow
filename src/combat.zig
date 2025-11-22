@@ -24,7 +24,7 @@ pub const CastResult = enum {
     already_casting,
 };
 
-pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_id: ?EntityId, rng: *std.Random, vfx_manager: *vfx.VFXManager) CastResult {
+pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_id: ?EntityId, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) CastResult {
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
 
@@ -71,7 +71,7 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
 
     // If instant cast, execute immediately
     if (skill.activation_time_ms == 0) {
-        executeSkill(caster, skill, target, skill_index, rng, vfx_manager);
+        executeSkill(caster, skill, target, skill_index, rng, vfx_manager, terrain_grid);
         caster.cast_target_id = null; // Clear target
         return .success;
     }
@@ -79,7 +79,7 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     return .casting_started;
 }
 
-pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager) void {
+pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) void {
     // Set cooldown
     caster.skill_cooldowns[skill_index] = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
 
@@ -259,6 +259,59 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
                 @tagName(chill_effect.chill),
                 chill_effect.duration_ms,
             });
+        }
+    } else if (skill.target_type == .ground) {
+        // Ground-targeted skill
+        // Target position is stored in target character's position if provided
+        const ground_pos = if (target) |tgt| tgt.position else caster.position;
+
+        print("{s} used {s} on ground at ({d:.1}, {d:.1})\n", .{
+            caster.name,
+            skill.name,
+            ground_pos.x,
+            ground_pos.z,
+        });
+
+        // Apply terrain effects (COMPOSITIONAL)
+        const effect = skill.terrain_effect;
+        if (effect.terrain_type) |terrain_type| {
+            switch (effect.shape) {
+                .none => {},
+                .circle => {
+                    terrain_grid.setTerrainInRadius(ground_pos.x, ground_pos.z, skill.aoe_radius, terrain_type);
+                    print("  -> Created {s} circle (radius {d:.1})\n", .{ @tagName(terrain_type), skill.aoe_radius });
+                },
+                .cone => {
+                    // TODO: Implement cone shape (from caster toward target)
+                    terrain_grid.setTerrainInRadius(ground_pos.x, ground_pos.z, skill.aoe_radius, terrain_type);
+                    print("  -> Created {s} cone (radius {d:.1})\n", .{ @tagName(terrain_type), skill.aoe_radius });
+                },
+                .line => {
+                    // TODO: Implement line shape (from caster to target)
+                    terrain_grid.setTerrainInRadius(ground_pos.x, ground_pos.z, skill.aoe_radius, terrain_type);
+                    print("  -> Created {s} line (radius {d:.1})\n", .{ @tagName(terrain_type), skill.aoe_radius });
+                },
+                .ring => {
+                    // TODO: Implement ring shape (donut)
+                    terrain_grid.setTerrainInRadius(ground_pos.x, ground_pos.z, skill.aoe_radius, terrain_type);
+                    print("  -> Created {s} ring (radius {d:.1})\n", .{ @tagName(terrain_type), skill.aoe_radius });
+                },
+                .trail => {
+                    // Trails are created during movement, not on cast
+                    // This is handled elsewhere (movement system)
+                    print("  -> Enabled {s} trail effect\n", .{@tagName(terrain_type)});
+                },
+                .square => {
+                    // TODO: Implement square shape
+                    terrain_grid.setTerrainInRadius(ground_pos.x, ground_pos.z, skill.aoe_radius, terrain_type);
+                    print("  -> Created {s} square (radius {d:.1})\n", .{ @tagName(terrain_type), skill.aoe_radius });
+                },
+                .cross => {
+                    // TODO: Implement cross shape
+                    terrain_grid.setTerrainInRadius(ground_pos.x, ground_pos.z, skill.aoe_radius, terrain_type);
+                    print("  -> Created {s} cross (radius {d:.1})\n", .{ @tagName(terrain_type), skill.aoe_radius });
+                },
+            }
         }
     }
 }
