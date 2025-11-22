@@ -27,6 +27,9 @@ pub const InputState = struct {
     // This prevents missing inputs that happen between ticks
     buffered_tab_forward: bool = false,
     buffered_tab_backward: bool = false,
+    buffered_ally_forward: bool = false,
+    buffered_ally_backward: bool = false,
+    buffered_self_target: bool = false,
     buffered_click_entity: ?EntityId = null,
     buffered_click_terrain: ?rl.Vector3 = null,
     buffered_skills: [8]bool = [_]bool{false} ** 8, // Skill buttons 1-8
@@ -62,22 +65,77 @@ pub fn pollInput(
     input_state: *InputState,
 ) void {
     // === TAB TARGETING (buffered) ===
-    var cycle_forward = false;
-    var cycle_backward = false;
+    // Multiple targeting modes for different situations
+    var cycle_enemies_forward = false;
+    var cycle_enemies_backward = false;
+    var cycle_allies_forward = false;
+    var cycle_allies_backward = false;
+    var target_self = false;
 
+    // Keyboard targeting
+    const ctrl_held = rl.isKeyDown(.left_control) or rl.isKeyDown(.right_control);
+    const shift_held = rl.isKeyDown(.left_shift) or rl.isKeyDown(.right_shift);
+
+    if (rl.isKeyPressed(.tab)) {
+        if (ctrl_held and shift_held) {
+            cycle_allies_backward = true; // CTRL+SHIFT+TAB
+        } else if (ctrl_held) {
+            cycle_allies_forward = true; // CTRL+TAB
+        } else if (shift_held) {
+            cycle_enemies_backward = true; // SHIFT+TAB
+        } else {
+            cycle_enemies_forward = true; // TAB (default)
+        }
+    }
+
+    // F1 = self-target (common MMO binding)
+    if (rl.isKeyPressed(.f1)) {
+        target_self = true;
+    }
+
+    // Gamepad targeting
     if (rl.isGamepadAvailable(0)) {
-        if (rl.isGamepadButtonPressed(0, .right_trigger_2)) cycle_forward = true;
-        if (rl.isGamepadButtonPressed(0, .left_trigger_2)) cycle_backward = true;
+        const l1_held = rl.isGamepadButtonDown(0, .left_trigger_1);
+
+        // R2/L2 = Enemy targeting (default)
+        if (rl.isGamepadButtonPressed(0, .right_trigger_2)) {
+            if (l1_held) {
+                cycle_allies_forward = true; // L1+R2
+            } else {
+                cycle_enemies_forward = true; // R2
+            }
+        }
+
+        if (rl.isGamepadButtonPressed(0, .left_trigger_2)) {
+            if (l1_held) {
+                cycle_allies_backward = true; // L1+L2
+            } else {
+                cycle_enemies_backward = true; // L2
+            }
+        }
+
+        // D-pad Up = self-target (quick self-cast)
+        if (rl.isGamepadButtonPressed(0, .left_face_up)) {
+            target_self = true;
+        }
+
+        // D-pad Left/Right = quick ally cycling
+        if (rl.isGamepadButtonPressed(0, .left_face_right)) {
+            cycle_allies_forward = true;
+        }
+        if (rl.isGamepadButtonPressed(0, .left_face_left)) {
+            cycle_allies_backward = true;
+        }
     }
 
-    if (rl.isKeyDown(.left_shift) and rl.isKeyPressed(.tab)) {
-        cycle_backward = true;
-    } else if (rl.isKeyPressed(.tab)) {
-        cycle_forward = true;
-    }
+    // Buffer the targeting commands
+    if (cycle_enemies_forward) input_state.buffered_tab_forward = true;
+    if (cycle_enemies_backward) input_state.buffered_tab_backward = true;
 
-    if (cycle_forward) input_state.buffered_tab_forward = true;
-    if (cycle_backward) input_state.buffered_tab_backward = true;
+    // Store ally cycling and self-target in input state
+    input_state.buffered_ally_forward = cycle_allies_forward;
+    input_state.buffered_ally_backward = cycle_allies_backward;
+    input_state.buffered_self_target = target_self;
 
     // === SKILL BUTTON PRESSES (buffered) ===
     // Pattern: Face buttons (ABXY) = Skills 1-4, L1 + Face buttons = Skills 5-8
@@ -308,14 +366,29 @@ pub fn handleInput(
     }
 
     // === TARGET CYCLING (from buffered inputs) ===
+    // Enemy targeting
     if (input_state.buffered_tab_backward) {
-        print("Cycling backward\n", .{});
-        selected_target.* = targeting.cycleTarget(entities, selected_target.*, false);
-        input_state.buffered_tab_backward = false; // Consume the input
+        selected_target.* = targeting.cycleEnemies(player.*, entities, selected_target.*, false);
+        input_state.buffered_tab_backward = false;
     } else if (input_state.buffered_tab_forward) {
-        print("Cycling forward\n", .{});
-        selected_target.* = targeting.cycleTarget(entities, selected_target.*, true);
-        input_state.buffered_tab_forward = false; // Consume the input
+        selected_target.* = targeting.cycleEnemies(player.*, entities, selected_target.*, true);
+        input_state.buffered_tab_forward = false;
+    }
+
+    // Ally targeting
+    if (input_state.buffered_ally_backward) {
+        selected_target.* = targeting.cycleAllies(player.*, entities, selected_target.*, false);
+        input_state.buffered_ally_backward = false;
+    } else if (input_state.buffered_ally_forward) {
+        selected_target.* = targeting.cycleAllies(player.*, entities, selected_target.*, true);
+        input_state.buffered_ally_forward = false;
+    }
+
+    // Self-target
+    if (input_state.buffered_self_target) {
+        selected_target.* = player.id;
+        print("Target: {s} (self)\n", .{player.name});
+        input_state.buffered_self_target = false;
     }
 
     // === MOVEMENT SYSTEM ===
@@ -408,34 +481,73 @@ pub fn handleInput(
         move_z -= 1.0;
     }
 
+    // === AUTO-ATTACK CHASE ===
+    // If auto-attacking and out of range, move towards target automatically
+    // BUT: Don't move if casting (would cancel the cast!)
+    var auto_chase_active = false;
+    if (player.is_auto_attacking and player.auto_attack_target_id != null and !player.isCasting()) {
+        const target_id = player.auto_attack_target_id.?;
+
+        // Find the target entity
+        for (entities) |*ent| {
+            if (ent.id == target_id) {
+                if (ent.isAlive()) {
+                    const distance = player.distanceTo(ent.*);
+                    const attack_range = player.getAutoAttackRange();
+
+                    // If out of range and no manual input, chase
+                    if (distance > attack_range and move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
+                        const dx = ent.position.x - player.position.x;
+                        const dz = ent.position.z - player.position.z;
+
+                        // Calculate world-space movement direction
+                        const move_dir_x = dx / distance;
+                        const move_dir_z = dz / distance;
+
+                        // Convert world movement to local space (inverse of camera rotation)
+                        const cos_angle = @cos(input_state.camera_angle);
+                        const sin_angle = @sin(input_state.camera_angle);
+                        move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
+                        move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
+
+                        auto_chase_active = true;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
     // === CLICK-TO-MOVE ===
-    // Check if we should use click-to-move instead
-    if (input_state.move_target) |target| {
-        const dx = target.x - player.position.x;
-        const dz = target.z - player.position.z;
-        const distance = @sqrt(dx * dx + dz * dz);
+    // Check if we should use click-to-move instead (unless auto-chasing)
+    if (!auto_chase_active) {
+        if (input_state.move_target) |target| {
+            const dx = target.x - player.position.x;
+            const dz = target.z - player.position.z;
+            const distance = @sqrt(dx * dx + dz * dz);
 
-        // Stop when close enough (within 2 units)
-        if (distance < 2.0) {
-            input_state.move_target = null;
-            print("Reached click target\n", .{});
-        } else {
-            // Move toward target (only if no manual input occurred)
-            if (move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
-                // Calculate world-space movement direction
-                // Then convert to local space for MovementIntent
-                const move_dir_x = dx / distance;
-                const move_dir_z = dz / distance;
-
-                // Convert world movement to local space (inverse of camera rotation)
-                const cos_angle = @cos(input_state.camera_angle);
-                const sin_angle = @sin(input_state.camera_angle);
-                move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
-                move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
-            } else {
-                // Manual input cancels click-to-move
+            // Stop when close enough (within 2 units)
+            if (distance < 2.0) {
                 input_state.move_target = null;
-                print("Click-to-move cancelled by manual input\n", .{});
+                print("Reached click target\n", .{});
+            } else {
+                // Move toward target (only if no manual input occurred)
+                if (move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
+                    // Calculate world-space movement direction
+                    // Then convert to local space for MovementIntent
+                    const move_dir_x = dx / distance;
+                    const move_dir_z = dz / distance;
+
+                    // Convert world movement to local space (inverse of camera rotation)
+                    const cos_angle = @cos(input_state.camera_angle);
+                    const sin_angle = @sin(input_state.camera_angle);
+                    move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
+                    move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
+                } else {
+                    // Manual input cancels click-to-move
+                    input_state.move_target = null;
+                    print("Click-to-move cancelled by manual input\n", .{});
+                }
             }
         }
     }
