@@ -1,0 +1,45 @@
+Name,Description,Overcast,Energy,Activation,Recharge,Attribute,Campaign
+Aftershock,Spell. Deals 26...85...100 earth damage to nearby foes. Deals 10...56...68 more earth damage to knocked down foes.,0,10,0.75,10,Earth Magic,Core
+Air Attunement,Enchantment Spell. (36...55...60 seconds.) You gain 1 Energy plus 30% of the Energy cost whenever you use an Air Magic skill.,0,10,1,30,Air Magic,Core
+Armor of Earth,Enchantment Spell. (30 seconds.) You have +24...53...60 armor. You move 50...21...14% slower.,0,10,0.75,15,Earth Magic,Core
+Aura of Restoration,Enchantment Spell. (60 seconds.) You gain 0...1...1 Energy and are healed for 200...440...500% of the Energy cost each time you cast a spell.,0,5,0.25,20,Energy Storage,Core
+Aura of Restoration (PvP),Enchantment Spell. (60 seconds.) You gain 0...1...1 Energy and are healed for 200...360...400% of the Energy cost each time you cast a spell.,0,5,0.25,20,Energy Storage,Core
+Blinding Flash,Spell. Inflicts Blindness condition (3...7...8 seconds).,0,10,0.75,8,Air Magic,Core
+Blurred Vision,Hex Spell. Also hexes foes adjacent to target (4...9...10 seconds). They have 50% chance to miss.,0,10,1,12,Water Magic,Core
+Conjure Flame,Enchantment Spell. (60 seconds.) Your attacks hit for +5...17...20 fire damage. No effect unless your weapon deals fire damage.,0,10,1,45,Fire Magic,Core
+Conjure Frost,Enchantment Spell. (60 seconds.) Your attacks hit for +5...17...20 cold damage. No effect unless your weapon deals cold damage.,0,10,1,45,Water Magic,Core
+Conjure Lightning,Enchantment Spell. (60 seconds.) Your attacks hit for +5...17...20 lightning damage. No effect unless your weapon deals lightning damage.,0,10,1,45,Air Magic,Core
+Deep Freeze,Hex Spell. Also hexes foes in the area of your target (10 seconds). These foes move 66% slower. Initial effect: deals 10...70...85 cold damage.,0,25,2,15,Water Magic,Core
+Earth Attunement,Enchantment Spell. (36...55...60 seconds.) You gain 1 Energy plus 30% of the Energy cost when you use an Earth Magic skill.,0,10,1,30,Earth Magic,Core
+Elemental Attunement,Elite Enchantment Spell. (25...53...60 seconds.) Your elemental attributes are increased by +1...2...2. You gain 50% of the Energy cost of any Air, Earth, Fire, and Water Magic skills you use.,0,10,1,20,Energy Storage,Core
+Enervating Charge,Spell. Deals 25...45...50 lightning damage. Inflicts Weakness condition (5...17...20 seconds). 25% armor penetration.,0,10,1,8,Air Magic,Core
+Fire Attunement,Enchantment Spell. (36...55...60 seconds.) You gain 1 Energy plus 30% of the Energy cost when you use a Fire Magic skill.,0,10,1,30,Fire Magic,Core
+Fire Storm,Spell. Deals 5...29...35 fire damage each second (10 seconds). Hits foes adjacent to target's initial location.,0,10,2,20,Fire Magic,Core
+Fireball,Spell. Projectile: deals 7...91...112 fire damage to target and adjacent foes.,0,10,1.5,7,Fire Magic,Core
+Flare,Spell. Projectile: deals 20...56...65 fire damage. If Overcast, strikes adjacent.,0,5,1,0,Fire Magic,Core
+Gale,Spell. Causes knock-down. 50% failure chance unless Air Magic 5 or more.,10,10,1,5,Air Magic,Core
+Glyph of Elemental Power,Glyph. (25 seconds.) Boosts your elemental attributes by +2 for your next 10 spells.,0,5,1,5,,Core
+Glyph of Lesser Energy,Glyph. (15 seconds.) Your next 2 spells cost 10...16...18 less Energy.,0,5,1,30,Energy Storage,Core
+Ice Spear,Enchantment Spell. Projectile: deals 10...50...60 cold damage. Gain +1...3...4 Health regeneration for 5 seconds if Overcast.,0,5,1,0,Water Magic,Core
+Ice Spikes,Hex Spell. Also hexes foes adjacent to target (2...5...6 seconds). These foes move 66% slower. Initial effect: deals 20...68...80 cold damage.,0,15,1.5,10,Water Magic,Core
+Immolate,Spell. Deals 20...64...75 fire damage. Inflicts Burning condition (1...3...3 second[s]).,0,10,1,5,Fire Magic,Core
+Inferno,Spell. Deals 30...114...135 fire damage to foes adjacent to you.,0,10,0.75,10,Fire Magic,Core
+Lightning Orb,Spell. Projectile: deals 10...82...100 lightning damage. 25% armor penetration.,0,15,2,5,Air Magic,Core
+Lightning Strike,Hex Spell. Deals 5...41...50 lightning damage. 25% armor penetration. Hex for 3 seconds if Overcast. End effect: deals 5...41...50 lightning damage.,0,5,1,5,Air Magic,Core
+Lightning Surge,Elite Hex Spell. (3 seconds.) End effect: deals 14...83...100 lightning damage, causes knock-down, and inflicts Cracked Armor (5...17...20 seconds). 25% armor penetration.,0,10,1,10,Air Magic,Core
+Lightning Touch,Touch Skill. Deals 10...50...60 lightning damage. Also hits foes adjacent to target foe. Inflicts Blind (1...3...4 second[s]) and Cracked Armor (1...8...10 second[s]) on all struck foes. 25% armor penetration.,0,5,0.75,10,Air Magic,Core
+Maelstrom,Spell. Deals 10...22...25 cold damage and interrupts spells each second (10 seconds). Hits foes adjacent to target's initial location.,10,25,2,30,Water Magic,Core
+Meteor,Spell. Deals 7...91...112 fire damage and causes knock-down. Also hits foes adjacent to target foe.,10,5,2,30,Fire Magic,Core
+Mind Burn,Elite Spell. Deals 15...51...60 fire damage. If you have more energy than target foe, deals 15...51...60 more fire damage and inflicts Burning (1...8...10 second[s]). Also hits adjacent foes.,5,5,1,5,Fire Magic,Core
+Mind Freeze,Elite Hex Spell. Deals 10...50...60 cold damage. If you have more Energy than target foe, deals +10...50...60 cold damage and causes 90% slower movement (1...4...5 second[s]).,5,5,1,5,Water Magic,Core
+Mind Freeze (PvP),Elite Hex Spell. Deals 10...34...40 cold damage. If you have more Energy than target foe, deals +10...34...40 cold damage and causes 90% slower movement (1...4...5 second[s]).,5,10,1,5,Water Magic,Core
+Obsidian Flame,Spell. Deals 22...94...112 damage.,5,5,1.5,5,Earth Magic,Core
+Obsidian Flame (PvP),Spell. Deals 22...78...92 damage.,5,5,1.5,5,Earth Magic,Core
+Obsidian Flesh,Elite Enchantment Spell. (8...18...20 seconds.) You have +20 armor and enemy spells cannot target you. You cannot attack and have -2 energy degeneration.,0,25,1,30,Earth Magic,Core
+Over the Limit,Elite Enchantment Spell. Spells cast 15...19...20% faster and recharge 15...43...50% faster. Continuously gain Overcast while active. PvE Skill,-1,5,1,20,Energy Storage,Core
+Rust,Hex Spell. Deals 10...58...70 cold damage to target and adjacent foes. Hexes target and adjacent foes (5...17...20 seconds). Doubles signet activation time. Interrupts and disables signets for 1...8...10 second[s] if you are Overcast.,0,10,1,8,Water Magic,Core
+Stone Daggers,Spell. Two projectiles: each deals 8...28...33 earth damage. If Overcast, cause Bleeding for 1...4...5 second[s].,0,5,1,0,Earth Magic,Core
+Stoning,Spell. Projectile: deals 45...93...105 earth damage. Causes knock-down if target foe is Weakened.,0,15,1,5,Earth Magic,Core
+Ward Against Foes,Ward Spell. (8...18...20 seconds.) Foes in this ward move 50% slower.,0,15,1,20,Earth Magic,Core
+Ward Against Melee,Ward Spell. (5...17...20 seconds.) Allies in this ward have a 50% chance to block melee attacks. Allied spirits are not affected.,0,15,1,30,Earth Magic,Core
+Water Attunement,Enchantment Spell. (36...55...60 seconds.) You gain 1 Energy plus 30% of the Energy cost when you use a Water Magic skill.,0,10,1,30,Water Magic,Core

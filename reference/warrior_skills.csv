@@ -1,0 +1,44 @@
+Name,Description,Adrenaline,Energy,Activation,Recharge,Attribute,Campaign
+"Charge!",Elite Shout. (5...11...13 seconds.) Allies in earshot move 33% faster. [Initial effect]: these allies lose Crippled condition.,0,5,0,20,Tactics,Core
+"For Great Justice!",Shout. (20 seconds.) You gain 100% more adrenaline.,0,5,0,45,,Core
+"For Great Justice!" (PvP),Shout. (8 seconds.) You gain 1 extra strike of adrenaline whenever you hit with an attack.,0,5,0,45,,Core
+"Shields Up!",Shout. (5...10...11 seconds.) Party members in earshot have +60 armor against projectile attacks.,0,10,0,30,Tactics,Core
+"Watch Yourself!",Shout. (10 seconds.) Party members in earshot have +5...21...25 armor. Ends after 10 incoming attacks.,4,0,0,4,Tactics,Core
+"Watch Yourself!" (PvP),Shout. (10 seconds.) Party members in earshot have +5...21...25 armor. Ends after 1...3...3 incoming attack[s].,4,0,0,4,Tactics,Core
+Axe Rake,Axe Attack. Deals +1...8...10 damage and inflicts Crippled condition (15 seconds) if target foe has a Deep Wound.,5,0,0,0,Axe Mastery,Core
+Balanced Stance,Stance. (8...18...20 seconds.) You cannot be knocked-down and do not take extra damage from critical hits.,0,5,0,30,Tactics,Core
+Battle Rage,Elite Stance. (5...17...20 seconds.) You move 33% faster and gain double adrenaline from your attacks. Ends if you use any non-adrenal skills.,4,0,0,0,Strength,Core
+Berserker Stance,Stance. (5...10...11 seconds.) You attack 33% faster and gain 50% more adrenaline. Ends if you use a skill.,0,5,0,20,Strength,Core
+Bull's Strike,Melee Attack. Deals +5...25...30 damage and causes knock-down if target foe is moving.,0,5,0,10,Strength,Core
+Cleave,Elite Axe Attack. Deals +10...26...30 damage.,4,0,0,0,Axe Mastery,Core
+Counter Blow,Hammer Attack. Causes knock-down if target foe is attacking.,4,0,0,0,Hammer Mastery,Core
+Cyclone Axe,Axe Attack. Deals +4...10...12 damage to all foes adjacent to you.,0,5,0,4,Axe Mastery,Core
+Defensive Stance,Stance. (1...4...5 second[s].) You have 75% chance to block. End effect: gain one adrenaline for each melee attack skill you have (maximum 0...3...4).,5,0,0,8,Tactics,Core
+Devastating Hammer,Elite Hammer Attack. Causes knock-down. Inflicts Weakness condition (5...17...20 seconds).,7,0,0,0,Hammer Mastery,Core
+Dismember,Axe Attack. Inflicts Deep Wound condition (5...17...20 seconds).,5,0,0,0,Axe Mastery,Core
+Disrupting Chop,Axe Attack. Interrupts an action. Interruption effect: interrupted skill is disabled for +20 seconds.,6,0,0,0,Axe Mastery,Core
+Distracting Blow,Melee Attack. Also attacks foes adjacent to your target. Interrupts an action. Hits for no damage.,0,5,0.5,10,,Core
+Endure Pain,Skill. (7...16...18 seconds.) You have +90...258...300 maximum Health.,0,5,0,30,Strength,Core
+Executioner's Strike,Axe Attack. Deals +10...34...40 damage.,8,0,0,0,Axe Mastery,Core
+Final Thrust,Sword Attack. Deals +1...32...40 damage. Deals +1...32...40 more damage if target foe is below 50% Health. Lose all adrenaline.,10,0,0,0,Swordsmanship,Core
+Frenzy,Stance. (8 seconds.) You attack 33% faster. You take double damage.,0,5,0,4,,Core
+Gash,Sword Attack. Deals +5...17...20 damage and inflicts Deep Wound condition (5...17...20 seconds) if your target is Bleeding.,6,0,0,0,Swordsmanship,Core
+Hammer Bash,Hammer Attack. Causes knock-down. Lose all adrenaline.,6,0,0,0,Hammer Mastery,Core
+Hamstring,Sword Attack. Inflicts Crippled condition (3...13...15 seconds).,0,10,0,15,Swordsmanship,Core
+Healing Signet,Signet. You gain 82...154...172 Health. You have -40 armor while using this skill.,0,0,2,4,Tactics,Core
+Heavy Blow,Hammer Attack. Deals +1...24...30 damage and causes knock-down if target foe is Weakened. Lose all adrenaline.,5,0,0,0,Hammer Mastery,Core
+Hundred Blades,Elite Skill. (15 seconds.) Deals 10...22...25 slashing damage to all adjacent foes whenever you attack with a sword.,0,5,0,25,Swordsmanship,Core
+Irresistible Blow,Hammer Attack. Deals +5...17...20 damage. Deals 5...17...20 damage and causes knock-down if blocked.,0,5,0,6,Hammer Mastery,Core
+Mighty Blow,Hammer Attack. Deals +10...34...40 damage.,7,0,0,0,Hammer Mastery,Core
+Power Attack,Melee Attack. Deals +10...34...40 damage.,0,5,0,3,Strength,Core
+Savage Slash,Sword Attack. Interrupts an action. Interruption effect: deals +1...32...40 damage if action was a spell.,0,5,0.5,15,Swordsmanship,Core
+Seeking Blade,Sword Attack. Deals +1...16...20 damage. Deals 1...16...20 damage and inflicts Bleeding condition (25 seconds) if blocked.,0,5,0,4,Swordsmanship,Core
+Seven Weapons Stance,Elite Stance. (3...17...20 seconds.) Weapon attributes are increased by +1...12...15. You attack 33% faster. PvE Skill,0,5,0,20,Strength,Core
+Sever Artery,Sword Attack. Inflicts Bleeding condition (5...21...25 seconds).,4,0,0,0,Swordsmanship,Core
+Shield Bash,Skill. (5...10...11 seconds.) You block of next attack skill. Causes knock-down and +15 second recharge if it was a melee skill. No effect unless you are wielding a shield.,0,5,0,20,Strength,Core
+Sprint,Stance. (8...13...14 seconds.) You move 25% faster.,0,5,0,15,Strength,Core
+Staggering Blow,Hammer Attack. Inflicts Weakness condition (5...17...20 seconds).,4,0,1,0,Hammer Mastery,Core
+Swift Chop,Axe Attack. Deals +1...16...20 damage. Deals 1...16...20 damage and inflicts Deep Wound condition (20 seconds) if blocked.,0,5,0,4,Axe Mastery,Core
+Thrill of Victory,Melee Attack. Deals +20...36...40 damage. If you have more Health than your target, you gain 1...2...2 adrenaline.,0,5,0,8,Tactics,Core
+Warrior's Cunning,Skill. (5...10...11 seconds.) Your melee attacks are unblockable.,0,10,0,60,Strength,Core
+Wild Blow,Melee Attack. Always a critical hit. Removes a stance. Unblockable. Lose all adrenaline.,0,5,0,8,,Core

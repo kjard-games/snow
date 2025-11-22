@@ -35,26 +35,26 @@ fn lerpColor(a: rl.Color, b: rl.Color, t: f32) rl.Color {
     };
 }
 
-// Get color for a school (MTG color pie inspired)
+// Get color for a school (MTG color pie inspired) - VERY SATURATED
 pub fn getSchoolColor(school: School) rl.Color {
     return switch (school) {
-        .private_school => rl.Color{ .r = 255, .g = 245, .b = 200, .a = 255 }, // White/Gold
-        .public_school => rl.Color{ .r = 255, .g = 80, .b = 80, .a = 255 }, // Red
-        .montessori => rl.Color{ .r = 80, .g = 200, .b = 80, .a = 255 }, // Green
-        .homeschool => rl.Color{ .r = 120, .g = 80, .b = 160, .a = 255 }, // Purple/Black
-        .waldorf => rl.Color{ .r = 100, .g = 150, .b = 255, .a = 255 }, // Blue
+        .private_school => rl.Color{ .r = 255, .g = 220, .b = 100, .a = 255 }, // Bright Gold
+        .public_school => rl.Color{ .r = 255, .g = 50, .b = 50, .a = 255 }, // Bright Red
+        .montessori => rl.Color{ .r = 50, .g = 220, .b = 50, .a = 255 }, // Bright Green
+        .homeschool => rl.Color{ .r = 180, .g = 80, .b = 220, .a = 255 }, // Bright Purple
+        .waldorf => rl.Color{ .r = 80, .g = 150, .b = 255, .a = 255 }, // Bright Blue
     };
 }
 
-// Get color for a position (lighter variants)
+// Get color for a position - VERY SATURATED AND DISTINCT
 pub fn getPositionColor(position: Position) rl.Color {
     return switch (position) {
-        .pitcher => rl.Color{ .r = 255, .g = 200, .b = 100, .a = 255 }, // Orange
-        .fielder => rl.Color{ .r = 200, .g = 200, .b = 200, .a = 255 }, // Gray
-        .sledder => rl.Color{ .r = 255, .g = 100, .b = 255, .a = 255 }, // Pink
-        .shoveler => rl.Color{ .r = 150, .g = 150, .b = 255, .a = 255 }, // Light Blue
-        .animator => rl.Color{ .r = 200, .g = 255, .b = 100, .a = 255 }, // Yellow-Green
-        .thermos => rl.Color{ .r = 255, .g = 150, .b = 150, .a = 255 }, // Light Red
+        .pitcher => rl.Color{ .r = 255, .g = 140, .b = 0, .a = 255 }, // Bright Orange
+        .fielder => rl.Color{ .r = 180, .g = 180, .b = 180, .a = 255 }, // Light Gray
+        .sledder => rl.Color{ .r = 255, .g = 50, .b = 200, .a = 255 }, // Hot Pink
+        .shoveler => rl.Color{ .r = 100, .g = 200, .b = 255, .a = 255 }, // Cyan
+        .animator => rl.Color{ .r = 180, .g = 255, .b = 50, .a = 255 }, // Lime Green
+        .thermos => rl.Color{ .r = 255, .g = 100, .b = 100, .a = 255 }, // Salmon/Pink
     };
 }
 
@@ -62,13 +62,13 @@ pub fn getPositionColor(position: Position) rl.Color {
 pub fn drawProceduralIcon(x: f32, y: f32, size: f32, skill_name: []const u8, base_color: rl.Color) void {
     const seed = hashString(skill_name);
 
-    // Generate color variations based on seed
+    // Generate color variations based on seed - MUCH brighter
     const color_var1 = getHashFloat(seed, 0);
     const color_var2 = getHashFloat(seed, 1);
 
-    // Create darker and lighter versions with MORE variation
-    const dark_factor = 0.1 + color_var1 * 0.4; // 0.1-0.5 (darker range)
-    const light_factor = 0.5 + color_var2 * 0.5; // 0.5-1.0 (much brighter)
+    // Create darker and lighter versions - keep them BRIGHT
+    const dark_factor = 0.6 + color_var1 * 0.2; // 0.6-0.8 (stay bright!)
+    const light_factor = 0.3 + color_var2 * 0.4; // 0.3-0.7 (moderate brightening)
 
     const dark_color = rl.Color{
         .r = @intFromFloat(@as(f32, @floatFromInt(base_color.r)) * dark_factor),
@@ -84,12 +84,12 @@ pub fn drawProceduralIcon(x: f32, y: f32, size: f32, skill_name: []const u8, bas
         .a = 255,
     };
 
-    // Generate gradient parameters from hash - make them more extreme for visibility
+    // Generate gradient parameters from hash - REDUCED distortion
     const gradient_angle = getHashFloat(seed, 3) * std.math.pi * 2.0; // 0-360 degrees
-    const wave_freq = 1.0 + getHashFloat(seed, 4) * 10.0; // 1-11 waves (more range)
-    const wave_amp = 0.2 + getHashFloat(seed, 5) * 0.6; // 0.2-0.8 amplitude (stronger)
-    const noise_scale = 0.3 + getHashFloat(seed, 6) * 3.0; // 0.3-3.3 noise scale (more range)
-    const gradient_offset = getHashFloat(seed, 7) * 0.8 - 0.4; // -0.4 to 0.4 (can shift either way)
+    const wave_freq = 1.0 + getHashFloat(seed, 4) * 3.0; // 1-4 waves (less distortion)
+    const wave_amp = 0.05 + getHashFloat(seed, 5) * 0.15; // 0.05-0.2 amplitude (subtle)
+    const noise_scale = 0.5 + getHashFloat(seed, 6) * 1.0; // 0.5-1.5 noise scale (subtle)
+    const gradient_offset = getHashFloat(seed, 7) * 0.2 - 0.1; // -0.1 to 0.1 (minimal shift)
 
     // Draw the unique procedural gradient
     drawUniqueGradient(x, y, size, dark_color, base_color, light_color, gradient_angle, wave_freq, wave_amp, noise_scale, gradient_offset);
@@ -170,28 +170,47 @@ fn drawUniqueGradient(
 }
 
 // Draw icon for a skill based on its name (procedural generation)
-pub fn drawSkillIcon(x: f32, y: f32, size: f32, skill: *const Skill, school: School, position: Position) void {
-    // Determine if skill is from position or generic pool
+pub fn drawSkillIcon(x: f32, y: f32, size: f32, skill: *const Skill, school: School, position: Position, can_afford: bool) void {
+    // Check if skill is from position pool - compare by NAME not pointer
     const position_skills = position.getSkills();
     var is_position_skill = false;
 
-    for (position_skills) |pos_skill| {
-        if (&pos_skill == skill) {
+    for (position_skills) |*pos_skill| {
+        if (std.mem.eql(u8, pos_skill.name, skill.name)) {
             is_position_skill = true;
             break;
         }
     }
 
+    // Check if skill is from school pool - compare by NAME not pointer
+    const school_skills = school.getSkills();
+    var is_school_skill = false;
+
+    for (school_skills) |*school_skill| {
+        if (std.mem.eql(u8, school_skill.name, skill.name)) {
+            is_school_skill = true;
+            break;
+        }
+    }
+
     // Choose base color based on source
-    const base_color = if (is_position_skill) blk: {
-        // Position skills: blend school and position colors
-        const school_color = getSchoolColor(school);
-        const pos_color = getPositionColor(position);
-        break :blk lerpColor(school_color, pos_color, 0.5);
-    } else blk: {
-        // Generic skills: use school color (not gray!)
+    var base_color = if (is_position_skill) blk: {
+        // Position skills (slots 1-4): use position color
+        break :blk getPositionColor(position);
+    } else if (is_school_skill) blk: {
+        // School skills (slots 5-8): use school color
         break :blk getSchoolColor(school);
+    } else blk: {
+        // Fallback (shouldn't happen): gray
+        break :blk rl.Color{ .r = 150, .g = 150, .b = 150, .a = 255 };
     };
+
+    // Dim the color if player can't afford the skill
+    if (!can_afford) {
+        base_color.r = @intFromFloat(@as(f32, @floatFromInt(base_color.r)) * 0.3);
+        base_color.g = @intFromFloat(@as(f32, @floatFromInt(base_color.g)) * 0.3);
+        base_color.b = @intFromFloat(@as(f32, @floatFromInt(base_color.b)) * 0.3);
+    }
 
     // Generate procedural icon from skill name
     drawProceduralIcon(x, y, size, skill.name, base_color);

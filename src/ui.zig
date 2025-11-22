@@ -134,7 +134,11 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
         const icon_size: f32 = size * 0.8; // Icon takes 80% of slot (larger now, no text)
         const icon_x = x + (size - icon_size) / 2.0;
         const icon_y = y + (size - icon_size) / 2.0;
-        skill_icons.drawSkillIcon(icon_x, icon_y, icon_size, skill, player.school, player.player_position);
+
+        // Check if player can afford this skill
+        const can_afford = player.energy >= skill.energy_cost;
+
+        skill_icons.drawSkillIcon(icon_x, icon_y, icon_size, skill, player.school, player.player_position, can_afford);
 
         // Draw cooldown overlay (visual only, no text)
         if (player.skill_cooldowns[index] > 0) {

@@ -1,0 +1,48 @@
+Name,Description,Energy,Activation,Recharge,Attribute,Campaign
+"Together as One!",Elite Shout. (3...13...15 seconds.) All party members near you or your pet deal +5...13...15 damage and gain +1...6...7 Health regeneration. PvE Skill,10,0,15,Expertise,Core
+Antidote Signet,Signet. Remove Poison, Disease, and Blindness from yourself, and one additional condition.,0,1,4,,Core
+Apply Poison,Preparation. (24 seconds.) Your physical attacks inflict Poisoned condition (3...13...15 seconds).,15,2,12,Wilderness Survival,Core
+Barbed Trap,Trap. (90 seconds.) Affects nearby foes. Deals 7...20...23 piercing damage. Inflicts Crippled and Bleeding conditions (3...21...25 seconds). Easily interrupted.,15,2,20,Wilderness Survival,Core
+Barrage,Elite Bow Attack. Deals +5...17...20 damage. Hits 5 foes adjacent to your target. All your preparations are removed.,5,0,1,Marksmanship,Core
+Call of Haste,Shout. (30 seconds.) Your pet moves and attacks 33% faster.,10,0,25,Beast Mastery,Core
+Call of Haste (PvP),Shout. (30 seconds.) Your pet moves and attacks 25% faster.,10,0,25,Beast Mastery,Core
+Called Shot,Bow Attack. You shoot an arrow that moves 3 times faster. Unblockable.,5,0,3,,Core
+Charm Animal,Skill. Charm target animal. Once charmed, your animal companion will travel with you whenever you have Charm Animal equipped. You cannot charm an animal that is more than 4 levels above you.,10,10,0,Beast Mastery,Core
+Charm Animal (Codex),Skill. Your animal companion will travel with you whenever you have Charm Animal equipped. Failure unless Beast Mastery 8 or higher.,10,10,0,Beast Mastery,Core
+Choking Gas,Preparation. (1...10...12 seconds.) +1...7...8 damage. Spreads Choking Gas to foes adjacent to target. Choking Gas interrupts spells.,15,2,24,Wilderness Survival,Core
+Comfort Animal,Skill. Your pet gains 20...87...104 Health. Resurrects your pet (10...48...58% Health.) If you have Comfort Animal equipped, your animal companion will travel with you.,5,1,1,Beast Mastery,Core
+Comfort Animal (PvP),Skill. Your pet gains 20...87...104 Health. Resurrects your pet (10...48...58% Health.),10,1,1,Beast Mastery,Core
+Concussion Shot,Bow Attack. Interrupts a spell. Interruption effect: inflicts Dazed condition (5...17...20 seconds). Hits for only 1...13...16 damage.,25,0.5,5,Marksmanship,Core
+Debilitating Shot,Bow Attack. Causes 1...8...10 Energy loss.,10,0,10,Marksmanship,Core
+Determined Shot,Bow Attack. Deals +5...17...20 damage. Recharges your attack skills if it fails to hit.,5,0,10,Marksmanship,Core
+Disrupting Lunge,Pet Attack. Deals +1...10...12 damage. Interrupts a skill. Interruption effect: interrupted skill is disabled for +20 seconds.,5,0,20,Beast Mastery,Core
+Distracting Shot,Bow Attack. Interrupts an action. Interruption effect: interrupted skill is disabled for +20 seconds. Hits for only 1...13...16 damage.,5,0.5,10,Expertise,Core
+Dual Shot,Bow Attack. You shoot two arrows simultaneously at target foe. These arrows deal 25% less damage,10,0,10,,Core
+Energizing Wind,Nature Ritual. Creates a level 1...5...6 spirit (1...25...31 second[s] lifespan). Skills cost 15 less energy (minimum cost 10 energy) and recharge 25% slower for creatures in range. Does not affect spirits.,15,5,60,Beast Mastery,Core
+Escape,Elite Stance. (1...7...8 second[s].) You move 33% faster and have 75% chance to block.,5,0,12,Expertise,Core
+Escape (PvP),Elite Stance. (1...7...8 second[s].) You move 33% faster and have 75% chance to block. Ends if you make a melee attack.,5,0,12,Expertise,Core
+Favorable Winds,Nature Ritual. Creates a level 1...8...10 spirit (30...126...150 second lifespan). Arrows move twice as fast and hit for +6 damage for creatures in range. Does not affect spirits.,5,5,60,Marksmanship,Core
+Ferocious Strike,Elite Pet Attack. Deals +13...25...28 damage. You gain adrenaline and 3...9...10 energy.,5,0,8,Beast Mastery,Core
+Flame Trap,Trap. (90 seconds.) Affects nearby foes. Deals 5...17...20 fire damage every second (3 seconds). Inflicts Burning condition (1...3...3 second[s]). Easily interrupted.,10,2,20,Wilderness Survival,Core
+Hunter's Shot,Bow Attack. Inflicts Bleeding condition (3...21...25 seconds) if your target is hit.,5,1,10,Marksmanship,Core
+Kindle Arrows,Preparation. (24 seconds.) +3...20...24 fire damage. Your arrows deal fire damage.,5,2,12,Wilderness Survival,Core
+Lightning Reflexes,Stance. (5...10...11 seconds.) You attack 33% faster and have 75% chance to block.,10,0,30,Expertise,Core
+Lightning Reflexes (PvP),Stance. (5...10...11 seconds.) You attack 33% faster and have 75% chance to block.,10,0,45,Expertise,Core
+Maiming Strike,Pet Attack. Deals +5...17...20 damage. Inflicts Crippled condition (3...13...15 seconds) if target foe is moving.,10,0,5,Beast Mastery,Core
+Nature's Renewal,Nature Ritual. Creates a level 1...8...10 spirit (30...126...150 second lifespan). For creatures in range, enchantments and Hexes take twice as long to cast and it costs twice as much Energy to maintain enchantments. Does not affect spirits.,5,5,60,Wilderness Survival,Core
+Pin Down,Bow Attack. Inflicts Crippled condition (3...13...15 seconds).,15,0,8,Marksmanship,Core
+Power Shot,Bow Attack. Target foe takes 25...45...50 damage.,10,0,3,Marksmanship,Core
+Precision Shot,Bow Attack. Deals +3...9...10 damage. Unblockable. Easily Interrupted.,10,1,6,Marksmanship,Core
+Primal Echoes,Nature Ritual. Creates a level 1...8...10 spirit (30...126...150 second lifespan). Signets cost 10 energy for creatures in range. Does not affect spirits.,5,5,60,Beast Mastery,Core
+Quick Shot,Elite Bow Attack. You shoot an arrow that moves twice as fast.,5,1,1,,Core
+Quickening Zephyr,Nature Ritual. Creates a level 1...8...10 spirit (15...39...45 second lifespan). Skills cost 30% more Energy and recharge twice as fast for creatures in range. Does not affect spirits.,25,5,60,Wilderness Survival,Core
+Read the Wind,Preparation. (24 seconds). +3...9...10 damage. Your arrows move twice as fast.,5,2,12,Marksmanship,Core
+Read the Wind (PvP),Preparation. (24 seconds). Your arrows move twice as fast.,5,2,12,Marksmanship,Core
+Savage Shot,Bow Attack. Interrupts an action. Interruption effect: deals +13...25...28 damage if action was a spell.,10,0.5,5,Marksmanship,Core
+Scavenger Strike,Pet Attack. Deals +10...22...25 damage. You gain 3...13...15 Energy if target foe has a condition.,5,0,10,Beast Mastery,Core
+Spike Trap,Elite Trap. (90 seconds.) Affects nearby foes. Every second, (for 2 seconds), this trap deals 10...34...40 piercing damage, causes knockdown, and inflicts Crippled condition (3...21...25 seconds). Easily interrupted.,10,2,20,Wilderness Survival,Core
+Storm Chaser,Stance. (8...18...20 seconds.) You move 25% faster and gain 1...4...5 Energy whenever you take elemental damage.,10,0,20,Wilderness Survival,Core
+Throw Dirt,Touch Skill. Inflicts Blindness condition (3...13...15 seconds). Also affects foes adjacent to target foe.,5,1,30,Expertise,Core
+Troll Unguent,Skill. (13 seconds.) You have +3...9...10 Health regeneration.,5,3,10,Wilderness Survival,Core
+Whirling Defense,Stance. (8...18...20 seconds.) You have 75% chance to block. Deals 5...10...11 damage to adjacent foes whenever you block a projectile attack.,10,0,60,Expertise,Core
+Winnowing,Nature Ritual. Creates a level 1...8...10 spirit (30...126...150 second lifespan). Increases physical damage by +4 for creatures in range. Does not affect spirits.,5,5,60,Wilderness Survival,Core

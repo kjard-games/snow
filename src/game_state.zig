@@ -269,43 +269,21 @@ pub const GameState = struct {
             ent.energy = ent.school.getMaxEnergy();
             ent.max_energy = ent.school.getMaxEnergy();
 
-            // Load skills: First 4 from position, last 4 from generic pool
+            // Load skills: First 4 from position, last 4 from school
             const position_skills = ent.player_position.getSkills();
+            const school_skills = ent.school.getSkills();
+
             const position_skill_count = @min(position_skills.len, 4);
+            const school_skill_count = @min(school_skills.len, 4);
 
             // Slots 1-4: Position-specific skills
             for (0..position_skill_count) |skill_idx| {
                 ent.skill_bar[skill_idx] = &position_skills[skill_idx];
             }
 
-            // Slots 5-8: Generic/utility skills (from DEFAULT_SKILLS pool)
-            // We'll pick 4 random skills from the pool to add variety
-            const generic_skills = skills.DEFAULT_SKILLS;
-            var used_indices = [_]bool{false} ** skills.DEFAULT_SKILLS.len;
-
-            for (4..8) |slot_idx| {
-                // Pick a random unused skill
-                var attempts: u32 = 0;
-                while (attempts < 100) : (attempts += 1) {
-                    const random_idx = random.intRangeAtMost(usize, 0, generic_skills.len - 1);
-
-                    if (!used_indices[random_idx]) {
-                        // Check if this skill is already in position skills (no duplicates)
-                        var is_duplicate = false;
-                        for (0..position_skill_count) |pos_idx| {
-                            if (ent.skill_bar[pos_idx] == generic_skills[random_idx]) {
-                                is_duplicate = true;
-                                break;
-                            }
-                        }
-
-                        if (!is_duplicate) {
-                            ent.skill_bar[slot_idx] = generic_skills[random_idx];
-                            used_indices[random_idx] = true;
-                            break;
-                        }
-                    }
-                }
+            // Slots 5-8: School-specific skills
+            for (0..school_skill_count) |skill_idx| {
+                ent.skill_bar[4 + skill_idx] = &school_skills[skill_idx];
             }
 
             // Count how many skills were loaded
