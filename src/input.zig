@@ -31,6 +31,9 @@ pub const InputState = struct {
     buffered_click_terrain: ?rl.Vector3 = null,
     buffered_skills: [8]bool = [_]bool{false} ** 8, // Skill buttons 1-8
     buffered_spacebar: bool = false, // Auto-attack toggle
+
+    // Cancel-by-movement safeguards
+    prev_stick_magnitude: f32 = 0.0, // Track previous frame's stick position
 };
 
 // Input Command - Represents player input for ONE tick
@@ -256,6 +259,24 @@ pub fn handleInput(
         input_state.shift_held = false;
     }
 
+    // === CANCEL CASTING ===
+    // GW1-accurate: Press ESC (or gamepad B button) to cancel current cast
+    var cancel_pressed = false;
+
+    if (rl.isKeyPressed(.escape)) {
+        cancel_pressed = true;
+    }
+
+    // Gamepad B button (right_face_down) also cancels - feels natural
+    if (rl.isGamepadAvailable(0) and rl.isGamepadButtonPressed(0, .right_face_down)) {
+        cancel_pressed = true;
+    }
+
+    if (cancel_pressed and player.canCancelCast()) {
+        print("{s} cancelled cast!\n", .{player.name});
+        player.cancelCasting();
+    }
+
     // === SKILL USAGE (from buffered inputs) ===
     for (input_state.buffered_skills, 0..) |pressed, i| {
         if (pressed) {
@@ -319,6 +340,9 @@ pub fn handleInput(
         const left_x = rl.getGamepadAxisMovement(0, .left_x);
         const left_y = rl.getGamepadAxisMovement(0, .left_y);
 
+        // Calculate stick magnitude
+        const stick_magnitude = @sqrt(left_x * left_x + left_y * left_y);
+
         // Apply deadzone
         const deadzone = 0.15;
         if (@abs(left_x) > deadzone) move_x = left_x;
@@ -327,11 +351,40 @@ pub fn handleInput(
         // Any stick movement cancels autorun
         if (move_x != 0.0 or move_z != 0.0) {
             input_state.autorun = false;
+
+            // GW1-accurate: Movement cancels casting
+            // BUT: Require DELIBERATE movement - a strong push or new movement
+            // This prevents accidental cancels from small stick drift or adjustments
+            if (player.canCancelCast()) {
+                const cancel_threshold = 0.5; // Require 50% stick push to cancel
+
+                // Cancel if: strong push OR fresh movement (from near-zero to active)
+                const is_strong_push = stick_magnitude > cancel_threshold;
+                const is_fresh_movement = input_state.prev_stick_magnitude < deadzone and stick_magnitude > cancel_threshold;
+
+                if (is_strong_push or is_fresh_movement) {
+                    print("{s} cancelled cast by moving!\n", .{player.name});
+                    player.cancelCasting();
+                }
+            }
         }
+
+        // Track stick position for next frame
+        input_state.prev_stick_magnitude = stick_magnitude;
     }
 
     // Keyboard input (WASD) - fallback/secondary
     var has_keyboard_input = false;
+
+    // Check for movement key PRESSES (not just held) to cancel casting
+    const movement_key_pressed = rl.isKeyPressed(.w) or rl.isKeyPressed(.s) or
+        rl.isKeyPressed(.a) or rl.isKeyPressed(.d);
+
+    if (movement_key_pressed and player.canCancelCast()) {
+        print("{s} cancelled cast by moving!\n", .{player.name});
+        player.cancelCasting();
+    }
+
     if (rl.isKeyDown(.w)) {
         move_z -= 1.0;
         has_keyboard_input = true;

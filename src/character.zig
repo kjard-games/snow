@@ -391,21 +391,39 @@ pub const Character = struct {
         self.cast_time_remaining = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
         self.skill_executed = false;
 
-        // Consume energy immediately
+        // Consume energy immediately (even if cancelled later)
         self.energy -= skill.energy_cost;
     }
 
+    /// Cancel current cast (GW1-accurate)
+    /// Only works during activation phase (not aftercast)
+    /// Only works on skills with activation_time_ms > 0 (instant skills can't be cancelled)
+    /// Results:
+    /// - Energy cost is STILL incurred (no refund)
+    /// - Skill does NOT go on cooldown
+    /// - No aftercast delay
+    /// - Skill effect does NOT happen
     pub fn cancelCasting(self: *Character) void {
         if (self.cast_state == .activating) {
-            // Return partial energy on cancel?
-            const skill = self.skill_bar[self.casting_skill_index] orelse return;
-            const refund = skill.energy_cost / 2;
-            self.energy = @min(self.max_energy, self.energy + refund);
+            // No energy refund (costs are incurred)
+            // No cooldown set (skill doesn't go on recharge)
 
             self.cast_state = .idle;
             self.cast_time_remaining = 0;
             self.skill_executed = false;
+            self.cast_target_id = null;
         }
+    }
+
+    /// Check if character can cancel their current cast
+    pub fn canCancelCast(self: Character) bool {
+        if (self.cast_state != .activating) return false;
+
+        const skill = self.skill_bar[self.casting_skill_index] orelse return false;
+        // Only skills with activation time can be cancelled
+        // NOTE: In GW1, instant attack skills (0 activation) can be cancelled by weapon swapping
+        // We could implement this later if needed for advanced play
+        return skill.activation_time_ms > 0;
     }
 
     /// Check if character is casting (activating or in aftercast)
