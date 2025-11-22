@@ -494,6 +494,8 @@ pub const Actions = struct {
                             .previous_position = pos,
                             .radius = 0,
                             .color = .blue,
+                            .school_color = .blue,
+                            .position_color = .blue,
                             .name = "Ground",
                             .warmth = 100,
                             .max_warmth = 100,
@@ -1070,6 +1072,30 @@ pub fn updateAI(
         };
 
         _ = tree_result; // Result handled by tree actions
+
+        // Auto-attack management: Enable auto-attack when idle and have a target
+        if (target_id) |tid| {
+            // If not currently auto-attacking this target, start auto-attacking
+            if (!ent.is_auto_attacking or ent.auto_attack_target_id != tid) {
+                // Only start auto-attack if we're in range and not casting
+                if (ent.cast_state == .idle) {
+                    if (target) |tgt| {
+                        const distance = ent.distanceTo(tgt.*);
+                        const attack_range = ent.getAutoAttackRange();
+
+                        // Start auto-attacking if in range
+                        if (distance <= attack_range) {
+                            ent.startAutoAttack(tid);
+                        }
+                    }
+                }
+            }
+        } else {
+            // No target, stop auto-attacking
+            if (ent.is_auto_attacking) {
+                ent.stopAutoAttack();
+            }
+        }
 
         // Only move if not casting (GW1 rule: movement cancels/prevents casting)
         if (ent.cast_state == .idle) {

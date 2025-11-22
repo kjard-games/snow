@@ -30,6 +30,7 @@ pub const Projectile = struct {
     caster_id: EntityId = 0,
     target_id: EntityId = 0,
     is_melee: bool = false, // Melee attacks are instant, just show a flash
+    arc_height: f32 = 0.0, // Height of arc (0 = straight line, >0 = arcing throw)
 };
 
 // Floating damage/heal numbers
@@ -113,6 +114,10 @@ pub const VFXManager = struct {
         // Find empty slot
         for (&self.projectiles) |*proj| {
             if (!proj.active) {
+                // Calculate arc height for ranged snowball throws
+                const distance = vectorDistance(start_pos, target_pos);
+                const arc_height = if (is_ranged) distance * 0.3 else 0.0; // Arc scales with distance
+
                 proj.* = Projectile{
                     .active = true,
                     .start_pos = start_pos,
@@ -123,6 +128,7 @@ pub const VFXManager = struct {
                     .target_id = target_id,
                     .is_melee = !is_ranged,
                     .speed = if (is_ranged) 500.0 else 9999.0, // Melee is "instant"
+                    .arc_height = arc_height,
                 };
                 return;
             }
@@ -173,8 +179,18 @@ pub const VFXManager = struct {
                 self.spawnImpact(proj.target_pos, proj.color);
                 proj.active = false;
             } else {
-                // Update position (lerp from start to target)
-                proj.current_pos = vectorLerp(proj.start_pos, proj.target_pos, proj.progress);
+                // Update position with arc (parabolic trajectory)
+                const base_pos = vectorLerp(proj.start_pos, proj.target_pos, proj.progress);
+
+                // Arc uses sine wave for smooth parabola (peaks at 50% progress)
+                const arc_progress = @sin(proj.progress * std.math.pi);
+                const arc_offset = proj.arc_height * arc_progress;
+
+                proj.current_pos = rl.Vector3{
+                    .x = base_pos.x,
+                    .y = base_pos.y + arc_offset, // Add vertical arc
+                    .z = base_pos.z,
+                };
             }
         }
 

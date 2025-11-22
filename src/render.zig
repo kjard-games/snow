@@ -11,6 +11,43 @@ const EntityId = entity_types.EntityId;
 const TerrainGrid = terrain.TerrainGrid;
 const print = std.debug.print;
 
+// Team outline shader system
+pub var outline_render_texture: ?rl.RenderTexture2D = null;
+pub var outline_shader: ?rl.Shader = null;
+var resolution_loc: i32 = 0;
+var thickness_loc: i32 = 0;
+
+pub fn initOutlineShader(screen_width: i32, screen_height: i32) void {
+    outline_render_texture = rl.loadRenderTexture(screen_width, screen_height) catch {
+        print("Failed to load outline render texture\n", .{});
+        return;
+    };
+    outline_shader = rl.loadShader("shaders/outline.vs", "shaders/team_outline.fs") catch {
+        print("Failed to load outline shader\n", .{});
+        return;
+    };
+
+    if (outline_shader) |shader| {
+        resolution_loc = rl.getShaderLocation(shader, "resolution");
+        thickness_loc = rl.getShaderLocation(shader, "thickness");
+
+        // Set resolution uniform
+        const res = [2]f32{ @floatFromInt(screen_width), @floatFromInt(screen_height) };
+        rl.setShaderValue(shader, resolution_loc, &res, rl.ShaderUniformDataType.vec2);
+    }
+}
+
+pub fn deinitOutlineShader() void {
+    if (outline_render_texture) |tex| {
+        rl.unloadRenderTexture(tex);
+        outline_render_texture = null;
+    }
+    if (outline_shader) |shader| {
+        rl.unloadShader(shader);
+        outline_shader = null;
+    }
+}
+
 // Helper to convert float coordinates to integer screen positions
 inline fn toScreenPos(pos: rl.Vector2) struct { x: i32, y: i32 } {
     return .{
@@ -96,6 +133,29 @@ fn drawTerrainGrid(grid: *const TerrainGrid) void {
     }
 }
 
+// Helper function to draw a character's body (split color - left/right hemispheres)
+fn drawCharacterBody(render_pos: rl.Vector3, radius: f32, school_color: rl.Color, position_color: rl.Color, is_dead: bool) void {
+    if (is_dead) {
+        rl.drawSphere(render_pos, radius, palette.TEAM.DEAD);
+    } else {
+        // Draw left hemisphere in school color
+        const left_pos = rl.Vector3{
+            .x = render_pos.x - radius * 0.25,
+            .y = render_pos.y,
+            .z = render_pos.z,
+        };
+        rl.drawSphereEx(left_pos, radius * 0.75, 16, 16, school_color);
+
+        // Draw right hemisphere in position color
+        const right_pos = rl.Vector3{
+            .x = render_pos.x + radius * 0.25,
+            .y = render_pos.y,
+            .z = render_pos.z,
+        };
+        rl.drawSphereEx(right_pos, radius * 0.75, 16, 16, position_color);
+    }
+}
+
 pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager, terrain_grid: *const @import("terrain.zig").TerrainGrid) void {
     rl.clearBackground(.dark_gray);
 
@@ -121,9 +181,8 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         // Snow surface is at snow_height, character sinks sink_depth into it
         render_pos.y = snow_height - sink_depth + ent.radius;
 
-        const color = if (ent.is_dead) palette.TEAM.DEAD else ent.color;
-        rl.drawSphere(render_pos, ent.radius, color);
-        rl.drawSphereWires(render_pos, ent.radius, 8, 8, .black);
+        // Draw character body with halftone effect
+        drawCharacterBody(render_pos, ent.radius, ent.school_color, ent.position_color, ent.is_dead);
     }
 
     // Draw player (interpolated, adjusted for snow depth)
@@ -134,9 +193,8 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     const player_snow_height = terrain_grid.getSnowHeightAt(player_render_pos.x, player_render_pos.z);
     player_render_pos.y = player_snow_height - player_sink_depth + player.*.radius;
 
-    const player_color = if (player.*.is_dead) palette.TEAM.DEAD else player.*.color;
-    rl.drawSphere(player_render_pos, player.*.radius, player_color);
-    rl.drawSphereWires(player_render_pos, player.*.radius, 8, 8, .black);
+    // Draw player body with halftone effect
+    drawCharacterBody(player_render_pos, player.*.radius, player.*.school_color, player.*.position_color, player.*.is_dead);
 
     // Draw target selection indicator
     if (selected_target) |target_id| {
@@ -181,6 +239,60 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     vfx_manager.draw3D();
 
     rl.endMode3D();
+
+    // === TEAM OUTLINE SHADER PASS ===
+    if (outline_render_texture != null and outline_shader != null) {
+        const outline_tex = outline_render_texture.?;
+        const shader = outline_shader.?;
+
+        // Render team outline silhouettes to separate texture
+        rl.beginTextureMode(outline_tex);
+        rl.clearBackground(rl.Color{ .r = 0, .g = 0, .b = 0, .a = 0 });
+
+        rl.beginMode3D(camera);
+
+        // Draw entities as solid team colors
+        for (entities) |ent| {
+            if (!ent.isAlive()) continue;
+
+            var render_pos = ent.getInterpolatedPosition(interpolation_alpha);
+            const sink_depth = terrain_grid.getSinkDepthAt(render_pos.x, render_pos.z);
+            const snow_height = terrain_grid.getSnowHeightAt(render_pos.x, render_pos.z);
+            render_pos.y = snow_height - sink_depth + ent.radius;
+
+            const team_color = palette.getOutlineColor(ent.is_enemy, false);
+            rl.drawSphere(render_pos, ent.radius, team_color);
+        }
+
+        // Draw player as solid team color
+        var player_pos = player.*.getInterpolatedPosition(interpolation_alpha);
+        const p_sink = terrain_grid.getSinkDepthAt(player_pos.x, player_pos.z);
+        const p_snow = terrain_grid.getSnowHeightAt(player_pos.x, player_pos.z);
+        player_pos.y = p_snow - p_sink + player.*.radius;
+        const player_team_color = palette.getOutlineColor(player.*.is_enemy, true);
+        rl.drawSphere(player_pos, player.*.radius, player_team_color);
+
+        rl.endMode3D();
+        rl.endTextureMode();
+
+        // Apply outline shader and draw to screen
+        const thickness: f32 = 3.0;
+        rl.setShaderValue(shader, thickness_loc, &thickness, rl.ShaderUniformDataType.float);
+
+        rl.beginShaderMode(shader);
+        rl.drawTextureRec(
+            outline_tex.texture,
+            rl.Rectangle{
+                .x = 0,
+                .y = 0,
+                .width = @floatFromInt(outline_tex.texture.width),
+                .height = -@as(f32, @floatFromInt(outline_tex.texture.height)), // Flip vertically
+            },
+            rl.Vector2{ .x = 0, .y = 0 },
+            rl.Color.white,
+        );
+        rl.endShaderMode();
+    }
 
     // === 2D RENDERING (names, health bars, cast bars) ===
     const screen_width = rl.getScreenWidth();

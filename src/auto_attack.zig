@@ -21,6 +21,27 @@ const print = std.debug.print;
 pub fn updateAutoAttacks(entities: []Character, delta_time: f32, rng: *std.Random, vfx_manager: *vfx.VFXManager) void {
     for (entities) |*ent| {
         if (!ent.isAlive()) continue;
+
+        // Update lunge animation (return to position after lunge)
+        if (ent.lunge_time_remaining > 0) {
+            ent.lunge_time_remaining -= delta_time;
+
+            // When lunge expires, smoothly return to original position
+            if (ent.lunge_time_remaining <= 0) {
+                // Interpolate back to return position over the next tick
+                const lerp_factor: f32 = 0.3; // 30% per tick = smooth return
+                ent.position.x += (ent.lunge_return_position.x - ent.position.x) * lerp_factor;
+                ent.position.z += (ent.lunge_return_position.z - ent.position.z) * lerp_factor;
+
+                // If very close, snap to return position
+                const dist_to_return = @sqrt((ent.position.x - ent.lunge_return_position.x) * (ent.position.x - ent.lunge_return_position.x) +
+                    (ent.position.z - ent.lunge_return_position.z) * (ent.position.z - ent.lunge_return_position.z));
+                if (dist_to_return < 1.0) {
+                    ent.position = ent.lunge_return_position;
+                }
+            }
+        }
+
         if (!ent.is_auto_attacking) continue;
 
         // Can't auto-attack while casting or in aftercast
@@ -89,6 +110,35 @@ fn tryAutoAttack(attacker: *Character, entities: []Character, rng: *std.Random, 
 
 /// Execute an auto-attack (deal damage)
 fn executeAutoAttack(attacker: *Character, target: *Character, rng: *std.Random, vfx_manager: *vfx.VFXManager) void {
+    // For melee attacks, create a brief lunge towards target
+    const is_ranged = attacker.hasRangedAutoAttack();
+    if (!is_ranged) {
+        // Calculate direction to target
+        const dx = target.position.x - attacker.position.x;
+        const dz = target.position.z - attacker.position.z;
+        const distance = @sqrt(dx * dx + dz * dz);
+
+        if (distance > 0.1) {
+            // Quick lunge forward (40% of distance, max 25 units for more visibility)
+            const lunge_amount = @min(distance * 0.4, 25.0);
+            print("{s} MELEE LUNGE: {d:.1} units towards {s}\n", .{
+                attacker.name,
+                lunge_amount,
+                target.name,
+            });
+
+            // Save current position to return to
+            attacker.lunge_return_position = attacker.position;
+
+            // Lunge towards target
+            attacker.position.x += (dx / distance) * lunge_amount;
+            attacker.position.z += (dz / distance) * lunge_amount;
+
+            // Set lunge duration (should last 2-3 frames at 60fps = 0.033-0.05 sec)
+            attacker.lunge_time_remaining = 0.15; // 150ms lunge animation
+        }
+    }
+
     var damage = attacker.getAutoAttackDamage();
 
     // Apply chill (debuff) modifiers from attacker
@@ -105,10 +155,6 @@ fn executeAutoAttack(attacker: *Character, target: *Character, rng: *std.Random,
     if (target.hasCozy(.bundled_up)) {
         damage *= 0.75; // Bundled Up reduces incoming damage by 25%
     }
-
-    // Determine if ranged or melee (for now, default to ranged projectile)
-    // TODO: Add equipment field to Character and check attacker.equipment.is_ranged
-    const is_ranged = true;
 
     // Spawn projectile visual
     const color = if (attacker.is_enemy) palette.VFX.PROJECTILE_AUTO_ENEMY else palette.VFX.PROJECTILE_AUTO_ALLY;

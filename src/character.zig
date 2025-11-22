@@ -51,6 +51,8 @@ pub const Character = struct {
     previous_position: rl.Vector3 = .{ .x = 0, .y = 0, .z = 0 }, // Previous tick position (for interpolation)
     radius: f32,
     color: rl.Color,
+    school_color: rl.Color, // For halftone rendering
+    position_color: rl.Color, // For halftone rendering
     name: [:0]const u8,
     warmth: f32,
     max_warmth: f32,
@@ -60,10 +62,10 @@ pub const Character = struct {
     school: School,
     player_position: Position,
 
-    // Equipment system
+    // Equipment system (flexible hand slots + worn)
     main_hand: ?*const equipment.Equipment = null,
     off_hand: ?*const equipment.Equipment = null,
-    shield: ?*const equipment.Equipment = null,
+    worn: ?*const equipment.Equipment = null, // Mittens, Blanket, etc.
 
     // Universal primary resource
     energy: u8,
@@ -109,6 +111,10 @@ pub const Character = struct {
     is_auto_attacking: bool = false, // Whether auto-attack loop is active
     auto_attack_timer: f32 = 0.0, // Time until next auto-attack
     auto_attack_target_id: ?EntityId = null, // Current auto-attack target
+
+    // Melee lunge animation state
+    lunge_time_remaining: f32 = 0.0, // Time remaining in lunge animation (seconds)
+    lunge_return_position: rl.Vector3 = .{ .x = 0, .y = 0, .z = 0 }, // Position to return to after lunge
 
     // Skill queue (GW1 style: run into range and cast)
     queued_skill_index: ?u8 = null, // Which skill to cast when in range
@@ -672,33 +678,114 @@ pub const Character = struct {
 
     /// Get the attack interval for this character's equipped weapon
     pub fn getAttackInterval(self: Character) f32 {
-        // Use main hand weapon if equipped, otherwise default
-        if (self.main_hand) |weapon| {
-            return weapon.attack_interval;
+        // Two-handed weapon takes priority
+        if (self.main_hand) |main| {
+            if (main.hand_requirement == .two_hands) {
+                return main.attack_interval;
+            }
         }
-        // Default unarmed attack speed
-        return 2.0;
+
+        // One-handed weapon in main hand
+        if (self.main_hand) |main| {
+            if (main.hand_requirement == .one_hand) {
+                return main.attack_interval;
+            }
+        }
+
+        // Default bare-hand snowball throw
+        return 1.5;
     }
 
-    /// Calculate auto-attack damage based on weapon and attributes
+    /// Calculate auto-attack damage based on equipment
     pub fn getAutoAttackDamage(self: Character) f32 {
-        var base_damage: f32 = 5.0; // Unarmed damage
+        var base_damage: f32 = 10.0; // Bare-hand snowball damage
 
-        if (self.main_hand) |weapon| {
-            base_damage = weapon.damage;
+        // Two-handed weapon replaces auto-attack entirely
+        if (self.main_hand) |main| {
+            if (main.hand_requirement == .two_hands) {
+                return main.damage;
+            }
         }
 
-        // TODO: Apply attribute bonuses (like GW1's weapon mastery)
-        // TODO: Apply buffs/debuffs
+        // One-handed weapon in main hand
+        if (self.main_hand) |main| {
+            if (main.hand_requirement == .one_hand) {
+                // Melee weapons replace auto-attack
+                if (main.category == .melee_weapon) {
+                    return main.damage;
+                }
+                // Throwing tools modify snowball throw
+                if (main.category == .throwing_tool) {
+                    return main.damage;
+                }
+                // Shields and utility don't attack (fall through to bare hands)
+            }
+        }
+
+        // Apply worn equipment bonuses (mittens add damage to bare hands)
+        if (self.worn) |worn_item| {
+            base_damage += worn_item.damage;
+        }
 
         return base_damage;
     }
 
     /// Get auto-attack range
     pub fn getAutoAttackRange(self: Character) f32 {
-        if (self.main_hand) |weapon| {
-            return weapon.range;
+        const base_range: f32 = 80.0; // Default snowball throw range
+
+        // Two-handed weapon sets range
+        if (self.main_hand) |main| {
+            if (main.hand_requirement == .two_hands) {
+                return main.range;
+            }
         }
-        return 50.0; // Default melee range
+
+        // One-handed weapon in main hand
+        if (self.main_hand) |main| {
+            if (main.hand_requirement == .one_hand) {
+                // Melee weapons and throwing tools set range
+                if (main.category == .melee_weapon or main.category == .throwing_tool) {
+                    return main.range;
+                }
+                // Shields don't affect range (fall through)
+            }
+        }
+
+        // Apply worn equipment range modifiers
+        var final_range = base_range;
+        if (self.worn) |worn_item| {
+            final_range += worn_item.range; // Can be negative (mittens penalty)
+        }
+
+        return @max(30.0, final_range); // Minimum throw range
+    }
+
+    /// Check if character is using ranged auto-attacks
+    pub fn hasRangedAutoAttack(self: Character) bool {
+        // Two-handed weapon determines ranged/melee
+        if (self.main_hand) |main| {
+            if (main.hand_requirement == .two_hands) {
+                return main.is_ranged;
+            }
+        }
+
+        // One-handed weapon
+        if (self.main_hand) |main| {
+            if (main.hand_requirement == .one_hand) {
+                // Melee weapons are not ranged
+                if (main.category == .melee_weapon) {
+                    return false;
+                }
+                // Throwing tools are ranged
+                if (main.category == .throwing_tool) {
+                    return true;
+                }
+                // Shields/utility means bare hands (ranged snowballs)
+            }
+        }
+
+        // Default: bare-hand snowball throws are ranged
+        return true;
     }
 };

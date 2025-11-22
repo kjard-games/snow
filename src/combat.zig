@@ -137,8 +137,8 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             return;
         }
 
-        // Spawn projectile visual (skill is always "ranged" for now, instant travel)
-        const color = if (caster.is_enemy) palette.VFX.PROJECTILE_ENEMY else palette.VFX.PROJECTILE_ALLY;
+        // Spawn projectile visual with caster's school/position color
+        const color = palette.getCharacterColor(caster.school, caster.player_position);
         vfx_manager.spawnProjectile(caster.position, tgt.position, caster.id, tgt.id, true, color);
 
         // Deal damage

@@ -14,6 +14,8 @@ const entity = @import("entity.zig");
 const auto_attack = @import("auto_attack.zig");
 const vfx = @import("vfx.zig");
 const terrain = @import("terrain.zig");
+const equipment = @import("equipment.zig");
+const palette = @import("color_palette.zig");
 
 const print = std.debug.print;
 
@@ -64,6 +66,62 @@ pub const GameState = struct {
     // Terrain system
     terrain_grid: TerrainGrid,
     allocator: std.mem.Allocator,
+
+    // Helper function to assign equipment loadouts to characters
+    fn assignEquipment(char: *Character, rng: *std.Random) void {
+        // Define equipment pools
+        const melee_weapons = [_]*const equipment.Equipment{ &equipment.BigShovel, &equipment.IceScraper };
+        const throwing_tools = [_]*const equipment.Equipment{ &equipment.LacrosseStick, &equipment.JaiAlaiScoop, &equipment.Slingshot };
+        const shields = [_]*const equipment.Equipment{ &equipment.SaucerSled, &equipment.GarbageCanLid };
+        const utility_items = [_]*const equipment.Equipment{ &equipment.Thermos, &equipment.Toboggan };
+        const worn_items = [_]*const equipment.Equipment{ &equipment.Mittens, &equipment.Blanket };
+
+        // Roll for loadout type (simplified: just pick random main hand + maybe off hand + maybe worn)
+        const roll = rng.intRangeAtMost(u8, 0, 100);
+
+        if (roll < 30) {
+            // 30% - Melee weapon (two-handed or one-handed + shield)
+            const melee = melee_weapons[rng.intRangeAtMost(usize, 0, melee_weapons.len - 1)];
+            char.main_hand = melee;
+
+            if (melee.hand_requirement == .one_hand and rng.boolean()) {
+                // One-handed melee + shield
+                char.off_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
+            }
+        } else if (roll < 60) {
+            // 30% - Throwing tool
+            const thrower = throwing_tools[rng.intRangeAtMost(usize, 0, throwing_tools.len - 1)];
+            char.main_hand = thrower;
+
+            // One-handed throwing tool might have shield or utility
+            if (thrower.hand_requirement == .one_hand and rng.boolean()) {
+                if (rng.boolean()) {
+                    char.off_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
+                } else {
+                    char.off_hand = &equipment.Thermos; // Off-hand utility
+                }
+            }
+        } else if (roll < 80) {
+            // 20% - Utility/defensive focus
+            if (rng.boolean()) {
+                char.main_hand = utility_items[rng.intRangeAtMost(usize, 0, utility_items.len - 1)];
+            } else {
+                // Shield + something
+                char.main_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
+                if (rng.boolean()) {
+                    char.off_hand = &equipment.JaiAlaiScoop; // Shield + one-handed thrower
+                }
+            }
+        } else {
+            // 20% - Bare hands (just throw snowballs)
+            char.main_hand = null;
+        }
+
+        // 50% chance to have worn equipment (doesn't conflict with hands)
+        if (rng.boolean()) {
+            char.worn = worn_items[rng.intRangeAtMost(usize, 0, worn_items.len - 1)];
+        }
+    }
 
     pub fn init(allocator: std.mem.Allocator) !GameState {
         var id_gen = EntityIdGenerator{};
@@ -125,6 +183,8 @@ pub const GameState = struct {
                 .previous_position = ally_positions[0],
                 .radius = 20,
                 .color = .blue,
+                .school_color = .blue,
+                .position_color = .blue,
                 .name = "Player",
                 .warmth = 100,
                 .max_warmth = 100,
@@ -143,6 +203,8 @@ pub const GameState = struct {
                 .previous_position = ally_positions[1],
                 .radius = 18,
                 .color = .blue,
+                .school_color = .blue,
+                .position_color = .blue,
                 .name = "Ally 1",
                 .warmth = 100,
                 .max_warmth = 100,
@@ -161,6 +223,8 @@ pub const GameState = struct {
                 .previous_position = ally_positions[2],
                 .radius = 18,
                 .color = .blue,
+                .school_color = .blue,
+                .position_color = .blue,
                 .name = "Ally 2",
                 .warmth = 100,
                 .max_warmth = 100,
@@ -179,6 +243,8 @@ pub const GameState = struct {
                 .previous_position = ally_positions[3],
                 .radius = 18,
                 .color = .blue,
+                .school_color = .blue,
+                .position_color = .blue,
                 .name = "Ally Healer",
                 .warmth = 100,
                 .max_warmth = 100,
@@ -199,6 +265,8 @@ pub const GameState = struct {
                 .previous_position = enemy_positions[0],
                 .radius = 18,
                 .color = .red,
+                .school_color = .red,
+                .position_color = .red,
                 .name = "Enemy 1",
                 .warmth = 100,
                 .max_warmth = 100,
@@ -217,6 +285,8 @@ pub const GameState = struct {
                 .previous_position = enemy_positions[1],
                 .radius = 18,
                 .color = .red,
+                .school_color = .red,
+                .position_color = .red,
                 .name = "Enemy 2",
                 .warmth = 100,
                 .max_warmth = 100,
@@ -235,6 +305,8 @@ pub const GameState = struct {
                 .previous_position = enemy_positions[2],
                 .radius = 18,
                 .color = .red,
+                .school_color = .red,
+                .position_color = .red,
                 .name = "Enemy 3",
                 .warmth = 100,
                 .max_warmth = 100,
@@ -253,6 +325,8 @@ pub const GameState = struct {
                 .previous_position = enemy_positions[3],
                 .radius = 18,
                 .color = .red,
+                .school_color = .red,
+                .position_color = .red,
                 .name = "Enemy Healer",
                 .warmth = 100,
                 .max_warmth = 100,
@@ -364,12 +438,21 @@ pub const GameState = struct {
                 if (maybe_skill != null) skill_count += 1;
             }
 
-            print("#{d} {s}: {s}/{s} ({d} skills)\n", .{
+            // Assign random equipment loadouts based on character type
+            assignEquipment(ent, &random);
+
+            // Set character colors for halftone rendering
+            ent.school_color = palette.getSchoolColor(ent.school);
+            ent.position_color = palette.getPositionColor(ent.player_position);
+            ent.color = palette.getCharacterColor(ent.school, ent.player_position);
+
+            print("#{d} {s}: {s}/{s} ({d} skills) [{s}]\n", .{
                 i,
                 ent.name,
                 @tagName(ent.school),
                 @tagName(ent.player_position),
                 skill_count,
+                if (ent.main_hand) |mh| mh.name else "bare hands",
             });
         }
 

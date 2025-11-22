@@ -1,6 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
 const game_state = @import("game_state.zig");
+const render = @import("render.zig");
 
 const GameState = game_state.GameState;
 
@@ -10,6 +11,10 @@ pub fn main() !void {
 
     rl.initWindow(screenWidth, screenHeight, "Snow - GW1-Style 3D Tab Targeting");
     defer rl.closeWindow();
+
+    // Initialize outline shader
+    render.initOutlineShader(screenWidth, screenHeight);
+    defer render.deinitOutlineShader();
 
     // Enable window resizing and toggling fullscreen
     rl.setWindowState(rl.ConfigFlags{ .window_resizable = true });
