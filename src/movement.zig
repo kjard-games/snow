@@ -62,6 +62,9 @@ pub fn applyMovement(
         }
     }
 
+    // Apply warmth-based speed multipliers (freezing, slippery, sure_footed)
+    speed_multiplier *= entity.getMovementSpeedMultiplier();
+
     // Rotate movement by facing angle to world space
     const cos_angle = @cos(intent.facing_angle);
     const sin_angle = @sin(intent.facing_angle);

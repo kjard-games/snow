@@ -100,6 +100,11 @@ pub const Character = struct {
     auto_attack_timer: f32 = 0.0, // Time until next auto-attack
     auto_attack_target_id: ?EntityId = null, // Current auto-attack target
 
+    // Skill queue (GW1 style: run into range and cast)
+    queued_skill_index: ?u8 = null, // Which skill to cast when in range
+    queued_skill_target_id: ?EntityId = null, // Target for queued skill
+    is_approaching_for_skill: bool = false, // Moving toward target to cast
+
     // Active chills (debuffs) on this character
     active_chills: [MAX_ACTIVE_CONDITIONS]?skills.ActiveChill = [_]?skills.ActiveChill{null} ** MAX_ACTIVE_CONDITIONS,
     active_chill_count: u8 = 0,
@@ -111,8 +116,41 @@ pub const Character = struct {
     // Death state
     is_dead: bool = false,
 
+    // Warmth regeneration/degeneration system (GW1-style pips)
+    warmth_regen_pips: i8 = 0, // -10 to +10 pips (like GW1 health regen/degen)
+    warmth_pip_accumulator: f32 = 0.0, // Tracks fractional warmth for pip ticking
+
+    // TODO: Natural warmth regeneration (GW1 out-of-combat regen)
+    // Tracks time since last warmth loss for natural regen scaling
+    // time_since_last_warmth_loss: f32 = 0.0,
+    // time_safe_for_natural_regen: f32 = 0.0,
+
+    // TODO: Combat tracking for natural regen (future)
+    // last_attacked_time: f32 = 0.0,
+    // last_damaged_time: f32 = 0.0,
+    // last_offensive_skill_time: f32 = 0.0,
+    // last_targeted_by_offensive_skill_time: f32 = 0.0,
+
     pub fn isAlive(self: Character) bool {
         return !self.is_dead and self.warmth > 0;
+    }
+
+    /// Check if character is freezing (below 25% warmth)
+    /// Causes movement speed penalty and slower skill activation
+    pub fn isFreezing(self: Character) bool {
+        return (self.warmth / self.max_warmth) < 0.25;
+    }
+
+    /// Get movement speed multiplier based on warmth
+    pub fn getMovementSpeedMultiplier(self: Character) f32 {
+        if (self.isFreezing()) {
+            return 0.75; // -25% movement speed when freezing
+        }
+
+        // TODO: Apply slippery chill slow
+        // TODO: Apply sure_footed cozy speed boost
+
+        return 1.0;
     }
 
     /// Get interpolated position for smooth rendering between ticks
@@ -230,6 +268,74 @@ pub const Character = struct {
         }
     }
 
+    /// Update warmth regeneration/degeneration (GW1-style pips)
+    /// Call this every tick (50ms) for accurate pip timing
+    pub fn updateWarmth(self: *Character, delta_time: f32) void {
+        // Calculate warmth change per second from pips
+        // In GW1: 1 pip of regen/degen = 2 health per second
+        // We'll use the same ratio: 1 pip = 2 warmth per second
+        const warmth_per_second = @as(f32, @floatFromInt(self.warmth_regen_pips)) * 2.0;
+        const warmth_delta = warmth_per_second * delta_time;
+
+        // Accumulate fractional warmth
+        self.warmth_pip_accumulator += warmth_delta;
+
+        // Apply whole points of warmth
+        if (@abs(self.warmth_pip_accumulator) >= 1.0) {
+            const warmth_to_apply = self.warmth_pip_accumulator;
+            self.warmth = @max(0.0, @min(self.max_warmth, self.warmth + warmth_to_apply));
+            self.warmth_pip_accumulator -= warmth_to_apply;
+
+            // Check for death
+            if (self.warmth <= 0) {
+                self.is_dead = true;
+                if (self.cast_state != .idle) {
+                    self.cancelCasting();
+                }
+            }
+        }
+    }
+
+    /// Recalculate warmth regen/degen pips from active conditions
+    /// Call this whenever conditions change (add/remove/expire)
+    pub fn recalculateWarmthPips(self: *Character) void {
+        var total_pips: i16 = 0; // Use i16 to detect overflow before clamping
+
+        // Add regeneration from cozies
+        for (self.active_cozies[0..self.active_cozy_count]) |maybe_cozy| {
+            if (maybe_cozy) |cozy| {
+                const pips = switch (cozy.cozy) {
+                    .hot_cocoa => @as(i16, 2) * @as(i16, cozy.stack_intensity), // +2 per stack
+                    .fire_inside => @as(i16, 1) * @as(i16, cozy.stack_intensity), // +1 per stack
+                    else => 0,
+                };
+                total_pips += pips;
+            }
+        }
+
+        // Add degeneration from chills
+        for (self.active_chills[0..self.active_chill_count]) |maybe_chill| {
+            if (maybe_chill) |chill| {
+                const pips = switch (chill.chill) {
+                    .soggy => -@as(i16, 2) * @as(i16, chill.stack_intensity), // -2 per stack (DoT)
+                    .windburn => -@as(i16, 3) * @as(i16, chill.stack_intensity), // -3 per stack (DoT)
+                    .brain_freeze => -@as(i16, 1) * @as(i16, chill.stack_intensity), // -1 per stack
+                    else => 0,
+                };
+                total_pips += pips;
+            }
+        }
+
+        // TODO: Add natural regeneration pips (GW1 out-of-combat regen)
+        // if (self.time_safe_for_natural_regen >= 5.0) {
+        //     const natural_pips = calculateNaturalRegenPips(self.time_safe_for_natural_regen);
+        //     total_pips += natural_pips;
+        // }
+
+        // Clamp to GW1 limits: -10 to +10
+        self.warmth_regen_pips = @intCast(@max(-10, @min(10, total_pips)));
+    }
+
     pub fn updateCooldowns(self: *Character, delta_time: f32) void {
         // Update skill cooldowns
         for (&self.skill_cooldowns) |*cooldown| {
@@ -257,6 +363,8 @@ pub const Character = struct {
     }
 
     pub fn updateConditions(self: *Character, delta_time_ms: u32) void {
+        var conditions_changed = false;
+
         // Update active chills (debuffs), removing expired ones
         // Use swap-with-last pattern for efficient removal (order doesn't matter for conditions)
         var i: usize = 0;
@@ -267,6 +375,7 @@ pub const Character = struct {
                     self.active_chill_count -= 1;
                     self.active_chills[i] = self.active_chills[self.active_chill_count];
                     self.active_chills[self.active_chill_count] = null;
+                    conditions_changed = true;
                     // Don't increment i since we need to check the swapped element
                 } else {
                     chill.time_remaining_ms -= delta_time_ms;
@@ -286,6 +395,7 @@ pub const Character = struct {
                     self.active_cozy_count -= 1;
                     self.active_cozies[i] = self.active_cozies[self.active_cozy_count];
                     self.active_cozies[self.active_cozy_count] = null;
+                    conditions_changed = true;
                     // Don't increment i since we need to check the swapped element
                 } else {
                     cozy.time_remaining_ms -= delta_time_ms;
@@ -294,6 +404,11 @@ pub const Character = struct {
             } else {
                 i += 1;
             }
+        }
+
+        // Recalculate warmth pips if any conditions expired
+        if (conditions_changed) {
+            self.recalculateWarmthPips();
         }
     }
 
@@ -327,6 +442,7 @@ pub const Character = struct {
                     // Refresh duration and stack intensity
                     active.time_remaining_ms = @max(active.time_remaining_ms, effect.duration_ms);
                     active.stack_intensity = @min(255, active.stack_intensity + effect.stack_intensity);
+                    self.recalculateWarmthPips(); // Pips changed!
                     return;
                 }
             }
@@ -341,6 +457,7 @@ pub const Character = struct {
                 .source_character_id = source_id,
             };
             self.active_chill_count += 1;
+            self.recalculateWarmthPips(); // New chill added!
         }
         // Silently ignore if array is full - this is a game, not critical
     }
@@ -353,6 +470,7 @@ pub const Character = struct {
                     // Refresh duration and stack intensity
                     active.time_remaining_ms = @max(active.time_remaining_ms, effect.duration_ms);
                     active.stack_intensity = @min(255, active.stack_intensity + effect.stack_intensity);
+                    self.recalculateWarmthPips(); // Pips changed!
                     return;
                 }
             }
@@ -367,6 +485,7 @@ pub const Character = struct {
                 .source_character_id = source_id,
             };
             self.active_cozy_count += 1;
+            self.recalculateWarmthPips(); // New cozy added!
         }
         // Silently ignore if array is full - this is a game, not critical
     }
@@ -429,6 +548,27 @@ pub const Character = struct {
     /// Check if character is casting (activating or in aftercast)
     pub fn isCasting(self: Character) bool {
         return self.cast_state != .idle;
+    }
+
+    // === SKILL QUEUE SYSTEM (GW1-style auto-approach) ===
+
+    /// Queue a skill to cast when in range (GW1 behavior)
+    pub fn queueSkill(self: *Character, skill_index: u8, target_id: EntityId) void {
+        self.queued_skill_index = skill_index;
+        self.queued_skill_target_id = target_id;
+        self.is_approaching_for_skill = true;
+    }
+
+    /// Clear the skill queue
+    pub fn clearSkillQueue(self: *Character) void {
+        self.queued_skill_index = null;
+        self.queued_skill_target_id = null;
+        self.is_approaching_for_skill = false;
+    }
+
+    /// Check if character has a queued skill
+    pub fn hasQueuedSkill(self: Character) bool {
+        return self.queued_skill_index != null;
     }
 
     // === AUTO-ATTACK SYSTEM (Guild Wars style) ===

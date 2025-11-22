@@ -518,9 +518,72 @@ pub fn handleInput(
         }
     }
 
+    // === SKILL QUEUE APPROACH (GW1-style: run into range to cast) ===
+    // If we have a queued skill and we're out of range, approach the target
+    var skill_approach_active = false;
+    if (!auto_chase_active and player.hasQueuedSkill() and !player.isCasting()) {
+        if (player.queued_skill_index) |skill_idx| {
+            if (player.queued_skill_target_id) |target_id| {
+                const skill = player.skill_bar[skill_idx] orelse {
+                    player.clearSkillQueue(); // Skill no longer exists
+                    @panic("unreachable");
+                };
+
+                // Find the target entity
+                for (entities) |*ent| {
+                    if (ent.id == target_id) {
+                        if (!ent.isAlive()) {
+                            print("Queued skill target died\n", .{});
+                            player.clearSkillQueue();
+                            break;
+                        }
+
+                        const distance = player.distanceTo(ent.*);
+
+                        // Check if we're in range now
+                        if (distance <= skill.cast_range) {
+                            // In range! Try to cast the queued skill
+                            print("In range - casting queued skill: {s}\n", .{skill.name});
+                            const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager);
+                            player.clearSkillQueue();
+
+                            if (result == .out_of_range) {
+                                // Still somehow out of range? (shouldn't happen)
+                                print("Still out of range after approach?\n", .{});
+                            }
+                        } else {
+                            // Still out of range - keep approaching (only if no manual input)
+                            if (move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
+                                const dx = ent.position.x - player.position.x;
+                                const dz = ent.position.z - player.position.z;
+
+                                // Calculate world-space movement direction
+                                const move_dir_x = dx / distance;
+                                const move_dir_z = dz / distance;
+
+                                // Convert world movement to local space (inverse of camera rotation)
+                                const cos_angle = @cos(input_state.camera_angle);
+                                const sin_angle = @sin(input_state.camera_angle);
+                                move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
+                                move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
+
+                                skill_approach_active = true;
+                            } else {
+                                // Manual input cancels skill queue
+                                print("Skill queue cancelled by manual input\n", .{});
+                                player.clearSkillQueue();
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // === CLICK-TO-MOVE ===
-    // Check if we should use click-to-move instead (unless auto-chasing)
-    if (!auto_chase_active) {
+    // Check if we should use click-to-move instead (unless auto-chasing or skill-approaching)
+    if (!auto_chase_active and !skill_approach_active) {
         if (input_state.move_target) |target| {
             const dx = target.x - player.position.x;
             const dz = target.z - player.position.z;

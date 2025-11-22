@@ -133,6 +133,20 @@ pub const Skill = struct {
     unblockable: bool = false,
     armor_penetration: f32 = 0.0, // percentage (0.0 to 1.0)
     interrupts: bool = false, // Does this skill interrupt target's casting?
+
+    // TODO: Warmth as resource (Homeschool mechanic)
+    // Some skills sacrifice warmth for power instead of energy
+    // warmth_cost: f32 = 0.0, // Costs warmth instead of/in addition to energy
+    // min_warmth_percent: f32 = 0.0, // Can't use skill below this warmth % (prevent suicide)
+
+    // TODO: Warmth-conditional effects (GW1-style health conditionals)
+    // Skills that deal bonus damage/healing based on warmth thresholds
+    // bonus_if_self_above_50_warmth: f32 = 0.0,
+    // bonus_if_self_below_50_warmth: f32 = 0.0,
+    // bonus_if_foe_above_50_warmth: f32 = 0.0,
+    // bonus_if_foe_below_50_warmth: f32 = 0.0,
+    // requires_self_above_warmth_percent: f32 = 0.0, // Can't use unless above this %
+    // requires_foe_below_warmth_percent: f32 = 1.0, // Can't use unless foe below this %
 };
 
 // Example snowball-themed skills

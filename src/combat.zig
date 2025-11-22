@@ -55,7 +55,11 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
         // Check range
         const distance = caster.distanceTo(tgt.*);
         if (distance > skill.cast_range) {
-            print("{s} target out of range ({d:.1}/{d:.1})\n", .{ caster.name, distance, skill.cast_range });
+            print("{s} target out of range ({d:.1}/{d:.1}) - queuing skill\n", .{ caster.name, distance, skill.cast_range });
+            // GW1 behavior: Queue the skill and run into range
+            if (target_id) |tid| {
+                caster.queueSkill(skill_index, tid);
+            }
             return .out_of_range;
         }
     }

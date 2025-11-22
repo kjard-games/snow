@@ -26,7 +26,7 @@ const EntityId = entity.EntityId;
 const EntityIdGenerator = entity.EntityIdGenerator;
 
 // Game configuration constants
-pub const MAX_ENTITIES: usize = 5; // Player + allies + enemies
+pub const MAX_ENTITIES: usize = 8; // 4v4 combat (4 allies + 4 enemies)
 
 // Tick-based game loop (Guild Wars / tab-targeting style)
 pub const TICK_RATE_HZ: u32 = 20; // 20 ticks per second
@@ -62,104 +62,199 @@ pub const GameState = struct {
     pub fn init() GameState {
         var id_gen = EntityIdGenerator{};
 
-        // Setup positions for all entities
-        const player_start_pos = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
-        const ally_pos = rl.Vector3{ .x = 60, .y = 0, .z = 20 };
-        const enemy1_pos = rl.Vector3{ .x = -80, .y = 0, .z = -120 };
-        const enemy2_pos = rl.Vector3{ .x = 80, .y = 0, .z = -120 };
-        const empty_pos = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
+        // Initialize RNG with current time as seed (needed for random team generation)
+        const timestamp = std.time.timestamp();
+        const seed: u64 = @bitCast(timestamp);
+        var prng = std.Random.DefaultPrng.init(seed);
+        var random = prng.random();
 
-        // Create entities array with player at index 0
-        // In multiplayer: "controlled_entity_id" determines which one is "yours"
+        // Helper to pick random school
+        const all_schools = [_]School{ .private_school, .public_school, .montessori, .homeschool, .waldorf };
+        const pickRandomSchool = struct {
+            fn pick(rng: *std.Random) School {
+                const idx = rng.intRangeAtMost(usize, 0, all_schools.len - 1);
+                return all_schools[idx];
+            }
+        }.pick;
+
+        // Helper to pick random non-healer position
+        const non_healer_positions = [_]Position{ .pitcher, .fielder, .sledder, .shoveler, .animator };
+        const pickRandomPosition = struct {
+            fn pick(rng: *std.Random) Position {
+                const idx = rng.intRangeAtMost(usize, 0, non_healer_positions.len - 1);
+                return non_healer_positions[idx];
+            }
+        }.pick;
+
+        // === 4v4 Team Setup ===
+        // Ally team (blue): [Player, Ally1, Ally2, Healer]
+        // Enemy team (red): [Enemy1, Enemy2, Enemy3, Healer]
+
+        // Ally team positions (front line, spread out)
+        const ally_positions = [_]rl.Vector3{
+            .{ .x = -40, .y = 0, .z = 50 }, // Player (left-front)
+            .{ .x = 40, .y = 0, .z = 50 }, // Ally1 (right-front)
+            .{ .x = -60, .y = 0, .z = 100 }, // Ally2 (left-back)
+            .{ .x = 0, .y = 0, .z = 120 }, // Healer (center-back)
+        };
+
+        // Enemy team positions (opposite side)
+        const enemy_positions = [_]rl.Vector3{
+            .{ .x = -40, .y = 0, .z = -220 }, // Enemy1
+            .{ .x = 40, .y = 0, .z = -220 }, // Enemy2
+            .{ .x = -60, .y = 0, .z = -270 }, // Enemy3
+            .{ .x = 0, .y = 0, .z = -290 }, // Enemy Healer
+        };
+
+        // Generate random builds for player + 2 allies + 3 enemies (6 random, 2 healer)
+        const player_school = pickRandomSchool(&random);
+        const player_position = pickRandomPosition(&random);
+
         var entities = [_]Character{
-            // Index 0: Player (Waldorf Animator)
+            // ===== ALLY TEAM (Blue) =====
+            // Index 0: Player (random school/position)
             Character{
                 .id = id_gen.generate(),
-                .position = player_start_pos,
-                .previous_position = player_start_pos,
+                .position = ally_positions[0],
+                .previous_position = ally_positions[0],
                 .radius = 20,
                 .color = .blue,
                 .name = "Player",
                 .warmth = 100,
                 .max_warmth = 100,
                 .is_enemy = false,
-                .school = .waldorf,
-                .player_position = .animator,
-                .energy = School.waldorf.getMaxEnergy(),
-                .max_energy = School.waldorf.getMaxEnergy(),
+                .school = player_school,
+                .player_position = player_position,
+                .energy = player_school.getMaxEnergy(),
+                .max_energy = player_school.getMaxEnergy(),
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
-            // Index 1: Ally (Waldorf Thermos - Support/Healer)
+            // Index 1: Ally 1 (random)
             Character{
                 .id = id_gen.generate(),
-                .position = ally_pos,
-                .previous_position = ally_pos,
+                .position = ally_positions[1],
+                .previous_position = ally_positions[1],
                 .radius = 18,
-                .color = .green,
+                .color = .blue,
+                .name = "Ally 1",
+                .warmth = 100,
+                .max_warmth = 100,
+                .is_enemy = false,
+                .school = pickRandomSchool(&random),
+                .player_position = pickRandomPosition(&random),
+                .energy = 0, // Set after school
+                .max_energy = 0, // Set after school
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            // Index 2: Ally 2 (random)
+            Character{
+                .id = id_gen.generate(),
+                .position = ally_positions[2],
+                .previous_position = ally_positions[2],
+                .radius = 18,
+                .color = .blue,
+                .name = "Ally 2",
+                .warmth = 100,
+                .max_warmth = 100,
+                .is_enemy = false,
+                .school = pickRandomSchool(&random),
+                .player_position = pickRandomPosition(&random),
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            // Index 3: Ally Healer (always Thermos)
+            Character{
+                .id = id_gen.generate(),
+                .position = ally_positions[3],
+                .previous_position = ally_positions[3],
+                .radius = 18,
+                .color = .blue,
                 .name = "Ally Healer",
                 .warmth = 100,
                 .max_warmth = 100,
                 .is_enemy = false,
-                .school = .waldorf,
-                .player_position = .thermos,
-                .energy = School.waldorf.getMaxEnergy(),
-                .max_energy = School.waldorf.getMaxEnergy(),
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 2: Enemy 1 (Public School Pitcher - Pure Damage)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy1_pos,
-                .previous_position = enemy1_pos,
-                .radius = 18,
-                .color = .red,
-                .name = "Enemy Ranger",
-                .warmth = 100,
-                .max_warmth = 100,
-                .is_enemy = true,
-                .school = .public_school,
-                .player_position = .pitcher,
-                .energy = School.public_school.getMaxEnergy(),
-                .max_energy = School.public_school.getMaxEnergy(),
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 3: Enemy 2 (Homeschool Animator - Burst Damage + Disruption)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy2_pos,
-                .previous_position = enemy2_pos,
-                .radius = 18,
-                .color = .red,
-                .name = "Enemy Caster",
-                .warmth = 100,
-                .max_warmth = 100,
-                .is_enemy = true,
-                .school = .homeschool,
-                .player_position = .animator,
-                .energy = School.homeschool.getMaxEnergy(),
-                .max_energy = School.homeschool.getMaxEnergy(),
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 4: Empty slot
-            Character{
-                .id = id_gen.generate(),
-                .position = empty_pos,
-                .previous_position = empty_pos,
-                .radius = 0,
-                .color = .black,
-                .name = "Empty",
-                .warmth = 0,
-                .max_warmth = 1,
-                .is_enemy = false,
-                .is_dead = true,
-                .school = .waldorf,
-                .player_position = .animator,
+                .school = pickRandomSchool(&random),
+                .player_position = .thermos, // Always healer
                 .energy = 0,
-                .max_energy = 1,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+
+            // ===== ENEMY TEAM (Red) =====
+            // Index 4: Enemy 1 (random)
+            Character{
+                .id = id_gen.generate(),
+                .position = enemy_positions[0],
+                .previous_position = enemy_positions[0],
+                .radius = 18,
+                .color = .red,
+                .name = "Enemy 1",
+                .warmth = 100,
+                .max_warmth = 100,
+                .is_enemy = true,
+                .school = pickRandomSchool(&random),
+                .player_position = pickRandomPosition(&random),
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            // Index 6: Enemy 2 (random)
+            Character{
+                .id = id_gen.generate(),
+                .position = enemy_positions[1],
+                .previous_position = enemy_positions[1],
+                .radius = 18,
+                .color = .red,
+                .name = "Enemy 2",
+                .warmth = 100,
+                .max_warmth = 100,
+                .is_enemy = true,
+                .school = pickRandomSchool(&random),
+                .player_position = pickRandomPosition(&random),
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            // Index 6: Enemy 3 (random)
+            Character{
+                .id = id_gen.generate(),
+                .position = enemy_positions[2],
+                .previous_position = enemy_positions[2],
+                .radius = 18,
+                .color = .red,
+                .name = "Enemy 3",
+                .warmth = 100,
+                .max_warmth = 100,
+                .is_enemy = true,
+                .school = pickRandomSchool(&random),
+                .player_position = pickRandomPosition(&random),
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            // Index 7: Enemy Healer (always Thermos)
+            Character{
+                .id = id_gen.generate(),
+                .position = enemy_positions[3],
+                .previous_position = enemy_positions[3],
+                .radius = 18,
+                .color = .red,
+                .name = "Enemy Healer",
+                .warmth = 100,
+                .max_warmth = 100,
+                .is_enemy = true,
+                .school = pickRandomSchool(&random),
+                .player_position = .thermos, // Always healer
+                .energy = 0,
+                .max_energy = 0,
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
@@ -168,26 +263,32 @@ pub const GameState = struct {
         // Store player's entity ID
         const player_entity_id = entities[0].id;
 
-        // Load skills from position definitions for all entities
+        // Set energy pools based on school and load skills for all entities
         for (&entities, 0..) |*ent, i| {
-            if (i >= 4) break; // Skip empty slot (index 4)
+            // Set energy based on school
+            ent.energy = ent.school.getMaxEnergy();
+            ent.max_energy = ent.school.getMaxEnergy();
+
+            // Load skills from position
             const ent_skills = ent.player_position.getSkills();
             const ent_skill_count = @min(ent_skills.len, character.MAX_SKILLS);
             for (0..ent_skill_count) |skill_idx| {
                 ent.skill_bar[skill_idx] = &ent_skills[skill_idx];
             }
-            print("Loaded {d} skills for {s} ({s}/{s})\n", .{
-                ent_skill_count,
+
+            print("#{d} {s}: {s}/{s} ({d} skills)\n", .{
+                i,
                 ent.name,
                 @tagName(ent.school),
                 @tagName(ent.player_position),
+                ent_skill_count,
             });
         }
 
-        // Initialize RNG with current time as seed
-        const timestamp = std.time.timestamp();
-        const seed: u64 = @bitCast(timestamp); // Convert i64 to u64 safely
-        const rng = std.Random.DefaultPrng.init(seed);
+        print("\n=== 4v4 MATCH START ===\n", .{});
+        print("ALLY TEAM (Blue): Player, Ally 1, Ally 2, Ally Healer\n", .{});
+        print("ENEMY TEAM (Red): Enemy 1, Enemy 2, Enemy 3, Enemy Healer\n", .{});
+        print("======================\n\n", .{});
 
         // Check if gamepad is available and default to Action Camera if so
         const has_gamepad = rl.isGamepadAvailable(0);
@@ -204,7 +305,7 @@ pub const GameState = struct {
 
         return GameState{
             .entities = entities,
-            .controlled_entity_id = player_entity_id, // Track which entity is "ours"
+            .controlled_entity_id = player_entity_id,
             .selected_target = null,
             .camera = rl.Camera{
                 .position = .{ .x = 0, .y = 200, .z = 200 },
@@ -218,12 +319,15 @@ pub const GameState = struct {
             },
             .ai_states = [_]AIState{
                 .{}, // Player (no AI)
-                .{ .role = .support }, // Ally Thermos - healer/support
-                .{ .role = .damage_dealer }, // Enemy Pitcher - ranged DPS
-                .{ .role = .disruptor }, // Enemy Animator - burst/control
-                .{}, // Empty slot
+                .{ .role = .damage_dealer }, // Ally 1
+                .{ .role = .damage_dealer }, // Ally 2
+                .{ .role = .support }, // Ally Healer
+                .{ .role = .damage_dealer }, // Enemy 1
+                .{ .role = .damage_dealer }, // Enemy 2
+                .{ .role = .damage_dealer }, // Enemy 3
+                .{ .role = .support }, // Enemy Healer
             },
-            .rng = rng,
+            .rng = prng,
             .combat_state = .active,
             .entity_id_gen = id_gen,
             .vfx_manager = vfx.VFXManager.init(),
@@ -280,12 +384,13 @@ pub const GameState = struct {
         // This makes the game deterministic and multiplayer-ready
 
         // Save previous positions for interpolation BEFORE any movement this tick
-        // Update energy, cooldowns, conditions for ALL entities (including player!)
+        // Update energy, cooldowns, conditions, warmth for ALL entities (including player!)
         for (&self.entities) |*ent| {
             ent.previous_position = ent.position;
             ent.updateEnergy(TICK_RATE_SEC);
             ent.updateCooldowns(TICK_RATE_SEC);
             ent.updateConditions(TICK_RATE_MS);
+            ent.updateWarmth(TICK_RATE_SEC); // Warmth regen/degen from pips
         }
 
         // Handle input and AI (only if combat is active)
@@ -294,9 +399,13 @@ pub const GameState = struct {
             // Get player-controlled entity
             const player = self.getPlayer();
 
-            // Get player movement intent from input and apply it
+            // Get player movement intent from input
             const player_movement = input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state, &self.vfx_manager);
-            movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC);
+
+            // Only apply movement if not casting (GW1 rule: can't move while casting)
+            if (player.cast_state == .idle) {
+                movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC);
+            }
 
             // Update AI for non-player entities
             ai.updateAI(&self.entities, self.controlled_entity_id, TICK_RATE_SEC, &self.ai_states, &random_state, &self.vfx_manager);
