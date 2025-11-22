@@ -555,8 +555,8 @@ pub const GameState = struct {
         render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager);
     }
 
-    pub fn drawUI(self: *const GameState) void {
+    pub fn drawUI(self: *GameState) void {
         const player = self.getPlayerConst();
-        ui.drawUI(player, &self.entities, self.selected_target, self.input_state, self.camera);
+        ui.drawUI(player, &self.entities, self.selected_target, &self.input_state, self.camera);
     }
 };

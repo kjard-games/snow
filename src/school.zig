@@ -129,6 +129,7 @@ const private_school_skills = [_]Skill{
     // 1. Energy management - gain energy
     .{
         .name = "Trust Fund",
+        .description = "Gesture. You gain 10 energy.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 0,
@@ -142,6 +143,7 @@ const private_school_skills = [_]Skill{
     // 2. Expensive powerful shield
     .{
         .name = "Hire Bodyguard",
+        .description = "Stance. (10 seconds.) You block the next 3 attacks.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 15,
@@ -156,6 +158,7 @@ const private_school_skills = [_]Skill{
     // 3. Team energy support
     .{
         .name = "Share Allowance",
+        .description = "Shout. (20 seconds.) Party members in earshot have +3 energy regeneration.",
         .skill_type = .call,
         .mechanic = .shout,
         .energy_cost = 12,
@@ -169,9 +172,10 @@ const private_school_skills = [_]Skill{
         .cozies = &private_insulated,
     },
 
-    // 4. Defensive buff - armor
+    // 4. Defensive buff - padding
     .{
         .name = "Designer Jacket",
+        .description = "Stance. (12 seconds.) You have +20 padding and take 33% less damage.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 10,
@@ -185,6 +189,7 @@ const private_school_skills = [_]Skill{
     // 5. Expensive AoE damage
     .{
         .name = "Hired Pitcher",
+        .description = "Trick. Deals 15 damage to all foes in the area.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 18,
@@ -200,6 +205,7 @@ const private_school_skills = [_]Skill{
     // 6. Healing - can afford the best
     .{
         .name = "Private Nurse",
+        .description = "Trick. Heals target ally for 50 Health.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 12,
@@ -214,6 +220,7 @@ const private_school_skills = [_]Skill{
     // 7. Max health buff
     .{
         .name = "Well Fed",
+        .description = "Stance. (18 seconds.) You have +50 maximum Health.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 10,
@@ -227,6 +234,7 @@ const private_school_skills = [_]Skill{
     // 8. Condition removal - money solves problems
     .{
         .name = "Call Mom",
+        .description = "Gesture. Heals for 25 Health. Removes all chills.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 8,
@@ -460,6 +468,7 @@ const montessori_skills = [_]Skill{
     // 5. Learns from experience
     .{
         .name = "Growth Mindset",
+        .description = "Stance. (15 seconds.) You gain +2 to all attributes.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 6,
@@ -581,6 +590,7 @@ const homeschool_skills = [_]Skill{
     // 4. Execute - kills low health targets
     .{
         .name = "Final Exam",
+        .description = "Throw. Deals 25 damage. Deals double damage if target foe is below 30% Health. Completely soaks through padding.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 12,
@@ -589,7 +599,7 @@ const homeschool_skills = [_]Skill{
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 35000,
-        .armor_penetration = 1.0,
+        .soak = 1.0,
         // TODO: Deals double damage if target below 30% health
     },
 
@@ -744,6 +754,7 @@ const waldorf_skills = [_]Skill{
     // 5. Reactive skill - counters
     .{
         .name = "Eurythmy",
+        .description = "Stance. (15 seconds.) Your movement is synchronized. Move 25% faster.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,

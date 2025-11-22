@@ -21,6 +21,6 @@ pub fn main() void {
         defer rl.endDrawing();
 
         state.draw();
-        state.drawUI();
+        state.drawUI(); // Note: drawUI now takes *GameState (mutable) for input_state updates
     }
 }

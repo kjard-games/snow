@@ -91,6 +91,7 @@ const pitcher_skills = [_]Skill{
     // 1. Fast, reliable damage - your bread and butter
     .{
         .name = "Fastball",
+        .description = "Throw. Deals 18 damage.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 5,
@@ -104,6 +105,7 @@ const pitcher_skills = [_]Skill{
     // 2. Conditional burst - high damage if target is chilled
     .{
         .name = "Ice Fastball",
+        .description = "Throw. Deals 15 damage. Deals +15 damage if target foe has a chill.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 8,
@@ -118,6 +120,7 @@ const pitcher_skills = [_]Skill{
     // 3. AoE pressure - hits adjacent foes
     .{
         .name = "Slushball Barrage",
+        .description = "Throw. Deals 12 damage to target and adjacent foes. Inflicts Soggy condition (6 seconds).",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 10,
@@ -133,6 +136,7 @@ const pitcher_skills = [_]Skill{
     // 4. Interrupt tool - fast cast, low damage, disrupts
     .{
         .name = "Snipe",
+        .description = "Throw. Interrupts an action. Deals 10 damage.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 7,
@@ -147,6 +151,7 @@ const pitcher_skills = [_]Skill{
     // 5. Maximum range poke - safe but slow
     .{
         .name = "Lob",
+        .description = "Throw. Deals 14 damage. Maximum range.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 6,
@@ -160,6 +165,7 @@ const pitcher_skills = [_]Skill{
     // 6. Execute - bonus damage vs low health
     .{
         .name = "Headshot",
+        .description = "Throw. Deals 20 damage. Deals +20 damage if target foe is below 50% Health. Soaks through half their padding.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 12,
@@ -168,13 +174,14 @@ const pitcher_skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        .armor_penetration = 0.5,
+        .soak = 0.5,
         // TODO: Add conditional: +20 damage if target below 50% health
     },
 
     // 7. DoT application - sustained pressure
     .{
         .name = "Windburn Throw",
+        .description = "Throw. Deals 10 damage. Inflicts Windburn condition (5 seconds).",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 8,
@@ -189,6 +196,7 @@ const pitcher_skills = [_]Skill{
     // 8. Energy efficient spam - low cost, low cooldown
     .{
         .name = "Quick Toss",
+        .description = "Throw. Deals 12 damage.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 3,
@@ -222,6 +230,7 @@ const fielder_skills = [_]Skill{
     // 1. Versatile throw - good at everything
     .{
         .name = "All-Rounder",
+        .description = "Throw. Deals 15 damage.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 5,
@@ -235,6 +244,7 @@ const fielder_skills = [_]Skill{
     // 2. Repositioning tool - mobility + utility
     .{
         .name = "Dive Roll",
+        .description = "Stance. (6 seconds.) You move 25% faster and evade attacks.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,
@@ -250,6 +260,7 @@ const fielder_skills = [_]Skill{
     // 3. Control tool - slows enemies
     .{
         .name = "Trip Up",
+        .description = "Throw. Deals 8 damage. Inflicts Slippery condition (4 seconds).",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 6,
@@ -264,6 +275,7 @@ const fielder_skills = [_]Skill{
     // 4. Long range option - can play like pitcher
     .{
         .name = "Long Toss",
+        .description = "Throw. Deals 13 damage.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 6,
@@ -277,6 +289,7 @@ const fielder_skills = [_]Skill{
     // 5. Close range option - can play like sledder
     .{
         .name = "Point Blank",
+        .description = "Throw. Deals 18 damage. Deals +10 damage if you are within melee range.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 7,
@@ -291,6 +304,7 @@ const fielder_skills = [_]Skill{
     // 6. Utility trick - removes chill from self
     .{
         .name = "Shake It Off",
+        .description = "Gesture. Removes one chill from yourself.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 0,
@@ -304,6 +318,7 @@ const fielder_skills = [_]Skill{
     // 7. Team call - provides minor buff
     .{
         .name = "Rally",
+        .description = "Shout. Allies in earshot gain +5 damage for 10 seconds.",
         .skill_type = .call,
         .mechanic = .shout,
         .energy_cost = 8,
@@ -320,6 +335,7 @@ const fielder_skills = [_]Skill{
     // 8. Fast response - instant cast
     .{
         .name = "Snap Throw",
+        .description = "Throw. Deals 11 damage.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 4,
@@ -353,6 +369,7 @@ const sledder_skills = [_]Skill{
     // 1. Gap closer - mobility + damage
     .{
         .name = "Downhill Charge",
+        .description = "Throw. Deals 22 damage. Dash toward target before attacking.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 8,
@@ -367,6 +384,7 @@ const sledder_skills = [_]Skill{
     // 2. Melee burst - highest damage at close range
     .{
         .name = "Ram",
+        .description = "Throw. Deals 25 damage at close range.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 10,
@@ -380,6 +398,7 @@ const sledder_skills = [_]Skill{
     // 3. AoE sweep - hits all nearby
     .{
         .name = "Snow Spray",
+        .description = "Trick. Deals 10 damage to adjacent foes. Inflicts Numb condition (5 seconds).",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 7,
@@ -394,6 +413,7 @@ const sledder_skills = [_]Skill{
     // 4. Sustained aggression buff
     .{
         .name = "Adrenaline Rush",
+        .description = "Stance. (8 seconds.) You deal +50% damage and move 33% faster.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 6,
@@ -407,6 +427,7 @@ const sledder_skills = [_]Skill{
     // 5. Sliding attack - move while attacking
     .{
         .name = "Drift Strike",
+        .description = "Throw. Deals 18 damage. Can be used while moving.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 6,
@@ -421,6 +442,7 @@ const sledder_skills = [_]Skill{
     // 6. Jump attack - unblockable
     .{
         .name = "Aerial Assault",
+        .description = "Throw. Deals 20 damage. Unblockable.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 9,
@@ -435,6 +457,7 @@ const sledder_skills = [_]Skill{
     // 7. Debilitating strike - reduces enemy damage
     .{
         .name = "Crushing Blow",
+        .description = "Throw. Deals 28 damage. Causes knockdown.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 7,
@@ -449,6 +472,7 @@ const sledder_skills = [_]Skill{
     // 8. Speed boost stance
     .{
         .name = "Sprint",
+        .description = "Stance. (10 seconds.) You move 50% faster.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,
@@ -488,6 +512,7 @@ const shoveler_skills = [_]Skill{
     // 1. Armor stance - damage reduction
     .{
         .name = "Dig In",
+        .description = "Stance. (12 seconds.) You have +50 padding and cannot be moved.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 6,
@@ -501,6 +526,7 @@ const shoveler_skills = [_]Skill{
     // 2. Health boost
     .{
         .name = "Fortify",
+        .description = "Stance. (15 seconds.) You take 50% less damage.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 8,
@@ -514,6 +540,7 @@ const shoveler_skills = [_]Skill{
     // 3. Block stance
     .{
         .name = "Snow Wall",
+        .description = "Trick. Creates a wall that blocks projectiles for 10 seconds.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 7,
@@ -528,6 +555,7 @@ const shoveler_skills = [_]Skill{
     // 4. Counter attack - damage when attacked
     .{
         .name = "Retribution",
+        .description = "Stance. (8 seconds.) Reflects 25% of damage back to attackers.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,
@@ -542,6 +570,7 @@ const shoveler_skills = [_]Skill{
     // 5. Taunt - force enemies to target you
     .{
         .name = "Challenge",
+        .description = "Shout. Target foe must attack you for 5 seconds.",
         .skill_type = .call,
         .mechanic = .shout,
         .energy_cost = 6,
@@ -557,6 +586,7 @@ const shoveler_skills = [_]Skill{
     // 6. Moderate damage throw
     .{
         .name = "Shovel Toss",
+        .description = "Throw. Deals 12 damage. Interrupts target.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 5,
@@ -570,6 +600,7 @@ const shoveler_skills = [_]Skill{
     // 7. Ground hazard - creates defensive zone
     .{
         .name = "Ice Wall",
+        .description = "Trick. Creates an ice barrier. Foes touching it are slowed.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 10,
@@ -585,6 +616,7 @@ const shoveler_skills = [_]Skill{
     // 8. Self-heal
     .{
         .name = "Second Wind",
+        .description = "Gesture. Heals for 40 Health.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 0,
@@ -798,6 +830,7 @@ const thermos_skills = [_]Skill{
     // 3. HoT buff - regeneration over time
     .{
         .name = "Hand Warmers",
+        .description = "Trick. Removes all chills from target ally.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 7,

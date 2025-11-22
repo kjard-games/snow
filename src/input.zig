@@ -37,6 +37,10 @@ pub const InputState = struct {
 
     // Cancel-by-movement safeguards
     prev_stick_magnitude: f32 = 0.0, // Track previous frame's stick position
+
+    // Skill tooltip state (updated every frame)
+    hovered_skill_index: ?u8 = null, // Mouse hover detection
+    inspected_skill_index: ?u8 = null, // Controller inspection (Q/E to cycle)
 };
 
 // Input Command - Represents player input for ONE tick
@@ -174,6 +178,87 @@ pub fn pollInput(
 
     // Keyboard: Spacebar
     if (rl.isKeyPressed(.space)) input_state.buffered_spacebar = true;
+
+    // === SKILL TOOLTIP INSPECTION ===
+    // Controller: D-pad Down to enter inspection mode (starts at skill 1), then Right Stick Left/Right to navigate
+    // Keyboard: [ and ] to cycle through skill tooltips
+    if (rl.isGamepadAvailable(0)) {
+        // D-pad Down: Toggle inspection mode (enters at skill 1, or exits if already inspecting)
+        if (rl.isGamepadButtonPressed(0, .left_face_down)) {
+            if (input_state.inspected_skill_index) |_| {
+                // Already inspecting - exit inspection mode
+                input_state.inspected_skill_index = null;
+            } else {
+                // Enter inspection mode - start at skill 1
+                input_state.inspected_skill_index = 0;
+            }
+        }
+
+        // Right stick left/right: Navigate through skills when in inspection mode
+        if (input_state.inspected_skill_index) |idx| {
+            const right_x = rl.getGamepadAxisMovement(0, .right_x);
+            const deadzone = 0.3; // Higher deadzone for discrete navigation
+
+            // Track if we've already moved (prevent rapid cycling)
+            const stick_neutral = @abs(right_x) < deadzone;
+
+            // Use a static to track previous frame's stick state
+            const prev_neutral = blk: {
+                const State = struct {
+                    var was_neutral: bool = true;
+                };
+                const result = State.was_neutral;
+                State.was_neutral = stick_neutral;
+                break :blk result;
+            };
+
+            // Only cycle when stick crosses threshold (was neutral, now active)
+            if (prev_neutral and !stick_neutral) {
+                if (right_x < -deadzone) {
+                    // Left: Previous skill
+                    if (idx > 0) {
+                        input_state.inspected_skill_index = idx - 1;
+                    } else {
+                        input_state.inspected_skill_index = 7; // Wrap to skill 8
+                    }
+                } else if (right_x > deadzone) {
+                    // Right: Next skill
+                    if (idx < 7) {
+                        input_state.inspected_skill_index = idx + 1;
+                    } else {
+                        input_state.inspected_skill_index = 0; // Wrap to skill 1
+                    }
+                }
+            }
+        }
+    }
+
+    // Keyboard: [ and ] to cycle through skill tooltips
+    if (rl.isKeyPressed(.left_bracket)) {
+        // [ = cycle backward
+        if (input_state.inspected_skill_index) |idx| {
+            if (idx > 0) {
+                input_state.inspected_skill_index = idx - 1;
+            } else {
+                input_state.inspected_skill_index = 7; // Wrap to skill 8
+            }
+        } else {
+            input_state.inspected_skill_index = 0; // Enter inspection at skill 1
+        }
+    }
+
+    if (rl.isKeyPressed(.right_bracket)) {
+        // ] = cycle forward
+        if (input_state.inspected_skill_index) |idx| {
+            if (idx < 7) {
+                input_state.inspected_skill_index = idx + 1;
+            } else {
+                input_state.inspected_skill_index = 0; // Wrap to skill 1
+            }
+        } else {
+            input_state.inspected_skill_index = 0; // Enter inspection at skill 1
+        }
+    }
 
     // === CAMERA SYSTEM (every frame for smooth camera movement) ===
     // Toggle Action Camera mode with C key or gamepad L3 (left stick click)

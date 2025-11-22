@@ -104,9 +104,9 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             final_damage *= 0.75; // Bundled Up reduces incoming damage by 25%
         }
 
-        // Apply armor penetration
-        if (skill.armor_penetration > 0) {
-            // TODO: implement armor system
+        // Apply soak (penetrates padding/layers)
+        if (skill.soak > 0) {
+            // TODO: implement padding system and soak mechanic
         }
 
         // Apply miss chance from chills

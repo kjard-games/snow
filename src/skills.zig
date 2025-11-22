@@ -105,6 +105,7 @@ pub const ActiveCozy = struct {
 
 pub const Skill = struct {
     name: [:0]const u8,
+    description: [:0]const u8 = "", // GW1-style oracle text describing what the skill does
     skill_type: SkillType, // Thematic type (visual/animation)
     mechanic: SkillMechanic, // Mechanical type (timing behavior)
     energy_cost: u8 = 5,
@@ -131,7 +132,7 @@ pub const Skill = struct {
 
     // Special properties
     unblockable: bool = false,
-    armor_penetration: f32 = 0.0, // percentage (0.0 to 1.0)
+    soak: f32 = 0.0, // percentage (0.0 to 1.0) - soaks through padding/layers
     interrupts: bool = false, // Does this skill interrupt target's casting?
 
     // TODO: Warmth as resource (Homeschool mechanic)
@@ -297,7 +298,7 @@ pub const PRECISION_STRIKE = Skill{
     .recharge_time_ms = 10000, // 10 seconds
     .damage = 20.0,
     .cast_range = 220.0,
-    .armor_penetration = 0.5, // 50% armor pen
+    .soak = 0.5, // 50% soak - soaks through padding
 };
 
 const bundled_up_cozy = [_]CozyEffect{.{
