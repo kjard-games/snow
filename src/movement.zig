@@ -9,6 +9,15 @@ const Character = character.Character;
 pub const BASE_MOVE_SPEED: f32 = 150.0; // Base units per second (was 3.0 per frame at 60fps = 180/s, tuned down for feel)
 pub const BACKPEDAL_SPEED: f32 = 0.6; // 60% speed when backing up
 pub const STRAFE_SPEED: f32 = 0.85; // 85% speed when strafing
+pub const DIAGONAL_BACKWARD_SPEED: f32 = 0.75; // 75% speed when moving diagonally backward
+
+// Movement direction thresholds for penalty detection
+pub const BACKWARD_THRESHOLD: f32 = 0.7; // Movement z-component threshold for backpedal penalty
+pub const LATERAL_THRESHOLD: f32 = 0.7; // Movement x-component threshold for strafe penalty
+pub const DIAGONAL_THRESHOLD: f32 = 0.3; // Component threshold for diagonal backward movement
+
+// Collision constants
+pub const MAX_PUSH_DISTANCE_MULTIPLIER: f32 = 2.0; // Maximum distance entities can be pushed during collision resolution
 
 /// Movement intent - what an entity wants to do this tick
 pub const MovementIntent = struct {
@@ -50,15 +59,15 @@ pub fn applyMovement(
         const forward_component = norm_z; // Positive = backward, negative = forward
         const lateral_component = @abs(norm_x);
 
-        if (forward_component > 0.7) {
+        if (forward_component > BACKWARD_THRESHOLD) {
             // Moving primarily backward
             speed_multiplier = BACKPEDAL_SPEED; // 60% speed
-        } else if (lateral_component > 0.7) {
+        } else if (lateral_component > LATERAL_THRESHOLD) {
             // Moving primarily sideways (strafe)
             speed_multiplier = STRAFE_SPEED; // 85% speed
-        } else if (forward_component > 0.3 and lateral_component > 0.3) {
+        } else if (forward_component > DIAGONAL_THRESHOLD and lateral_component > DIAGONAL_THRESHOLD) {
             // Diagonal backward movement
-            speed_multiplier = 0.75; // 75% speed
+            speed_multiplier = DIAGONAL_BACKWARD_SPEED; // 75% speed
         }
     }
 
@@ -123,7 +132,7 @@ pub fn applyMovement(
     const pushed_distance = @sqrt((entity.position.x - new_x) * (entity.position.x - new_x) +
         (entity.position.z - new_z) * (entity.position.z - new_z));
 
-    if (pushed_distance > distance * 2.0) {
+    if (pushed_distance > distance * MAX_PUSH_DISTANCE_MULTIPLIER) {
         // Pushed too far, just stop at the collision point
         entity.position.x = old_x;
         entity.position.z = old_z;

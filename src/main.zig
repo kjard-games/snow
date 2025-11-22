@@ -10,7 +10,10 @@ pub fn main() void {
     rl.initWindow(screenWidth, screenHeight, "Snow - GW1-Style 3D Tab Targeting");
     defer rl.closeWindow();
 
-    rl.setTargetFPS(60);
+    // Set target FPS to monitor refresh rate (or 60 if unavailable)
+    const monitor_refresh = rl.getMonitorRefreshRate(0);
+    const target_fps = if (monitor_refresh > 0) monitor_refresh else 60;
+    rl.setTargetFPS(target_fps);
 
     var state = GameState.init();
 

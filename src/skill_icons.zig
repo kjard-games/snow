@@ -3,6 +3,7 @@ const rl = @import("raylib");
 const school_mod = @import("school.zig");
 const position_mod = @import("position.zig");
 const skills_mod = @import("skills.zig");
+const palette = @import("color_palette.zig");
 
 const School = school_mod.School;
 const Position = position_mod.Position;
@@ -38,23 +39,23 @@ fn lerpColor(a: rl.Color, b: rl.Color, t: f32) rl.Color {
 // Get color for a school (MTG color pie inspired) - VERY SATURATED
 pub fn getSchoolColor(school: School) rl.Color {
     return switch (school) {
-        .private_school => rl.Color{ .r = 255, .g = 220, .b = 100, .a = 255 }, // Bright Gold
-        .public_school => rl.Color{ .r = 255, .g = 50, .b = 50, .a = 255 }, // Bright Red
-        .montessori => rl.Color{ .r = 50, .g = 220, .b = 50, .a = 255 }, // Bright Green
-        .homeschool => rl.Color{ .r = 180, .g = 80, .b = 220, .a = 255 }, // Bright Purple
-        .waldorf => rl.Color{ .r = 80, .g = 150, .b = 255, .a = 255 }, // Bright Blue
+        .private_school => palette.SCHOOL.PRIVATE,
+        .public_school => palette.SCHOOL.PUBLIC,
+        .montessori => palette.SCHOOL.MONTESSORI,
+        .homeschool => palette.SCHOOL.HOMESCHOOL,
+        .waldorf => palette.SCHOOL.WALDORF,
     };
 }
 
 // Get color for a position - VERY SATURATED AND DISTINCT
 pub fn getPositionColor(position: Position) rl.Color {
     return switch (position) {
-        .pitcher => rl.Color{ .r = 255, .g = 140, .b = 0, .a = 255 }, // Bright Orange
-        .fielder => rl.Color{ .r = 180, .g = 180, .b = 180, .a = 255 }, // Light Gray
-        .sledder => rl.Color{ .r = 255, .g = 50, .b = 200, .a = 255 }, // Hot Pink
-        .shoveler => rl.Color{ .r = 100, .g = 200, .b = 255, .a = 255 }, // Cyan
-        .animator => rl.Color{ .r = 180, .g = 255, .b = 50, .a = 255 }, // Lime Green
-        .thermos => rl.Color{ .r = 255, .g = 100, .b = 100, .a = 255 }, // Salmon/Pink
+        .pitcher => palette.POSITION.PITCHER,
+        .fielder => palette.POSITION.FIELDER,
+        .sledder => palette.POSITION.SLEDDER,
+        .shoveler => palette.POSITION.SHOVELER,
+        .animator => palette.POSITION.ANIMATOR,
+        .thermos => palette.POSITION.THERMOS,
     };
 }
 
@@ -202,7 +203,7 @@ pub fn drawSkillIcon(x: f32, y: f32, size: f32, skill: *const Skill, school: Sch
         break :blk getSchoolColor(school);
     } else blk: {
         // Fallback (shouldn't happen): gray
-        break :blk rl.Color{ .r = 150, .g = 150, .b = 150, .a = 255 };
+        break :blk palette.POSITION.FALLBACK;
     };
 
     // Dim the color if player can't afford the skill

@@ -11,6 +11,7 @@ const rl = @import("raylib");
 const character = @import("character.zig");
 const entity_types = @import("entity.zig");
 const vfx = @import("vfx.zig");
+const palette = @import("color_palette.zig");
 
 const Character = character.Character;
 const EntityId = entity_types.EntityId;
@@ -110,7 +111,7 @@ fn executeAutoAttack(attacker: *Character, target: *Character, rng: *std.Random,
     const is_ranged = true;
 
     // Spawn projectile visual
-    const color = if (attacker.is_enemy) rl.Color.orange else rl.Color.white;
+    const color = if (attacker.is_enemy) palette.VFX.PROJECTILE_AUTO_ENEMY else palette.VFX.PROJECTILE_AUTO_ALLY;
     vfx_manager.spawnProjectile(attacker.position, target.position, attacker.id, target.id, is_ranged, color);
 
     // Apply miss chance from chills

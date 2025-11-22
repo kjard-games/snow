@@ -12,11 +12,26 @@ const MovementIntent = movement.MovementIntent;
 const EntityId = entity_types.EntityId;
 const print = std.debug.print;
 
+// Camera constants
+pub const DEFAULT_CAMERA_PITCH: f32 = 0.6; // ~34 degrees, good default viewing angle
+pub const DEFAULT_CAMERA_DISTANCE: f32 = 250.0;
+pub const MIN_CAMERA_PITCH: f32 = 0.1; // Nearly horizontal
+pub const MAX_CAMERA_PITCH: f32 = 1.4; // Nearly straight down
+pub const MIN_CAMERA_DISTANCE: f32 = 50.0;
+pub const MAX_CAMERA_DISTANCE: f32 = 400.0;
+pub const CAMERA_ZOOM_SPEED: f32 = 20.0; // Units per mouse wheel increment
+
+// Input sensitivity constants
+pub const MOUSE_SENSITIVITY: f32 = 0.003; // Radians per pixel
+pub const GAMEPAD_CAMERA_SPEED: f32 = 0.05; // Radians per frame with gamepad
+pub const GAMEPAD_DEADZONE_MOVEMENT: f32 = 0.15; // Deadzone for movement sticks
+pub const GAMEPAD_DEADZONE_MENU: f32 = 0.3; // Higher deadzone for menu navigation
+
 pub const InputState = struct {
     shift_held: bool = false,
     camera_angle: f32 = 0.0,
-    camera_pitch: f32 = 0.6, // Pitch angle in radians (0.6 ≈ 34 degrees, good default)
-    camera_distance: f32 = 250.0,
+    camera_pitch: f32 = DEFAULT_CAMERA_PITCH,
+    camera_distance: f32 = DEFAULT_CAMERA_DISTANCE,
     autorun: bool = false,
     move_target: ?rl.Vector3 = null, // Click-to-move destination
     last_click_time: f32 = 0.0, // For double-click detection
@@ -197,7 +212,7 @@ pub fn pollInput(
         // Right stick left/right: Navigate through skills when in inspection mode
         if (input_state.inspected_skill_index) |idx| {
             const right_x = rl.getGamepadAxisMovement(0, .right_x);
-            const deadzone = 0.3; // Higher deadzone for discrete navigation
+            const deadzone = GAMEPAD_DEADZONE_MENU; // Higher deadzone for discrete navigation
 
             // Track if we've already moved (prevent rapid cycling)
             const stick_neutral = @abs(right_x) < deadzone;
@@ -284,19 +299,17 @@ pub fn pollInput(
     // Camera rotation and pitch (processed every frame!)
     var camera_rotation: f32 = 0.0;
     var camera_pitch_delta: f32 = 0.0;
-    const camera_speed = 0.05;
 
     // Gamepad right stick (first-class)
     if (rl.isGamepadAvailable(0)) {
         const right_x = rl.getGamepadAxisMovement(0, .right_x);
         const right_y = rl.getGamepadAxisMovement(0, .right_y);
-        const deadzone = 0.15;
 
-        if (@abs(right_x) > deadzone) {
-            camera_rotation = right_x * camera_speed;
+        if (@abs(right_x) > GAMEPAD_DEADZONE_MOVEMENT) {
+            camera_rotation = right_x * GAMEPAD_CAMERA_SPEED;
         }
-        if (@abs(right_y) > deadzone) {
-            camera_pitch_delta = -right_y * camera_speed; // Inverted Y
+        if (@abs(right_y) > GAMEPAD_DEADZONE_MOVEMENT) {
+            camera_pitch_delta = -right_y * GAMEPAD_CAMERA_SPEED; // Inverted Y
         }
     }
 
@@ -304,28 +317,28 @@ pub fn pollInput(
     if (input_state.action_camera) {
         // Action Camera: Always mouse-look (like GW2)
         const mouse_delta = rl.getMouseDelta();
-        camera_rotation = mouse_delta.x * 0.003;
-        camera_pitch_delta = -mouse_delta.y * 0.003; // Inverted Y
+        camera_rotation = mouse_delta.x * MOUSE_SENSITIVITY;
+        camera_pitch_delta = -mouse_delta.y * MOUSE_SENSITIVITY; // Inverted Y
     } else if (rl.isMouseButtonDown(.right)) {
         // Traditional: Right-click to mouse-look
         const mouse_delta = rl.getMouseDelta();
-        camera_rotation = mouse_delta.x * 0.003;
-        camera_pitch_delta = -mouse_delta.y * 0.003; // Inverted Y
+        camera_rotation = mouse_delta.x * MOUSE_SENSITIVITY;
+        camera_pitch_delta = -mouse_delta.y * MOUSE_SENSITIVITY; // Inverted Y
     }
 
     // Mouse wheel zoom
     const wheel = rl.getMouseWheelMove();
     if (wheel != 0.0) {
-        input_state.camera_distance -= wheel * 20.0;
+        input_state.camera_distance -= wheel * CAMERA_ZOOM_SPEED;
         // Clamp zoom distance
-        input_state.camera_distance = @max(50.0, @min(400.0, input_state.camera_distance));
+        input_state.camera_distance = @max(MIN_CAMERA_DISTANCE, @min(MAX_CAMERA_DISTANCE, input_state.camera_distance));
     }
 
     // Apply camera rotation and pitch (every frame!)
     input_state.camera_angle += camera_rotation;
     input_state.camera_pitch += camera_pitch_delta;
-    // Clamp pitch: 0.1 (nearly horizontal) to 1.4 (nearly straight down)
-    input_state.camera_pitch = @max(0.1, @min(1.4, input_state.camera_pitch));
+    // Clamp pitch
+    input_state.camera_pitch = @max(MIN_CAMERA_PITCH, @min(MAX_CAMERA_PITCH, input_state.camera_pitch));
 
     // === CLICK-TO-TARGET & CLICK-TO-MOVE (buffered) ===
     if (rl.isMouseButtonPressed(.left)) {
@@ -606,60 +619,63 @@ pub fn handleInput(
     // === SKILL QUEUE APPROACH (GW1-style: run into range to cast) ===
     // If we have a queued skill and we're out of range, approach the target
     var skill_approach_active = false;
-    if (!auto_chase_active and player.hasQueuedSkill() and !player.isCasting()) {
-        if (player.queued_skill_index) |skill_idx| {
-            if (player.queued_skill_target_id) |target_id| {
-                const skill = player.skill_bar[skill_idx] orelse {
-                    player.clearSkillQueue(); // Skill no longer exists
-                    @panic("unreachable");
-                };
+    skill_queue_block: {
+        if (!auto_chase_active and player.hasQueuedSkill() and !player.isCasting()) {
+            if (player.queued_skill_index) |skill_idx| {
+                if (player.queued_skill_target_id) |target_id| {
+                    // Get skill or clear queue if invalid (defensive programming - shouldn't happen)
+                    const skill = player.skill_bar[skill_idx] orelse {
+                        player.clearSkillQueue();
+                        break :skill_queue_block;
+                    };
 
-                // Find the target entity
-                for (entities) |*ent| {
-                    if (ent.id == target_id) {
-                        if (!ent.isAlive()) {
-                            print("Queued skill target died\n", .{});
-                            player.clearSkillQueue();
+                    // Find the target entity
+                    for (entities) |*ent| {
+                        if (ent.id == target_id) {
+                            if (!ent.isAlive()) {
+                                print("Queued skill target died\n", .{});
+                                player.clearSkillQueue();
+                                break;
+                            }
+
+                            const distance = player.distanceTo(ent.*);
+
+                            // Check if we're in range now
+                            if (distance <= skill.cast_range) {
+                                // In range! Try to cast the queued skill
+                                print("In range - casting queued skill: {s}\n", .{skill.name});
+                                const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager);
+                                player.clearSkillQueue();
+
+                                if (result == .out_of_range) {
+                                    // Still somehow out of range? (shouldn't happen)
+                                    print("Still out of range after approach?\n", .{});
+                                }
+                            } else {
+                                // Still out of range - keep approaching (only if no manual input)
+                                if (move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
+                                    const dx = ent.position.x - player.position.x;
+                                    const dz = ent.position.z - player.position.z;
+
+                                    // Calculate world-space movement direction
+                                    const move_dir_x = dx / distance;
+                                    const move_dir_z = dz / distance;
+
+                                    // Convert world movement to local space (inverse of camera rotation)
+                                    const cos_angle = @cos(input_state.camera_angle);
+                                    const sin_angle = @sin(input_state.camera_angle);
+                                    move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
+                                    move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
+
+                                    skill_approach_active = true;
+                                } else {
+                                    // Manual input cancels skill queue
+                                    print("Skill queue cancelled by manual input\n", .{});
+                                    player.clearSkillQueue();
+                                }
+                            }
                             break;
                         }
-
-                        const distance = player.distanceTo(ent.*);
-
-                        // Check if we're in range now
-                        if (distance <= skill.cast_range) {
-                            // In range! Try to cast the queued skill
-                            print("In range - casting queued skill: {s}\n", .{skill.name});
-                            const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager);
-                            player.clearSkillQueue();
-
-                            if (result == .out_of_range) {
-                                // Still somehow out of range? (shouldn't happen)
-                                print("Still out of range after approach?\n", .{});
-                            }
-                        } else {
-                            // Still out of range - keep approaching (only if no manual input)
-                            if (move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
-                                const dx = ent.position.x - player.position.x;
-                                const dz = ent.position.z - player.position.z;
-
-                                // Calculate world-space movement direction
-                                const move_dir_x = dx / distance;
-                                const move_dir_z = dz / distance;
-
-                                // Convert world movement to local space (inverse of camera rotation)
-                                const cos_angle = @cos(input_state.camera_angle);
-                                const sin_angle = @sin(input_state.camera_angle);
-                                move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
-                                move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
-
-                                skill_approach_active = true;
-                            } else {
-                                // Manual input cancels skill queue
-                                print("Skill queue cancelled by manual input\n", .{});
-                                player.clearSkillQueue();
-                            }
-                        }
-                        break;
                     }
                 }
             }

@@ -3,6 +3,7 @@ const rl = @import("raylib");
 const character = @import("character.zig");
 const entity_types = @import("entity.zig");
 const vfx = @import("vfx.zig");
+const palette = @import("color_palette.zig");
 
 const Character = character.Character;
 const EntityId = entity_types.EntityId;
@@ -32,14 +33,14 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
 
         // Draw entity as sphere at interpolated position
         const render_pos = ent.getInterpolatedPosition(interpolation_alpha);
-        const color = if (ent.is_dead) rl.Color.gray else ent.color;
+        const color = if (ent.is_dead) palette.TEAM.DEAD else ent.color;
         rl.drawSphere(render_pos, ent.radius, color);
         rl.drawSphereWires(render_pos, ent.radius, 8, 8, .black);
     }
 
     // Draw player (interpolated)
     const player_render_pos = player.*.getInterpolatedPosition(interpolation_alpha);
-    const player_color = if (player.*.is_dead) rl.Color.gray else player.*.color;
+    const player_color = if (player.*.is_dead) palette.TEAM.DEAD else player.*.color;
     rl.drawSphere(player_render_pos, player.*.radius, player_color);
     rl.drawSphereWires(player_render_pos, player.*.radius, 8, 8, .black);
 
@@ -63,7 +64,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
             if (tgt.isAlive()) {
                 // Draw selection ring around target (interpolated)
                 const target_render_pos = tgt.getInterpolatedPosition(interpolation_alpha);
-                rl.drawCylinder(target_render_pos, tgt.radius + 5, tgt.radius + 5, 2, 16, .yellow);
+                rl.drawCylinder(target_render_pos, tgt.radius + 5, tgt.radius + 5, 2, 16, palette.TEAM.SELECTION);
 
                 // Draw selection arrow above target
                 const arrow_pos = rl.Vector3{
@@ -71,7 +72,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
                     .y = target_render_pos.y + tgt.radius + 15,
                     .z = target_render_pos.z,
                 };
-                rl.drawCube(arrow_pos, 5, 5, 5, .yellow);
+                rl.drawCube(arrow_pos, 5, 5, 5, palette.TEAM.SELECTION);
             }
         }
     }

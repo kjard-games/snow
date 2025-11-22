@@ -1,6 +1,7 @@
 const std = @import("std");
 const rl = @import("raylib");
 const entity_types = @import("entity.zig");
+const palette = @import("color_palette.zig");
 
 const EntityId = entity_types.EntityId;
 
@@ -288,15 +289,15 @@ pub const VFXManager = struct {
             var text_buffer: [32]u8 = undefined;
             const text = switch (num.effect_type) {
                 .damage => blk: {
-                    color = rl.Color.red;
+                    color = palette.VFX.DAMAGE_TEXT;
                     break :blk std.fmt.bufPrintZ(&text_buffer, "-{d:.0}", .{num.value}) catch "DMG";
                 },
                 .heal => blk: {
-                    color = rl.Color.lime;
+                    color = palette.VFX.HEAL_TEXT;
                     break :blk std.fmt.bufPrintZ(&text_buffer, "+{d:.0}", .{num.value}) catch "HEAL";
                 },
                 .miss => blk: {
-                    color = rl.Color.gray;
+                    color = palette.VFX.MISS_TEXT;
                     break :blk "MISS";
                 },
             };
@@ -309,10 +310,11 @@ pub const VFXManager = struct {
             const y: i32 = @as(i32, @intFromFloat(screen_pos.y));
 
             // Draw with outline for readability
-            rl.drawText(text, x - 1, y - 1, font_size, .black);
-            rl.drawText(text, x + 1, y - 1, font_size, .black);
-            rl.drawText(text, x - 1, y + 1, font_size, .black);
-            rl.drawText(text, x + 1, y + 1, font_size, .black);
+            const outline = palette.VFX.TEXT_OUTLINE;
+            rl.drawText(text, x - 1, y - 1, font_size, outline);
+            rl.drawText(text, x + 1, y - 1, font_size, outline);
+            rl.drawText(text, x - 1, y + 1, font_size, outline);
+            rl.drawText(text, x + 1, y + 1, font_size, outline);
             rl.drawText(text, x, y, font_size, color);
         }
     }

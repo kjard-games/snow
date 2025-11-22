@@ -4,6 +4,7 @@ const character = @import("character.zig");
 const skills = @import("skills.zig");
 const entity_types = @import("entity.zig");
 const vfx = @import("vfx.zig");
+const palette = @import("color_palette.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
@@ -137,7 +138,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         }
 
         // Spawn projectile visual (skill is always "ranged" for now, instant travel)
-        const color = if (caster.is_enemy) rl.Color.red else rl.Color.sky_blue;
+        const color = if (caster.is_enemy) palette.VFX.PROJECTILE_ENEMY else palette.VFX.PROJECTILE_ALLY;
         vfx_manager.spawnProjectile(caster.position, tgt.position, caster.id, tgt.id, true, color);
 
         // Deal damage

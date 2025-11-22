@@ -4,6 +4,7 @@ const character = @import("character.zig");
 const input = @import("input.zig");
 const entity_types = @import("entity.zig");
 const skill_icons = @import("skill_icons.zig");
+const palette = @import("color_palette.zig");
 
 const Character = character.Character;
 const InputState = input.InputState;
@@ -27,8 +28,8 @@ fn drawSkillTooltip(skill: character.Skill, player_position: character.Position,
     const card_height_i = toI32(card_height);
 
     // Card background (dark with border)
-    rl.drawRectangle(xi, yi, card_width_i, card_height_i, rl.Color{ .r = 20, .g = 20, .b = 25, .a = 250 });
-    rl.drawRectangleLines(xi, yi, card_width_i, card_height_i, rl.Color{ .r = 200, .g = 180, .b = 100, .a = 255 });
+    rl.drawRectangle(xi, yi, card_width_i, card_height_i, palette.UI.BACKGROUND);
+    rl.drawRectangleLines(xi, yi, card_width_i, card_height_i, palette.UI.BORDER);
 
     var current_y = y + padding;
 
@@ -41,19 +42,19 @@ fn drawSkillTooltip(skill: character.Skill, player_position: character.Position,
 
     // Recharge glyph (clock icon with number)
     const recharge_sec = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
-    drawCostGlyph(glyph_x, current_y, glyph_size, rl.Color{ .r = 100, .g = 100, .b = 255, .a = 255 }, recharge_sec);
+    drawCostGlyph(glyph_x, current_y, glyph_size, palette.COST.RECHARGE, recharge_sec);
     glyph_x -= glyph_size + 4;
 
     // Activation glyph (hourglass with number) - only if not instant
     if (skill.activation_time_ms > 0) {
         const activation_sec = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
-        drawCostGlyph(glyph_x, current_y, glyph_size, rl.Color{ .r = 255, .g = 200, .b = 100, .a = 255 }, activation_sec);
+        drawCostGlyph(glyph_x, current_y, glyph_size, palette.COST.ACTIVATION, activation_sec);
         glyph_x -= glyph_size + 4;
     }
 
     // Energy glyph (lightning bolt with number)
     if (skill.energy_cost > 0) {
-        drawCostGlyph(glyph_x, current_y, glyph_size, rl.Color{ .r = 100, .g = 200, .b = 255, .a = 255 }, @as(f32, @floatFromInt(skill.energy_cost)));
+        drawCostGlyph(glyph_x, current_y, glyph_size, palette.COST.ENERGY, @as(f32, @floatFromInt(skill.energy_cost)));
     }
 
     current_y += 28;
@@ -68,11 +69,11 @@ fn drawSkillTooltip(skill: character.Skill, player_position: character.Position,
     const type_name = @tagName(skill.skill_type);
     const type_text_width = rl.measureText(type_name, 12);
     const type_x = x + (card_width - @as(f32, @floatFromInt(type_text_width))) / 2.0;
-    rl.drawText(type_name, toI32(type_x), toI32(current_y), 12, rl.Color{ .r = 180, .g = 180, .b = 180, .a = 255 });
+    rl.drawText(type_name, toI32(type_x), toI32(current_y), 12, palette.UI.TEXT_SECONDARY);
     current_y += 18;
 
     // Separator line
-    rl.drawLine(toI32(x + padding), toI32(current_y), toI32(x + card_width - padding), toI32(current_y), rl.Color{ .r = 100, .g = 100, .b = 100, .a = 255 });
+    rl.drawLine(toI32(x + padding), toI32(current_y), toI32(x + card_width - padding), toI32(current_y), palette.UI.SEPARATOR_LINE);
     current_y += 8;
 
     // DESCRIPTION / ORACLE TEXT (word-wrapped, multiple lines)
@@ -88,10 +89,10 @@ fn drawSkillTooltip(skill: character.Skill, player_position: character.Position,
 
     if (skill.description.len > 0) {
         const text_width = card_width - (padding * 2);
-        drawWrappedText(skill.description, x + padding, current_y, text_width, 11, rl.Color{ .r = 220, .g = 220, .b = 220, .a = 255 });
+        drawWrappedText(skill.description, x + padding, current_y, text_width, 11, palette.UI.TEXT_PRIMARY);
     } else {
         // Fallback: show basic stats if no description
-        rl.drawText("(No description available)", toI32(x + padding), toI32(current_y), 10, rl.Color{ .r = 150, .g = 150, .b = 150, .a = 255 });
+        rl.drawText("(No description available)", toI32(x + padding), toI32(current_y), 10, palette.UI.TEXT_DISABLED);
     }
 }
 
@@ -103,7 +104,7 @@ fn drawCostGlyph(x: f32, y: f32, size: f32, color: rl.Color, value: f32) void {
 
     // Draw circle background
     rl.drawCircle(toI32(center_x), toI32(center_y), radius, color);
-    rl.drawCircleLines(toI32(center_x), toI32(center_y), radius, .white);
+    rl.drawCircleLines(toI32(center_x), toI32(center_y), radius, palette.COST.GLYPH_BORDER);
 
     // Draw number (centered)
     var value_buf: [16]u8 = undefined;
@@ -115,7 +116,7 @@ fn drawCostGlyph(x: f32, y: f32, size: f32, color: rl.Color, value: f32) void {
     const text_width = rl.measureText(value_text, 12);
     const text_x = center_x - @as(f32, @floatFromInt(text_width)) / 2.0;
     const text_y = center_y - 6;
-    rl.drawText(value_text, toI32(text_x), toI32(text_y), 12, .black);
+    rl.drawText(value_text, toI32(text_x), toI32(text_y), 12, palette.COST.GLYPH_TEXT);
 }
 
 // Draw word-wrapped text (simple implementation for skill descriptions)
@@ -270,20 +271,20 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
 
     // Draw skill slot background
     const bg_color = if (player.skill_cooldowns[index] > 0)
-        rl.Color{ .r = 40, .g = 40, .b = 40, .a = 200 }
+        palette.UI.SKILL_SLOT_COOLDOWN
     else
-        rl.Color{ .r = 0, .g = 0, .b = 0, .a = 100 };
+        palette.UI.SKILL_SLOT_READY;
     rl.drawRectangle(xi, yi, sizei, sizei, bg_color);
 
     // Draw border - highlight if currently casting this skill OR if inspected
     const is_casting_this = player.cast_state == .activating and player.casting_skill_index == index;
     const is_inspected = if (input_state.inspected_skill_index) |idx| idx == index else false;
     const final_border = if (is_casting_this)
-        rl.Color.orange
+        palette.UI.BORDER_ACTIVE
     else if (is_inspected or is_hovered)
-        rl.Color.yellow
+        palette.UI.BORDER_HOVER
     else
-        rl.Color.white;
+        palette.UI.TEXT_PRIMARY;
     rl.drawRectangleLines(xi, yi, sizei, sizei, final_border);
 
     // Draw skill icon (centered in slot) if available
@@ -304,7 +305,7 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
             const overlay_height = size * cooldown_progress;
 
             // Dark overlay showing cooldown progress (drains from top)
-            rl.drawRectangle(xi, toI32(y + (size - overlay_height)), sizei, toI32(overlay_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 180 });
+            rl.drawRectangle(xi, toI32(y + (size - overlay_height)), sizei, toI32(overlay_height), palette.UI.COOLDOWN_OVERLAY);
         }
     }
 }
@@ -326,7 +327,7 @@ fn drawWarmthOrb(player: *const Character, x: f32, y: f32, width: f32, height: f
 
     // Draw filled circle portion (bottom to top)
     // We'll draw the circle in red, then cover the top unfilled portion with black
-    const health_color = rl.Color{ .r = 200, .g = 0, .b = 0, .a = 255 }; // Red
+    const health_color = palette.UI.HEALTH_BAR;
 
     // Draw full circle
     rl.drawCircle(center_xi, center_yi, radius - 2, health_color);
@@ -335,7 +336,7 @@ fn drawWarmthOrb(player: *const Character, x: f32, y: f32, width: f32, height: f
     if (fill_percent < 1.0) {
         const empty_height = (1.0 - fill_percent) * (radius * 2.0);
         const rect_y = center_y - radius;
-        rl.drawRectangle(toI32(center_x - radius), toI32(rect_y), toI32(radius * 2.0), toI32(empty_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 255 });
+        rl.drawRectangle(toI32(center_x - radius), toI32(rect_y), toI32(radius * 2.0), toI32(empty_height), palette.UI.EMPTY_BAR_BG);
     }
 
     // Redraw border to clean up edges
@@ -367,7 +368,7 @@ fn drawEnergyBar(player: *const Character, x: f32, y: f32, width: f32, height: f
     const fill_width = (width - 4) * fill_percent;
 
     // Draw energy fill (blue)
-    rl.drawRectangle(xi + 2, yi + 2, toI32(fill_width), heighti - 4, rl.Color{ .r = 0, .g = 100, .b = 255, .a = 255 });
+    rl.drawRectangle(xi + 2, yi + 2, toI32(fill_width), heighti - 4, palette.UI.ENERGY_BAR);
 
     // Draw energy text
     var energy_buf: [32]u8 = undefined;
@@ -392,8 +393,8 @@ fn drawConditionIcons(player: *const Character, x: f32, y: f32, icon_size: f32, 
             const buff_xi = toI32(buff_x);
 
             // Draw buff icon background
-            rl.drawRectangle(buff_xi, yi, sizei, sizei, rl.Color{ .r = 0, .g = 100, .b = 0, .a = 200 });
-            rl.drawRectangleLines(buff_xi, yi, sizei, sizei, .green);
+            rl.drawRectangle(buff_xi, yi, sizei, sizei, palette.UI.BUFF_BG);
+            rl.drawRectangleLines(buff_xi, yi, sizei, sizei, palette.UI.BUFF_BORDER);
 
             // Draw first letter of buff name
             const name = @tagName(cozy.cozy);
@@ -422,8 +423,8 @@ fn drawConditionIcons(player: *const Character, x: f32, y: f32, icon_size: f32, 
             const debuff_xi = toI32(debuff_x);
 
             // Draw debuff icon background
-            rl.drawRectangle(debuff_xi, debuff_yi, sizei, sizei, rl.Color{ .r = 100, .g = 0, .b = 0, .a = 200 });
-            rl.drawRectangleLines(debuff_xi, debuff_yi, sizei, sizei, .red);
+            rl.drawRectangle(debuff_xi, debuff_yi, sizei, sizei, palette.UI.DEBUFF_BG);
+            rl.drawRectangleLines(debuff_xi, debuff_yi, sizei, sizei, palette.UI.DEBUFF_BORDER);
 
             // Draw first letter of debuff name
             const name = @tagName(chill.chill);

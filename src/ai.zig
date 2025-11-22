@@ -17,6 +17,30 @@ const Position = position.Position;
 const print = std.debug.print;
 
 // ============================================================================
+// AI CONFIGURATION CONSTANTS
+// ============================================================================
+
+/// Formation positioning thresholds (in game units)
+pub const FORMATION = struct {
+    pub const FRONTLINE_RANGE: f32 = 200.0; // Distance from enemy center to be considered frontline
+    pub const SAFE_DISTANCE: f32 = 180.0; // Safe distance for backline from enemy center
+    pub const DANGER_DISTANCE: f32 = 120.0; // Backline retreat threshold
+    pub const SPREAD_RADIUS: f32 = 40.0; // Begin spreading when ally is this close
+    pub const COMFORT_ZONE: f32 = 20.0; // Range tolerance for positioning
+};
+
+/// Threat detection thresholds
+pub const THREAT = struct {
+    pub const CLOSE_RANGE: f32 = 150.0; // Enemy within this range is threatening
+};
+
+/// Healing priorities
+pub const HEALING = struct {
+    pub const CRITICAL_THRESHOLD: f32 = 0.4; // Below 40% health = critical
+    pub const LOW_THRESHOLD: f32 = 0.6; // Below 60% health = needs healing
+};
+
+// ============================================================================
 // BEHAVIOR TREE STRUCTURE
 // ============================================================================
 
@@ -95,8 +119,8 @@ fn calculateFormationAnchors(allies: []*Character, enemies: []*Character, allies
         const dist_to_enemy = @sqrt((ally.position.x - anchors.enemy_center.x) * (ally.position.x - anchors.enemy_center.x) +
             (ally.position.z - anchors.enemy_center.z) * (ally.position.z - anchors.enemy_center.z));
 
-        // Frontline = within 200 units of enemy center
-        if (dist_to_enemy < 200.0) {
+        // Frontline = within formation range of enemy center
+        if (dist_to_enemy < FORMATION.FRONTLINE_RANGE) {
             anchors.ally_frontline_center.x += ally.position.x;
             anchors.ally_frontline_center.z += ally.position.z;
             frontline_count += 1;
@@ -117,8 +141,8 @@ fn calculateFormationAnchors(allies: []*Character, enemies: []*Character, allies
         const dist_to_enemy = @sqrt((ally.position.x - anchors.enemy_center.x) * (ally.position.x - anchors.enemy_center.x) +
             (ally.position.z - anchors.enemy_center.z) * (ally.position.z - anchors.enemy_center.z));
 
-        // Backline = beyond 200 units from enemy center
-        if (dist_to_enemy >= 200.0) {
+        // Backline = beyond formation range from enemy center
+        if (dist_to_enemy >= FORMATION.FRONTLINE_RANGE) {
             anchors.ally_backline_center.x += ally.position.x;
             anchors.ally_backline_center.z += ally.position.z;
             backline_count += 1;
@@ -146,10 +170,10 @@ fn calculateFormationAnchors(allies: []*Character, enemies: []*Character, allies
 
 // Threat assessment - who is being targeted by whom?
 pub fn isUnderThreat(self: *const Character, enemies: []const *Character, enemies_count: usize) bool {
-    // Check if any enemy is close (within 150 units) - basic threat detection
+    // Check if any enemy is close - basic threat detection
     for (enemies[0..enemies_count]) |enemy| {
         const dist = self.distanceTo(enemy.*);
-        if (dist < 150.0) return true;
+        if (dist < THREAT.CLOSE_RANGE) return true;
     }
     return false;
 }
@@ -178,7 +202,7 @@ pub fn findClosestAllyInRole(self: *const Character, allies: []const *Character,
 // Calculate spreading force to avoid clumping (repulsion from nearby allies)
 pub fn calculateSpreadingForce(self: *const Character, allies: []const *Character, allies_count: usize) rl.Vector3 {
     var spread_force = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
-    const spread_radius: f32 = 40.0; // Start spreading if ally within this distance
+    const spread_radius = FORMATION.SPREAD_RADIUS;
 
     for (allies[0..allies_count]) |ally| {
         if (ally.id == self.id) continue; // Skip self
@@ -282,11 +306,11 @@ pub const Conditions = struct {
         return if (ctx.target.?.cast_state == .activating) .success else .failure;
     }
 
-    // Check if any ally needs healing (below 60% warmth)
+    // Check if any ally needs healing (below healing threshold)
     pub fn allyNeedsHealing(ctx: *BehaviorContext) NodeStatus {
         for (ctx.allies[0..ctx.allies_count]) |ally| {
             const health_pct = ally.warmth / ally.max_warmth;
-            if (health_pct < 0.6) return .success;
+            if (health_pct < HEALING.LOW_THRESHOLD) return .success;
         }
         return .failure;
     }
@@ -299,7 +323,7 @@ pub const Conditions = struct {
     // Check if self is under threat (low health or being targeted)
     pub fn underThreat(ctx: *BehaviorContext) NodeStatus {
         const health_pct = ctx.self.warmth / ctx.self.max_warmth;
-        return if (health_pct < 0.4) .success else .failure;
+        return if (health_pct < HEALING.CRITICAL_THRESHOLD) .success else .failure;
     }
 };
 
