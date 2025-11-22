@@ -407,6 +407,7 @@ pub const GameState = struct {
             ent.updateCooldowns(TICK_RATE_SEC);
             ent.updateConditions(TICK_RATE_MS);
             ent.updateWarmth(TICK_RATE_SEC); // Warmth regen/degen from pips
+            ent.updateDamageMonitor(TICK_RATE_SEC); // Update damage monitor timers
         }
 
         // Handle input and AI (only if combat is active)

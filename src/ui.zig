@@ -160,14 +160,8 @@ fn drawWrappedText(text: [:0]const u8, x: f32, y: f32, max_width: f32, font_size
 pub fn drawUI(player: *const Character, entities: []const Character, selected_target: ?EntityId, input_state: *InputState, camera: rl.Camera) void {
     _ = camera; // Suppress unused parameter warning
 
-    // Debug info
-    const shift_text = if (input_state.shift_held) "Shift Held: true" else "Shift Held: false";
-    rl.drawText(shift_text, 10, 10, 16, .yellow);
-
-    // Action Camera indicator
+    // Action Camera reticle (keep this - it's functional, not debug)
     if (input_state.action_camera) {
-        rl.drawText("ACTION CAMERA", 10, 30, 16, .orange);
-        // Draw center reticle
         const screen_width = rl.getScreenWidth();
         const screen_height = rl.getScreenHeight();
         const center_x = @divTrunc(screen_width, 2);
@@ -179,13 +173,7 @@ pub fn drawUI(player: *const Character, entities: []const Character, selected_ta
         rl.drawCircleLines(center_x, center_y, 5, .white);
     }
 
-    if (selected_target) |_| {
-        rl.drawText("Target: some", 10, 50, 16, .sky_blue);
-    } else {
-        rl.drawText("Target: null", 10, 50, 16, .sky_blue);
-    }
-
-    // Draw current target info
+    // Draw target frame
     if (selected_target) |target_id| {
         // Find target by ID
         var target: ?Character = null;
@@ -201,58 +189,22 @@ pub fn drawUI(player: *const Character, entities: []const Character, selected_ta
         }
 
         if (target) |tgt| {
-            rl.drawText("Current Target:", 10, 70, 18, .white);
-            // TODO: Fix target.name drawing - string issue
-            rl.drawText("Target Name", 10, 90, 16, tgt.color);
-
-            const target_type_text = if (tgt.is_enemy) "Enemy" else "Ally";
-            rl.drawText(target_type_text, 10, 110, 14, .light_gray);
-
-            var warmth_buf: [64]u8 = undefined;
-            const warmth_text = std.fmt.bufPrintZ(
-                &warmth_buf,
-                "Warmth: {d:.1}/{d:.1}",
-                .{ tgt.warmth, tgt.max_warmth },
-            ) catch unreachable; // Buffer is large enough
-            rl.drawText(warmth_text, 10, 130, 14, .light_gray);
-
-            var energy_buf: [64]u8 = undefined;
-            const energy_text = std.fmt.bufPrintZ(
-                &energy_buf,
-                "Energy: {d}/{d}",
-                .{ tgt.energy, tgt.max_energy },
-            ) catch unreachable; // Buffer is large enough
-            rl.drawText(energy_text, 10, 150, 14, .light_gray);
+            drawTargetFrame(&tgt, 10, 10);
         }
     }
 
+    // Draw party frames for all allies
+    drawPartyFrames(entities, 10, 120);
+
+    // Draw damage monitor (left side, below party frames)
+    drawDamageMonitor(player, 10, 350);
+
+    // Draw effects monitor (above skill bar - player's buffs/debuffs with sources)
+    const screen_height = rl.getScreenHeight();
+    drawEffectsMonitor(player, 400, @as(f32, @floatFromInt(screen_height)) - 200, input_state, selected_target);
+
     // Draw skill bar (and detect mouse hover)
     drawSkillBar(player, input_state);
-
-    // Draw secondary info (bottom right)
-    const secondary_x = rl.getScreenWidth() - 200;
-    const secondary_y = rl.getScreenHeight() - 100;
-
-    // Draw player info
-    var energy_buf: [64]u8 = undefined;
-    const energy_text = std.fmt.bufPrintZ(
-        &energy_buf,
-        "Energy: {d}/{d}",
-        .{ player.energy, player.max_energy },
-    ) catch unreachable; // Buffer is large enough
-    rl.drawText(energy_text, secondary_x, secondary_y, 16, .red);
-
-    var warmth_buf: [64]u8 = undefined;
-    const warmth_text = std.fmt.bufPrintZ(
-        &warmth_buf,
-        "Warmth: {d:.1}/{d:.1}",
-        .{ player.warmth, player.max_warmth },
-    ) catch unreachable; // Buffer is large enough
-    rl.drawText(warmth_text, secondary_x, secondary_y + 20, 16, .orange);
-
-    // Draw school info
-    const school_name = @tagName(player.school);
-    rl.drawText(school_name, secondary_x, secondary_y + 40, 12, .light_gray);
 }
 
 fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f32, input_state: *InputState) void {
@@ -380,6 +332,434 @@ fn drawEnergyBar(player: *const Character, x: f32, y: f32, width: f32, height: f
 
     const text_width = rl.measureText(energy_text, 10);
     rl.drawText(energy_text, toI32(x + width / 2.0) - @divTrunc(text_width, 2), yi + 2, 10, .white);
+}
+
+// Draw a proper MMO-style target frame
+fn drawTargetFrame(target: *const Character, x: f32, y: f32) void {
+    const frame_width: f32 = 280;
+    const frame_height: f32 = 110;
+    const padding: f32 = 8;
+
+    const xi = toI32(x);
+    const yi = toI32(y);
+    const frame_width_i = toI32(frame_width);
+    const frame_height_i = toI32(frame_height);
+
+    // Frame background
+    rl.drawRectangle(xi, yi, frame_width_i, frame_height_i, palette.UI.BACKGROUND);
+    rl.drawRectangleLines(xi, yi, frame_width_i, frame_height_i, palette.UI.BORDER);
+
+    var current_y = y + padding;
+
+    // Target name (use target color)
+    rl.drawText(target.name, toI32(x + padding), toI32(current_y), 14, target.color);
+
+    // Target type indicator
+    const type_x = x + padding + @as(f32, @floatFromInt(rl.measureText(target.name, 14))) + 8;
+    const type_text = if (target.is_enemy) "Enemy" else "Ally";
+    const type_color = if (target.is_enemy) palette.UI.TEXT_SECONDARY else rl.Color.green;
+    rl.drawText(type_text, toI32(type_x), toI32(current_y), 12, type_color);
+
+    current_y += 20;
+
+    // Warmth bar (health)
+    const bar_width = frame_width - (padding * 2);
+    const bar_height: f32 = 16;
+    drawHealthBar(target.warmth, target.max_warmth, x + padding, current_y, bar_width, bar_height);
+    current_y += bar_height + 4;
+
+    // Energy bar
+    drawResourceBar(@as(f32, @floatFromInt(target.energy)), @as(f32, @floatFromInt(target.max_energy)), x + padding, current_y, bar_width, 12, palette.UI.ENERGY_BAR);
+    current_y += 12 + 4;
+
+    // Cast bar (if casting) - GW1 style skill monitor
+    if (target.cast_state == .activating) {
+        const casting_skill = target.skill_bar[target.casting_skill_index];
+        if (casting_skill) |skill| {
+            // Skill icon on left
+            const icon_size: f32 = 24;
+            skill_icons.drawSkillIcon(x + padding, current_y, icon_size, skill, target.school, target.player_position, true);
+
+            // Cast bar next to icon
+            const cast_bar_x = x + padding + icon_size + 4;
+            const cast_bar_width = bar_width - icon_size - 4;
+            const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
+            const progress = 1.0 - (target.cast_time_remaining / cast_time_total);
+
+            const cast_bar_xi = toI32(cast_bar_x);
+            const cast_bar_yi = toI32(current_y + 4);
+
+            // Border
+            rl.drawRectangleLines(cast_bar_xi, cast_bar_yi, toI32(cast_bar_width), 16, palette.UI.BORDER);
+            // Fill (green for activation)
+            rl.drawRectangle(cast_bar_xi + 1, cast_bar_yi + 1, toI32((cast_bar_width - 2) * progress), 14, rl.Color.lime);
+
+            // Skill name
+            rl.drawText(skill.name, cast_bar_xi + 2, cast_bar_yi + 2, 10, .white);
+
+            current_y += icon_size + 4;
+        }
+    } else {
+        // Just show buffs/debuffs if not casting
+        const icon_size: f32 = 16;
+        const icon_spacing: f32 = 2;
+        drawCompactConditions(target, x + padding, current_y, icon_size, icon_spacing);
+    }
+}
+
+// Draw party frames for all allies (compact version showing health, name, school/position, conditions)
+fn drawPartyFrames(entities: []const Character, x: f32, y: f32) void {
+    const frame_width: f32 = 200;
+    const frame_height: f32 = 50;
+    const frame_spacing: f32 = 4;
+    const padding: f32 = 5;
+
+    var current_y = y;
+
+    // Show all allies (first 4 entities are the ally team)
+    for (entities[0..4]) |ally| {
+        if (!ally.isAlive()) {
+            current_y += frame_height + frame_spacing;
+            continue;
+        }
+
+        const xi = toI32(x);
+        const yi = toI32(current_y);
+        const frame_width_i = toI32(frame_width);
+        const frame_height_i = toI32(frame_height);
+
+        // Frame background
+        rl.drawRectangle(xi, yi, frame_width_i, frame_height_i, palette.UI.BACKGROUND);
+        rl.drawRectangleLines(xi, yi, frame_width_i, frame_height_i, palette.UI.BORDER);
+
+        var text_y = current_y + padding;
+
+        // Name, abbreviated school/position
+        rl.drawText(ally.name, toI32(x + padding), toI32(text_y), 11, ally.color);
+
+        // Abbreviated school (first 3 letters) and position (first 3 letters)
+        const school_name = @tagName(ally.school);
+        const pos_name = @tagName(ally.player_position);
+        var build_buf: [16]u8 = undefined;
+        const build_text = std.fmt.bufPrintZ(
+            &build_buf,
+            "{s}/{s}",
+            .{ school_name[0..@min(3, school_name.len)], pos_name[0..@min(3, pos_name.len)] },
+        ) catch unreachable;
+
+        const build_x = x + padding + @as(f32, @floatFromInt(rl.measureText(ally.name, 11))) + 6;
+        rl.drawText(build_text, toI32(build_x), toI32(text_y), 9, palette.UI.TEXT_SECONDARY);
+
+        text_y += 14;
+
+        // Health bar
+        const bar_width = frame_width - (padding * 2);
+        const bar_height: f32 = 12;
+        drawHealthBar(ally.warmth, ally.max_warmth, x + padding, text_y, bar_width, bar_height);
+        text_y += bar_height + 3;
+
+        // Compact conditions (single row)
+        const icon_size: f32 = 14;
+        const icon_spacing: f32 = 2;
+        drawCompactConditions(&ally, x + padding, text_y, icon_size, icon_spacing);
+
+        current_y += frame_height + frame_spacing;
+    }
+}
+
+// Draw school-specific secondary mechanic
+fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void {
+    const yi = toI32(y);
+
+    switch (player.school) {
+        .public_school => {
+            // Grit stacks (0-5) - show as filled circles
+            const grit_text = "Grit:";
+            rl.drawText(grit_text, toI32(x), yi, 9, palette.UI.TEXT_PRIMARY);
+
+            const circle_size: f32 = 8;
+            const circle_spacing: f32 = 3;
+            var circle_x = x + @as(f32, @floatFromInt(rl.measureText(grit_text, 9))) + 4;
+
+            for (0..player.max_grit_stacks) |i| {
+                const is_filled = i < player.grit_stacks;
+                const color = if (is_filled) rl.Color.gold else palette.UI.EMPTY_BAR_BG;
+                rl.drawCircle(toI32(circle_x + circle_size / 2), yi + 5, circle_size / 2, color);
+                rl.drawCircleLines(toI32(circle_x + circle_size / 2), yi + 5, circle_size / 2, palette.UI.BORDER);
+                circle_x += circle_size + circle_spacing;
+            }
+        },
+        .waldorf => {
+            // Rhythm charge (0-10) - show as bar with text
+            const rhythm_text = "Rhythm:";
+            rl.drawText(rhythm_text, toI32(x), yi, 9, palette.UI.TEXT_PRIMARY);
+
+            const bar_x = x + @as(f32, @floatFromInt(rl.measureText(rhythm_text, 9))) + 4;
+            const bar_width = width - (@as(f32, @floatFromInt(rl.measureText(rhythm_text, 9))) + 4);
+            drawResourceBar(@as(f32, @floatFromInt(player.rhythm_charge)), @as(f32, @floatFromInt(player.max_rhythm_charge)), bar_x, @as(f32, @floatFromInt(yi)), bar_width, 10, rl.Color.purple);
+        },
+        .montessori => {
+            // Variety bonus (0-50%) - show as percentage
+            const variety_percent = player.variety_bonus_damage * 100.0;
+            var text_buf: [32]u8 = undefined;
+            const text = std.fmt.bufPrintZ(
+                &text_buf,
+                "Variety: +{d:.0}%",
+                .{variety_percent},
+            ) catch unreachable;
+
+            const color = if (variety_percent > 0) rl.Color.lime else palette.UI.TEXT_SECONDARY;
+            rl.drawText(text, toI32(x), yi, 9, color);
+        },
+        .homeschool => {
+            // Sacrifice cooldown - show timer if on cooldown
+            if (player.sacrifice_cooldown > 0) {
+                var text_buf: [32]u8 = undefined;
+                const text = std.fmt.bufPrintZ(
+                    &text_buf,
+                    "Sacrifice: {d:.1}s",
+                    .{player.sacrifice_cooldown},
+                ) catch unreachable;
+                rl.drawText(text, toI32(x), yi, 9, rl.Color.orange);
+            } else {
+                rl.drawText("Sacrifice: Ready", toI32(x), yi, 9, rl.Color.green);
+            }
+        },
+        .private_school => {
+            // Private school has passive regen, just show a label
+            rl.drawText("Passive Regen", toI32(x), yi, 9, palette.UI.TEXT_SECONDARY);
+        },
+    }
+}
+
+// Helper: Draw health bar with text overlay
+fn drawHealthBar(current: f32, max: f32, x: f32, y: f32, width: f32, height: f32) void {
+    const xi = toI32(x);
+    const yi = toI32(y);
+    const widthi = toI32(width);
+    const heighti = toI32(height);
+
+    // Background
+    rl.drawRectangle(xi, yi, widthi, heighti, palette.UI.EMPTY_BAR_BG);
+
+    // Fill
+    const fill_percent = current / max;
+    const fill_width = (width - 2) * fill_percent;
+    rl.drawRectangle(xi + 1, yi + 1, toI32(fill_width), heighti - 2, palette.UI.HEALTH_BAR);
+
+    // Border
+    rl.drawRectangleLines(xi, yi, widthi, heighti, palette.UI.BORDER);
+
+    // Text (centered)
+    var text_buf: [32]u8 = undefined;
+    const text = std.fmt.bufPrintZ(
+        &text_buf,
+        "{d:.0}/{d:.0}",
+        .{ current, max },
+    ) catch unreachable;
+
+    const text_width = rl.measureText(text, 10);
+    rl.drawText(text, toI32(x + width / 2.0) - @divTrunc(text_width, 2), yi + 2, 10, .white);
+}
+
+// Helper: Draw resource bar (energy, etc) with text
+fn drawResourceBar(current: f32, max: f32, x: f32, y: f32, width: f32, height: f32, color: rl.Color) void {
+    const xi = toI32(x);
+    const yi = toI32(y);
+    const widthi = toI32(width);
+    const heighti = toI32(height);
+
+    // Background
+    rl.drawRectangle(xi, yi, widthi, heighti, palette.UI.EMPTY_BAR_BG);
+
+    // Fill
+    const fill_percent = current / max;
+    const fill_width = (width - 2) * fill_percent;
+    rl.drawRectangle(xi + 1, yi + 1, toI32(fill_width), heighti - 2, color);
+
+    // Border
+    rl.drawRectangleLines(xi, yi, widthi, heighti, palette.UI.BORDER);
+
+    // Text (centered)
+    var text_buf: [32]u8 = undefined;
+    const text = std.fmt.bufPrintZ(
+        &text_buf,
+        "{d:.0}/{d:.0}",
+        .{ current, max },
+    ) catch unreachable;
+
+    const text_width = rl.measureText(text, 8);
+    rl.drawText(text, toI32(x + width / 2.0) - @divTrunc(text_width, 2), yi + 1, 8, .white);
+}
+
+// Compact condition display (single row, for target/party frames)
+fn drawCompactConditions(char: *const Character, x: f32, y: f32, icon_size: f32, spacing: f32) void {
+    const yi = toI32(y);
+    const sizei = toI32(icon_size);
+
+    var current_x = x;
+
+    // Draw buffs (cozies)
+    for (char.active_cozies[0..char.active_cozy_count]) |maybe_cozy| {
+        if (maybe_cozy) |cozy| {
+            const xi = toI32(current_x);
+
+            // Draw buff icon background
+            rl.drawRectangle(xi, yi, sizei, sizei, palette.UI.BUFF_BG);
+            rl.drawRectangleLines(xi, yi, sizei, sizei, palette.UI.BUFF_BORDER);
+
+            // Draw first letter of buff name
+            const name = @tagName(cozy.cozy);
+            var letter_buf: [2]u8 = undefined;
+            letter_buf[0] = std.ascii.toUpper(name[0]);
+            letter_buf[1] = 0;
+            rl.drawText(@ptrCast(&letter_buf), xi + 3, yi + 2, 10, .white);
+
+            current_x += icon_size + spacing;
+        }
+    }
+
+    // Draw debuffs (chills)
+    for (char.active_chills[0..char.active_chill_count]) |maybe_chill| {
+        if (maybe_chill) |chill| {
+            const xi = toI32(current_x);
+
+            // Draw debuff icon background
+            rl.drawRectangle(xi, yi, sizei, sizei, palette.UI.DEBUFF_BG);
+            rl.drawRectangleLines(xi, yi, sizei, sizei, palette.UI.DEBUFF_BORDER);
+
+            // Draw first letter of debuff name
+            const name = @tagName(chill.chill);
+            var letter_buf: [2]u8 = undefined;
+            letter_buf[0] = std.ascii.toUpper(name[0]);
+            letter_buf[1] = 0;
+            rl.drawText(@ptrCast(&letter_buf), xi + 3, yi + 2, 10, .white);
+
+            current_x += icon_size + spacing;
+        }
+    }
+}
+
+// Draw damage monitor (GW1-style recent damage sources)
+fn drawDamageMonitor(player: *const Character, x: f32, y: f32) void {
+    if (player.damage_source_count == 0) return;
+
+    const frame_width: f32 = 200;
+    const icon_size: f32 = 32;
+    const spacing: f32 = 4;
+    const padding: f32 = 6;
+
+    const frame_height = @as(f32, @floatFromInt(player.damage_source_count)) * (icon_size + spacing) + (padding * 2);
+
+    const xi = toI32(x);
+    const yi = toI32(y);
+
+    // Frame background
+    rl.drawRectangle(xi, yi, toI32(frame_width), toI32(frame_height), palette.UI.BACKGROUND);
+    rl.drawRectangleLines(xi, yi, toI32(frame_width), toI32(frame_height), palette.UI.BORDER);
+
+    // Title
+    rl.drawText("Recent Damage", xi + toI32(padding), yi + toI32(padding), 10, palette.UI.TEXT_SECONDARY);
+
+    var current_y = y + padding + 14;
+
+    // Draw damage sources (most recent at bottom, like GW1)
+    for (player.damage_sources[0..player.damage_source_count]) |maybe_source| {
+        if (maybe_source) |source| {
+            const source_x = x + padding;
+
+            // Skill icon
+            if (source.skill_ptr) |skill| {
+                skill_icons.drawSkillIcon(source_x, current_y, icon_size, skill, player.school, player.player_position, true);
+            } else {
+                // Fallback: draw colored square
+                rl.drawRectangle(toI32(source_x), toI32(current_y), toI32(icon_size), toI32(icon_size), rl.Color.dark_gray);
+                rl.drawRectangleLines(toI32(source_x), toI32(current_y), toI32(icon_size), toI32(icon_size), .white);
+            }
+
+            // Skill name
+            rl.drawText(source.skill_name, toI32(source_x + icon_size + 4), toI32(current_y + 2), 10, .white);
+
+            // Hit count (like "x66" in GW1 image)
+            var count_buf: [16]u8 = undefined;
+            const count_text = std.fmt.bufPrintZ(&count_buf, "x{d}", .{source.hit_count}) catch unreachable;
+            rl.drawText(count_text, toI32(source_x + icon_size + 4), toI32(current_y + 14), 10, .yellow);
+
+            current_y += icon_size + spacing;
+        }
+    }
+
+    // "Frozen" indicator if dead
+    if (player.damage_monitor_frozen) {
+        rl.drawText("(Frozen)", xi + toI32(padding), toI32(y + frame_height - 14), 9, rl.Color.sky_blue);
+    }
+}
+
+// Draw effects monitor (player's buffs/debuffs above skill bar with sources - clickable)
+fn drawEffectsMonitor(player: *const Character, x: f32, y: f32, input_state: *InputState, selected_target: ?EntityId) void {
+    _ = input_state; // TODO: implement clicking
+    _ = selected_target; // TODO: implement targeting source
+
+    const icon_size: f32 = 28;
+    const spacing: f32 = 3;
+
+    var current_x = x;
+
+    // Draw buffs (cozies) with source info
+    for (player.active_cozies[0..player.active_cozy_count]) |maybe_cozy| {
+        if (maybe_cozy) |cozy| {
+            const xi = toI32(current_x);
+            const yi = toI32(y);
+            const sizei = toI32(icon_size);
+
+            // Background
+            rl.drawRectangle(xi, yi, sizei, sizei, palette.UI.BUFF_BG);
+            rl.drawRectangleLines(xi, yi, sizei, sizei, palette.UI.BUFF_BORDER);
+
+            // Icon letter
+            const name = @tagName(cozy.cozy);
+            var letter_buf: [2]u8 = undefined;
+            letter_buf[0] = std.ascii.toUpper(name[0]);
+            letter_buf[1] = 0;
+            rl.drawText(@ptrCast(&letter_buf), xi + 8, yi + 8, 12, .white);
+
+            // Time remaining (bar at bottom)
+            const seconds = cozy.time_remaining_ms / 1000;
+            var time_buf: [8]u8 = undefined;
+            const time_text = std.fmt.bufPrintZ(&time_buf, "{d}", .{seconds}) catch unreachable;
+            rl.drawText(time_text, xi + 2, toI32(y + icon_size - 10), 8, .white);
+
+            current_x += icon_size + spacing;
+        }
+    }
+
+    // Draw debuffs (chills)
+    for (player.active_chills[0..player.active_chill_count]) |maybe_chill| {
+        if (maybe_chill) |chill| {
+            const xi = toI32(current_x);
+            const yi = toI32(y);
+            const sizei = toI32(icon_size);
+
+            // Background
+            rl.drawRectangle(xi, yi, sizei, sizei, palette.UI.DEBUFF_BG);
+            rl.drawRectangleLines(xi, yi, sizei, sizei, palette.UI.DEBUFF_BORDER);
+
+            // Icon letter
+            const name = @tagName(chill.chill);
+            var letter_buf: [2]u8 = undefined;
+            letter_buf[0] = std.ascii.toUpper(name[0]);
+            letter_buf[1] = 0;
+            rl.drawText(@ptrCast(&letter_buf), xi + 8, yi + 8, 12, .white);
+
+            // Time remaining
+            const seconds = chill.time_remaining_ms / 1000;
+            var time_buf: [8]u8 = undefined;
+            const time_text = std.fmt.bufPrintZ(&time_buf, "{d}", .{seconds}) catch unreachable;
+            rl.drawText(time_text, xi + 2, toI32(y + icon_size - 10), 8, .white);
+
+            current_x += icon_size + spacing;
+        }
+    }
 }
 
 fn drawConditionIcons(player: *const Character, x: f32, y: f32, icon_size: f32, spacing: f32) void {

@@ -20,12 +20,22 @@ pub const MAX_ACTIVE_CONDITIONS: usize = 10;
 pub const MAX_RECENT_SKILLS: usize = 5;
 pub const MAX_GRIT_STACKS: u8 = 5;
 pub const MAX_RHYTHM_CHARGE: u8 = 10;
+pub const MAX_DAMAGE_SOURCES: usize = 6; // Track last 6 damage sources (GW1 damage monitor size)
 
 // Cast state for GW1-accurate skill timing
 pub const CastState = enum {
     idle, // Not casting or in aftercast
     activating, // Currently casting (activation phase)
     aftercast, // Skill fired, but locked in aftercast animation
+};
+
+// Damage source tracking (GW1 damage monitor)
+pub const DamageSource = struct {
+    skill_name: [:0]const u8,
+    skill_ptr: ?*const Skill, // For displaying icon
+    source_id: EntityId, // Who dealt the damage
+    hit_count: u32, // How many times this source hit us
+    time_since_last_hit: f32, // Fade out if not hit recently
 };
 
 // Compile-time safety: ensure MAX_SKILLS fits in u8 for skill indexing
@@ -116,6 +126,11 @@ pub const Character = struct {
     // Death state
     is_dead: bool = false,
 
+    // Damage monitor (GW1-style damage tracking)
+    damage_sources: [MAX_DAMAGE_SOURCES]?DamageSource = [_]?DamageSource{null} ** MAX_DAMAGE_SOURCES,
+    damage_source_count: u8 = 0,
+    damage_monitor_frozen: bool = false, // Freeze on death until resurrection
+
     // Warmth regeneration/degeneration system (GW1-style pips)
     warmth_regen_pips: i8 = 0, // -10 to +10 pips (like GW1 health regen/degen)
     warmth_pip_accumulator: f32 = 0.0, // Tracks fractional warmth for pip ticking
@@ -177,6 +192,7 @@ pub const Character = struct {
 
         if (self.warmth <= 0) {
             self.is_dead = true;
+            self.damage_monitor_frozen = true; // Freeze damage monitor on death (GW1 behavior)
             // Death interrupts casting
             if (self.cast_state != .idle) {
                 self.cancelCasting();
@@ -569,6 +585,73 @@ pub const Character = struct {
     /// Check if character has a queued skill
     pub fn hasQueuedSkill(self: Character) bool {
         return self.queued_skill_index != null;
+    }
+
+    // === DAMAGE MONITOR SYSTEM (Guild Wars style) ===
+
+    /// Record damage from a skill source (for damage monitor UI)
+    pub fn recordDamageSource(self: *Character, skill: *const Skill, source_id: EntityId) void {
+        if (self.damage_monitor_frozen) return; // Don't update if frozen (dead)
+
+        // Check if this source already exists
+        for (self.damage_sources[0..self.damage_source_count]) |*maybe_source| {
+            if (maybe_source.*) |*source| {
+                // Match by skill name and source
+                if (std.mem.eql(u8, source.skill_name, skill.name) and source.source_id == source_id) {
+                    source.hit_count += 1;
+                    source.time_since_last_hit = 0.0;
+                    return;
+                }
+            }
+        }
+
+        // Add new damage source if we have space
+        if (self.damage_source_count < self.damage_sources.len) {
+            self.damage_sources[self.damage_source_count] = DamageSource{
+                .skill_name = skill.name,
+                .skill_ptr = skill,
+                .source_id = source_id,
+                .hit_count = 1,
+                .time_since_last_hit = 0.0,
+            };
+            self.damage_source_count += 1;
+        } else {
+            // Replace oldest source (first in array)
+            for (1..self.damage_sources.len) |i| {
+                self.damage_sources[i - 1] = self.damage_sources[i];
+            }
+            self.damage_sources[self.damage_sources.len - 1] = DamageSource{
+                .skill_name = skill.name,
+                .skill_ptr = skill,
+                .source_id = source_id,
+                .hit_count = 1,
+                .time_since_last_hit = 0.0,
+            };
+        }
+    }
+
+    /// Update damage monitor timers (call every tick)
+    pub fn updateDamageMonitor(self: *Character, delta_time: f32) void {
+        if (self.damage_monitor_frozen) return;
+
+        var i: usize = 0;
+        while (i < self.damage_source_count) {
+            if (self.damage_sources[i]) |*source| {
+                source.time_since_last_hit += delta_time;
+
+                // Remove sources that haven't hit in 10 seconds
+                if (source.time_since_last_hit > 10.0) {
+                    // Shift remaining sources down
+                    for (i + 1..self.damage_source_count) |j| {
+                        self.damage_sources[j - 1] = self.damage_sources[j];
+                    }
+                    self.damage_sources[self.damage_source_count - 1] = null;
+                    self.damage_source_count -= 1;
+                    continue; // Don't increment i, check this slot again
+                }
+            }
+            i += 1;
+        }
     }
 
     // === AUTO-ATTACK SYSTEM (Guild Wars style) ===

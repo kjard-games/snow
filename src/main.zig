@@ -4,11 +4,17 @@ const game_state = @import("game_state.zig");
 const GameState = game_state.GameState;
 
 pub fn main() void {
-    const screenWidth = 800;
-    const screenHeight = 600;
+    const screenWidth = 1280;
+    const screenHeight = 720;
 
     rl.initWindow(screenWidth, screenHeight, "Snow - GW1-Style 3D Tab Targeting");
     defer rl.closeWindow();
+
+    // Enable window resizing and toggling fullscreen
+    rl.setWindowState(rl.ConfigFlags{ .window_resizable = true });
+
+    // Set minimum window size
+    rl.setWindowMinSize(800, 600);
 
     // Set target FPS to monitor refresh rate (or 60 if unavailable)
     const monitor_refresh = rl.getMonitorRefreshRate(0);
@@ -18,6 +24,11 @@ pub fn main() void {
     var state = GameState.init();
 
     while (!rl.windowShouldClose()) {
+        // Toggle fullscreen with F11
+        if (rl.isKeyPressed(rl.KeyboardKey.f11)) {
+            rl.toggleFullscreen();
+        }
+
         state.update();
 
         rl.beginDrawing();

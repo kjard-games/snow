@@ -145,6 +145,9 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         if (final_damage > 0) {
             tgt.takeDamage(final_damage);
 
+            // Record damage source for damage monitor
+            tgt.recordDamageSource(skill, caster.id);
+
             // Spawn damage number
             vfx_manager.spawnDamageNumber(final_damage, tgt.position, .damage);
 
