@@ -1,5 +1,8 @@
 const std = @import("std");
 const rl = @import("raylib");
+const entity = @import("entity.zig");
+
+const Team = entity.Team;
 
 // Terrain types for snow battle environment
 pub const TerrainType = enum {
@@ -100,6 +103,12 @@ pub const TerrainCell = struct {
     accumulation_timer: f32 = 0.0, // Time until next snow accumulation
     last_traffic_time: f32 = 0.0, // Time since last traffic (for restoration)
 
+    // Wall substrate layer - player-built structures
+    wall_height: f32 = 0.0, // Height of wall structure (0 = no wall)
+    wall_hp: f32 = 0.0, // Durability of wall (when 0, wall crumbles)
+    wall_age: f32 = 0.0, // Time since wall built (for decay/effects)
+    wall_team: Team = .none, // Which team built this wall
+
     pub fn applyTraffic(self: *TerrainCell, amount: f32) void {
         self.traffic_accumulator += amount;
         self.last_traffic_time = 0.0; // Reset idle timer when walked on
@@ -128,6 +137,65 @@ pub const TerrainCell = struct {
             self.accumulation_timer = 0.0;
             self.type = self.type.getAccumulatedType();
             self.snow_depth = @min(2.0, self.snow_depth + 0.05); // Slower depth increase
+        }
+    }
+
+    // Get total height of this cell (base + wall + snow)
+    pub fn getTotalHeight(self: TerrainCell, base_elevation: f32) f32 {
+        var height = base_elevation;
+        height += self.wall_height;
+        height += self.type.getSnowHeight() * self.snow_depth;
+        return height;
+    }
+
+    // Get movement speed multiplier (terrain + wall climbing penalty)
+    pub fn getMovementSpeedMultiplier(self: TerrainCell) f32 {
+        var speed = self.type.getMovementSpeedMultiplier();
+
+        // Major penalty for climbing walls
+        if (self.wall_height > 20.0) {
+            speed *= 0.2; // 80% slow while climbing tall walls
+        } else if (self.wall_height > 10.0) {
+            speed *= 0.5; // 50% slow for low walls
+        }
+
+        return speed;
+    }
+
+    // Update wall (erosion, decay)
+    pub fn updateWall(self: *TerrainCell, dt: f32) void {
+        if (self.wall_height <= 0.0) return; // No wall here
+
+        self.wall_age += dt;
+
+        // Walls naturally settle/erode slowly
+        const erosion_rate = 0.5; // units per second
+        self.wall_height = @max(0.0, self.wall_height - erosion_rate * dt);
+
+        // Wall completely eroded
+        if (self.wall_height <= 0.0) {
+            self.wall_hp = 0.0;
+            self.wall_age = 0.0;
+        }
+    }
+
+    // Damage the wall structure (from skills)
+    pub fn damageWall(self: *TerrainCell, damage: f32) void {
+        if (self.wall_height <= 0.0) return; // No wall to damage
+
+        self.wall_hp -= damage;
+
+        // Wall destroyed - crumbles significantly
+        if (self.wall_hp <= 0.0) {
+            self.wall_height = @max(0.0, self.wall_height * 0.3); // 70% reduction
+            self.wall_hp = self.wall_height * 10.0; // Rebuild HP if any height remains
+
+            if (self.wall_height < 5.0) {
+                // Completely destroyed
+                self.wall_height = 0.0;
+                self.wall_hp = 0.0;
+                self.wall_age = 0.0;
+            }
         }
     }
 };
@@ -312,17 +380,18 @@ pub const TerrainGrid = struct {
         }
     }
 
-    // Update all terrain (accumulation, melting, etc.)
+    // Update all terrain (accumulation, melting, walls, etc.)
     pub fn update(self: *TerrainGrid, dt: f32) void {
         for (self.cells) |*cell| {
             cell.updateAccumulation(dt, self.accumulation_rate);
+            cell.updateWall(dt);
         }
     }
 
     // Get terrain movement speed multiplier at world position
     pub fn getMovementSpeedAt(self: *const TerrainGrid, world_x: f32, world_z: f32) f32 {
         if (self.getCellAtConst(world_x, world_z)) |cell| {
-            return cell.type.getMovementSpeedMultiplier();
+            return cell.getMovementSpeedMultiplier();
         }
         return 1.0; // Default if out of bounds
     }
@@ -504,5 +573,176 @@ pub const TerrainGrid = struct {
     // Create ice in an area (for ice wall skills)
     pub fn createIceInRadius(self: *TerrainGrid, center_x: f32, center_z: f32, radius: f32) void {
         self.setTerrainInRadius(center_x, center_z, radius, .icy_ground);
+    }
+
+    // === WALL BUILDING API ===
+
+    /// Build a wall from point A to point B
+    /// Walls are substrate layer - composed with terrain
+    pub fn buildWall(
+        self: *TerrainGrid,
+        start_x: f32,
+        start_z: f32,
+        end_x: f32,
+        end_z: f32,
+        wall_height: f32,
+        wall_thickness: f32,
+        team: Team,
+    ) void {
+        // Walk along line from start to end
+        const dx = end_x - start_x;
+        const dz = end_z - start_z;
+        const length = @sqrt(dx * dx + dz * dz);
+        const steps = @as(usize, @intFromFloat(@ceil(length / (self.grid_size * 0.5))));
+
+        if (steps == 0) return;
+
+        // Normalized direction
+        const dir_x = dx / length;
+        const dir_z = dz / length;
+
+        // Perpendicular direction (for thickness)
+        const perp_x = -dir_z;
+        const perp_z = dir_x;
+
+        // For each step along the line
+        var i: usize = 0;
+        while (i <= steps) : (i += 1) {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(steps));
+            const center_x = start_x + dx * t;
+            const center_z = start_z + dz * t;
+
+            // For thickness, modify cells perpendicular to line
+            const thickness_steps = @as(usize, @intFromFloat(@ceil(wall_thickness / (self.grid_size * 0.5))));
+
+            var j: usize = 0;
+            while (j <= thickness_steps) : (j += 1) {
+                const offset = (@as(f32, @floatFromInt(j)) / @as(f32, @floatFromInt(@max(1, thickness_steps))) - 0.5) * wall_thickness;
+                const cell_x = center_x + perp_x * offset;
+                const cell_z = center_z + perp_z * offset;
+
+                if (self.getCellAt(cell_x, cell_z)) |cell| {
+                    // Set wall properties (additive - can stack walls)
+                    cell.wall_height = @max(cell.wall_height, wall_height);
+                    cell.wall_team = team;
+                    cell.wall_hp = wall_height * 10.0; // HP scales with height
+                    cell.wall_age = 0.0;
+
+                    // Reset snow on top (fresh wall surface)
+                    cell.type = .packed_snow; // Wall surface is packed
+                    cell.snow_depth = 0.5; // Minimal snow initially
+                    cell.last_traffic_time = 0.0; // Fresh surface
+                }
+            }
+        }
+    }
+
+    /// Build wall perpendicular to facing direction (for skills)
+    /// This is the main skill-casting interface
+    pub fn buildWallPerpendicular(
+        self: *TerrainGrid,
+        caster_x: f32,
+        caster_z: f32,
+        facing_angle: f32, // radians
+        distance_from_caster: f32,
+        wall_length: f32,
+        wall_height: f32,
+        wall_thickness: f32,
+        team: Team,
+    ) void {
+        // Position wall in front of caster
+        const wall_center_x = caster_x + @cos(facing_angle) * distance_from_caster;
+        const wall_center_z = caster_z + @sin(facing_angle) * distance_from_caster;
+
+        // Wall runs perpendicular to facing
+        const wall_angle = facing_angle + std.math.pi / 2.0;
+        const half_length = wall_length * 0.5;
+
+        const start_x = wall_center_x - @cos(wall_angle) * half_length;
+        const start_z = wall_center_z - @sin(wall_angle) * half_length;
+        const end_x = wall_center_x + @cos(wall_angle) * half_length;
+        const end_z = wall_center_z + @sin(wall_angle) * half_length;
+
+        self.buildWall(start_x, start_z, end_x, end_z, wall_height, wall_thickness, team);
+    }
+
+    /// Damage walls in an area (for wall-breaker skills)
+    pub fn damageWallsInRadius(
+        self: *TerrainGrid,
+        center_x: f32,
+        center_z: f32,
+        radius: f32,
+        damage: f32,
+    ) void {
+        const radius_sq = radius * radius;
+
+        const min_grid = self.worldToGrid(center_x - radius, center_z - radius);
+        const max_grid = self.worldToGrid(center_x + radius, center_z + radius);
+
+        if (min_grid == null or max_grid == null) return;
+
+        const min_gx = min_grid.?.x;
+        const min_gz = min_grid.?.z;
+        const max_gx = @min(max_grid.?.x + 1, self.width);
+        const max_gz = @min(max_grid.?.z + 1, self.height);
+
+        var gz = min_gz;
+        while (gz < max_gz) : (gz += 1) {
+            var gx = min_gx;
+            while (gx < max_gx) : (gx += 1) {
+                const cell_world_pos = self.gridToWorld(gx, gz);
+                const dx = cell_world_pos.x - center_x;
+                const dz = cell_world_pos.z - center_z;
+                const dist_sq = dx * dx + dz * dz;
+
+                if (dist_sq <= radius_sq) {
+                    const index = gz * self.width + gx;
+                    if (index < self.cells.len) {
+                        self.cells[index].damageWall(damage);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check if there's a wall between two points (for cover/LOS calculation)
+    pub fn hasWallBetween(
+        self: *const TerrainGrid,
+        from_x: f32,
+        from_z: f32,
+        to_x: f32,
+        to_z: f32,
+        min_wall_height: f32,
+    ) bool {
+        // Raycast along line, check for walls
+        const dx = to_x - from_x;
+        const dz = to_z - from_z;
+        const distance = @sqrt(dx * dx + dz * dz);
+        const steps = @as(usize, @intFromFloat(@ceil(distance / (self.grid_size * 0.5))));
+
+        if (steps == 0) return false;
+
+        var i: usize = 1; // Skip starting point
+        while (i < steps) : (i += 1) { // Skip ending point too
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(steps));
+            const check_x = from_x + dx * t;
+            const check_z = from_z + dz * t;
+
+            if (self.getCellAtConst(check_x, check_z)) |cell| {
+                if (cell.wall_height >= min_wall_height) {
+                    return true; // Wall blocking line
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// Get wall height at position (for rendering, collision, etc.)
+    pub fn getWallHeightAt(self: *const TerrainGrid, world_x: f32, world_z: f32) f32 {
+        if (self.getCellAtConst(world_x, world_z)) |cell| {
+            return cell.wall_height;
+        }
+        return 0.0;
     }
 };
