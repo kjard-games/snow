@@ -269,11 +269,49 @@ pub const GameState = struct {
             ent.energy = ent.school.getMaxEnergy();
             ent.max_energy = ent.school.getMaxEnergy();
 
-            // Load skills from position
-            const ent_skills = ent.player_position.getSkills();
-            const ent_skill_count = @min(ent_skills.len, character.MAX_SKILLS);
-            for (0..ent_skill_count) |skill_idx| {
-                ent.skill_bar[skill_idx] = &ent_skills[skill_idx];
+            // Load skills: First 4 from position, last 4 from generic pool
+            const position_skills = ent.player_position.getSkills();
+            const position_skill_count = @min(position_skills.len, 4);
+
+            // Slots 1-4: Position-specific skills
+            for (0..position_skill_count) |skill_idx| {
+                ent.skill_bar[skill_idx] = &position_skills[skill_idx];
+            }
+
+            // Slots 5-8: Generic/utility skills (from DEFAULT_SKILLS pool)
+            // We'll pick 4 random skills from the pool to add variety
+            const generic_skills = skills.DEFAULT_SKILLS;
+            var used_indices = [_]bool{false} ** skills.DEFAULT_SKILLS.len;
+
+            for (4..8) |slot_idx| {
+                // Pick a random unused skill
+                var attempts: u32 = 0;
+                while (attempts < 100) : (attempts += 1) {
+                    const random_idx = random.intRangeAtMost(usize, 0, generic_skills.len - 1);
+
+                    if (!used_indices[random_idx]) {
+                        // Check if this skill is already in position skills (no duplicates)
+                        var is_duplicate = false;
+                        for (0..position_skill_count) |pos_idx| {
+                            if (ent.skill_bar[pos_idx] == generic_skills[random_idx]) {
+                                is_duplicate = true;
+                                break;
+                            }
+                        }
+
+                        if (!is_duplicate) {
+                            ent.skill_bar[slot_idx] = generic_skills[random_idx];
+                            used_indices[random_idx] = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Count how many skills were loaded
+            var skill_count: usize = 0;
+            for (ent.skill_bar) |maybe_skill| {
+                if (maybe_skill != null) skill_count += 1;
             }
 
             print("#{d} {s}: {s}/{s} ({d} skills)\n", .{
@@ -281,7 +319,7 @@ pub const GameState = struct {
                 ent.name,
                 @tagName(ent.school),
                 @tagName(ent.player_position),
-                ent_skill_count,
+                skill_count,
             });
         }
 

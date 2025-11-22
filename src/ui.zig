@@ -3,6 +3,7 @@ const rl = @import("raylib");
 const character = @import("character.zig");
 const input = @import("input.zig");
 const entity_types = @import("entity.zig");
+const skill_icons = @import("skill_icons.zig");
 
 const Character = character.Character;
 const InputState = input.InputState;
@@ -128,35 +129,22 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
     const final_border = if (is_casting_this) rl.Color.orange else rl.Color.white;
     rl.drawRectangleLines(xi, yi, sizei, sizei, final_border);
 
-    // Draw skill number
-    var num_buf: [8]u8 = undefined;
-    const num_text = std.fmt.bufPrintZ(&num_buf, "{}", .{index + 1}) catch unreachable;
-    rl.drawText(num_text, xi + 2, yi + 2, 10, .white);
-
-    // Draw skill name if available
+    // Draw skill icon (centered in slot) if available
     if (player.skill_bar[index]) |skill| {
-        const name_color = if (player.skill_cooldowns[index] > 0) rl.Color.dark_gray else rl.Color.yellow;
-        rl.drawText(skill.name, xi + 2, yi + 25, 6, name_color);
+        const icon_size: f32 = size * 0.8; // Icon takes 80% of slot (larger now, no text)
+        const icon_x = x + (size - icon_size) / 2.0;
+        const icon_y = y + (size - icon_size) / 2.0;
+        skill_icons.drawSkillIcon(icon_x, icon_y, icon_size, skill, player.school, player.player_position);
 
-        // Draw cooldown overlay
+        // Draw cooldown overlay (visual only, no text)
         if (player.skill_cooldowns[index] > 0) {
             const cooldown_total = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
             const cooldown_progress = player.skill_cooldowns[index] / cooldown_total;
             const overlay_height = size * cooldown_progress;
 
-            rl.drawRectangle(xi, toI32(y + (size - overlay_height)), sizei, toI32(overlay_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 150 });
-
-            // Draw cooldown time
-            var cd_buf: [16]u8 = undefined;
-            const cd_text = std.fmt.bufPrintZ(&cd_buf, "{d:.1}", .{player.skill_cooldowns[index]}) catch unreachable;
-            rl.drawText(cd_text, xi + 10, yi + 15, 12, .red);
+            // Dark overlay showing cooldown progress (drains from top)
+            rl.drawRectangle(xi, toI32(y + (size - overlay_height)), sizei, toI32(overlay_height), rl.Color{ .r = 0, .g = 0, .b = 0, .a = 180 });
         }
-
-        // Draw energy cost
-        var cost_buf: [8]u8 = undefined;
-        const cost_text = std.fmt.bufPrintZ(&cost_buf, "{d}", .{skill.energy_cost}) catch unreachable;
-        const cost_color = if (player.energy >= skill.energy_cost) rl.Color.sky_blue else rl.Color.red;
-        rl.drawText(cost_text, xi + sizei - 15, yi + 2, 10, cost_color);
     }
 }
 
