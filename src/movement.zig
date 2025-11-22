@@ -101,6 +101,16 @@ pub fn applyMovement(
     entity.position.x = new_x;
     entity.position.z = new_z;
 
+    // Check collision with boundary walls (massive snowdrifts)
+    if (terrain_grid) |grid| {
+        if (grid.isBlocked(new_x, new_z)) {
+            // Hit boundary wall - revert to old position
+            entity.position.x = old_x;
+            entity.position.z = old_z;
+            return; // Can't move into walls
+        }
+    }
+
     // Check collisions with all other entities
     var has_collision = false;
 

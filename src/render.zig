@@ -56,7 +56,56 @@ inline fn toScreenPos(pos: rl.Vector2) struct { x: i32, y: i32 } {
     };
 }
 
-// Draw the terrain grid with 3D snow depth
+// Draw a simple atmospheric skybox (winter sky with gradient)
+fn drawSkybox(camera: rl.Camera) void {
+    // Draw a large sphere around the camera for sky gradient
+    // Top: darker blue-gray winter sky
+    // Horizon: lighter blue-white
+    const sky_top = rl.Color{ .r = 120, .g = 140, .b = 180, .a = 255 };
+    const sky_horizon = rl.Color{ .r = 200, .g = 210, .b = 230, .a = 255 };
+
+    // Draw back hemisphere (top of sky)
+    rl.drawSphereEx(
+        rl.Vector3{ .x = camera.position.x, .y = camera.position.y + 500, .z = camera.position.z },
+        3000.0, // Large sphere
+        16, // Lower poly count for performance
+        16,
+        sky_top,
+    );
+
+    // Draw horizon ring
+    rl.drawSphereEx(
+        rl.Vector3{ .x = camera.position.x, .y = camera.position.y - 200, .z = camera.position.z },
+        3000.0,
+        16,
+        8,
+        sky_horizon,
+    );
+
+    // Add some distant mountain silhouettes (simple shapes using cylinders)
+    const mountain_color = rl.Color{ .r = 90, .g = 100, .b = 120, .a = 200 };
+
+    // Draw a few distant peaks around the horizon
+    for (0..8) |i| {
+        const angle = @as(f32, @floatFromInt(i)) * 3.14159 * 2.0 / 8.0;
+        const distance = 2500.0;
+        const height = 300.0 + @sin(angle * 3.0) * 150.0;
+        const peak_x = camera.position.x + @cos(angle) * distance;
+        const peak_z = camera.position.z + @sin(angle) * distance;
+
+        // Draw tapered mountain using cylinder (top radius smaller than bottom)
+        rl.drawCylinder(
+            rl.Vector3{ .x = peak_x, .y = -50 + height / 2.0, .z = peak_z },
+            50.0, // Top radius (small peak)
+            200.0, // Bottom radius (wide base)
+            height,
+            8, // Sides
+            mountain_color,
+        );
+    }
+}
+
+// Draw the terrain grid with 3D snow depth and elevation
 fn drawTerrainGrid(grid: *const TerrainGrid) void {
     var z: usize = 0;
     while (z < grid.height) : (z += 1) {
@@ -64,26 +113,32 @@ fn drawTerrainGrid(grid: *const TerrainGrid) void {
         while (x < grid.width) : (x += 1) {
             const index = z * grid.width + x;
             const cell = grid.cells[index];
+            const elevation = grid.heightmap[index];
             const world_pos = grid.gridToWorld(x, z);
 
             const tile_size = grid.grid_size;
             const color = cell.type.getColor();
             const snow_height = cell.type.getSnowHeight();
 
-            // Draw ground base (dark gray ground underneath snow)
-            const ground_color = rl.Color{ .r = 80, .g = 80, .b = 80, .a = 255 };
+            // Draw ground base (dark gray/brown ground underneath snow)
+            // Ground extends from elevation down to a fixed base level
+            const ground_base_y = -30.0; // Base level for all terrain
+            const ground_thickness = elevation - ground_base_y;
+            const ground_center_y = ground_base_y + ground_thickness / 2.0;
+
+            const ground_color = rl.Color{ .r = 80, .g = 70, .b = 60, .a = 255 };
             rl.drawCube(
-                rl.Vector3{ .x = world_pos.x, .y = -2.0, .z = world_pos.z },
+                rl.Vector3{ .x = world_pos.x, .y = ground_center_y, .z = world_pos.z },
                 tile_size,
-                4.0, // Ground thickness
+                ground_thickness,
                 tile_size,
                 ground_color,
             );
 
-            // Draw snow layer with actual height
+            // Draw snow layer with actual height on top of elevation
             if (snow_height > 0.5) {
-                // Snow cube positioned so its top is at snow_height/2 and bottom at y=0
-                const snow_y = snow_height / 2.0;
+                // Snow cube positioned so its bottom is at elevation and top is at elevation + snow_height
+                const snow_y = elevation + snow_height / 2.0;
                 rl.drawCube(
                     rl.Vector3{ .x = world_pos.x, .y = snow_y, .z = world_pos.z },
                     tile_size - 1.0, // Slightly smaller to show gaps between cells
@@ -99,7 +154,7 @@ fn drawTerrainGrid(grid: *const TerrainGrid) void {
                 top_color.b = @min(255, @as(u16, top_color.b) + 15);
 
                 rl.drawCube(
-                    rl.Vector3{ .x = world_pos.x, .y = snow_height + 0.1, .z = world_pos.z },
+                    rl.Vector3{ .x = world_pos.x, .y = elevation + snow_height + 0.1, .z = world_pos.z },
                     tile_size - 1.0,
                     0.2, // Thin top layer
                     tile_size - 1.0,
@@ -120,9 +175,9 @@ fn drawTerrainGrid(grid: *const TerrainGrid) void {
                     border_color,
                 );
             } else {
-                // For cleared/icy ground (minimal snow), just draw a thin layer
+                // For cleared/icy ground (minimal snow), just draw a thin layer on top of elevation
                 rl.drawCube(
-                    rl.Vector3{ .x = world_pos.x, .y = 0.5, .z = world_pos.z },
+                    rl.Vector3{ .x = world_pos.x, .y = elevation + 0.5, .z = world_pos.z },
                     tile_size - 1.0,
                     1.0,
                     tile_size - 1.0,
@@ -157,12 +212,15 @@ fn drawCharacterBody(render_pos: rl.Vector3, radius: f32, school_color: rl.Color
 }
 
 pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager, terrain_grid: *const @import("terrain.zig").TerrainGrid) void {
-    rl.clearBackground(.dark_gray);
+    rl.clearBackground(rl.Color{ .r = 180, .g = 200, .b = 220, .a = 255 }); // Soft winter sky color
 
     // === 3D RENDERING ===
     rl.beginMode3D(camera);
 
-    // Draw terrain grid with 3D snow depth
+    // Draw skybox (simple gradient sphere around camera)
+    drawSkybox(camera);
+
+    // Draw terrain grid with 3D snow depth and elevation
     drawTerrainGrid(terrain_grid);
 
     // Draw entities (interpolated for smooth movement, adjusted for snow depth)
@@ -173,13 +231,14 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         // Get interpolated position
         var render_pos = ent.getInterpolatedPosition(interpolation_alpha);
 
-        // Adjust Y position based on terrain sink depth (characters sink into snow)
+        // Adjust Y position based on terrain elevation and sink depth (characters sink into snow)
+        const elevation = terrain_grid.getElevationAt(render_pos.x, render_pos.z);
         const sink_depth = terrain_grid.getSinkDepthAt(render_pos.x, render_pos.z);
         const snow_height = terrain_grid.getSnowHeightAt(render_pos.x, render_pos.z);
 
-        // Character's center should be at: snow_surface - sink_depth + radius
-        // Snow surface is at snow_height, character sinks sink_depth into it
-        render_pos.y = snow_height - sink_depth + ent.radius;
+        // Character's center should be at: elevation + snow_surface - sink_depth + radius
+        // Snow surface is at elevation + snow_height, character sinks sink_depth into it
+        render_pos.y = elevation + snow_height - sink_depth + ent.radius;
 
         // Draw character body with halftone effect
         drawCharacterBody(render_pos, ent.radius, ent.school_color, ent.position_color, ent.is_dead);
@@ -188,10 +247,11 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     // Draw player (interpolated, adjusted for snow depth)
     var player_render_pos = player.*.getInterpolatedPosition(interpolation_alpha);
 
-    // Adjust player Y position based on terrain
+    // Adjust player Y position based on terrain elevation
+    const player_elevation = terrain_grid.getElevationAt(player_render_pos.x, player_render_pos.z);
     const player_sink_depth = terrain_grid.getSinkDepthAt(player_render_pos.x, player_render_pos.z);
     const player_snow_height = terrain_grid.getSnowHeightAt(player_render_pos.x, player_render_pos.z);
-    player_render_pos.y = player_snow_height - player_sink_depth + player.*.radius;
+    player_render_pos.y = player_elevation + player_snow_height - player_sink_depth + player.*.radius;
 
     // Draw player body with halftone effect
     drawCharacterBody(player_render_pos, player.*.radius, player.*.school_color, player.*.position_color, player.*.is_dead);
@@ -217,10 +277,11 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
                 // Draw selection ring around target (interpolated, adjusted for terrain)
                 var target_render_pos = tgt.getInterpolatedPosition(interpolation_alpha);
 
-                // Adjust for terrain depth (same as entity rendering)
+                // Adjust for terrain elevation and depth (same as entity rendering)
+                const target_elevation = terrain_grid.getElevationAt(target_render_pos.x, target_render_pos.z);
                 const target_sink_depth = terrain_grid.getSinkDepthAt(target_render_pos.x, target_render_pos.z);
                 const target_snow_height = terrain_grid.getSnowHeightAt(target_render_pos.x, target_render_pos.z);
-                target_render_pos.y = target_snow_height - target_sink_depth + tgt.radius;
+                target_render_pos.y = target_elevation + target_snow_height - target_sink_depth + tgt.radius;
 
                 rl.drawCylinder(target_render_pos, tgt.radius + 5, tgt.radius + 5, 2, 16, palette.TEAM.SELECTION);
 
@@ -256,9 +317,10 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
             if (!ent.isAlive()) continue;
 
             var render_pos = ent.getInterpolatedPosition(interpolation_alpha);
+            const elevation = terrain_grid.getElevationAt(render_pos.x, render_pos.z);
             const sink_depth = terrain_grid.getSinkDepthAt(render_pos.x, render_pos.z);
             const snow_height = terrain_grid.getSnowHeightAt(render_pos.x, render_pos.z);
-            render_pos.y = snow_height - sink_depth + ent.radius;
+            render_pos.y = elevation + snow_height - sink_depth + ent.radius;
 
             const team_color = palette.getOutlineColor(ent.is_enemy, false);
             rl.drawSphere(render_pos, ent.radius, team_color);
@@ -266,9 +328,10 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
 
         // Draw player as solid team color
         var player_pos = player.*.getInterpolatedPosition(interpolation_alpha);
+        const p_elevation = terrain_grid.getElevationAt(player_pos.x, player_pos.z);
         const p_sink = terrain_grid.getSinkDepthAt(player_pos.x, player_pos.z);
         const p_snow = terrain_grid.getSnowHeightAt(player_pos.x, player_pos.z);
-        player_pos.y = p_snow - p_sink + player.*.radius;
+        player_pos.y = p_elevation + p_snow - p_sink + player.*.radius;
         const player_team_color = palette.getOutlineColor(player.*.is_enemy, true);
         rl.drawSphere(player_pos, player.*.radius, player_team_color);
 
@@ -304,10 +367,11 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
 
         var render_pos = ent.getInterpolatedPosition(interpolation_alpha);
 
-        // Adjust for terrain depth (same as entity rendering)
+        // Adjust for terrain elevation and depth (same as entity rendering)
+        const elevation = terrain_grid.getElevationAt(render_pos.x, render_pos.z);
         const sink_depth = terrain_grid.getSinkDepthAt(render_pos.x, render_pos.z);
         const snow_height = terrain_grid.getSnowHeightAt(render_pos.x, render_pos.z);
-        render_pos.y = snow_height - sink_depth + ent.radius;
+        render_pos.y = elevation + snow_height - sink_depth + ent.radius;
 
         // Position above entity
         const ui_3d_pos = rl.Vector3{

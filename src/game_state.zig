@@ -154,20 +154,20 @@ pub const GameState = struct {
         // Ally team (blue): [Player, Ally1, Ally2, Healer]
         // Enemy team (red): [Enemy1, Enemy2, Enemy3, Healer]
 
-        // Ally team positions (front line, spread out)
+        // Ally team positions (front line, spread out) - 4x further apart
         const ally_positions = [_]rl.Vector3{
-            .{ .x = -40, .y = 0, .z = 50 }, // Player (left-front)
-            .{ .x = 40, .y = 0, .z = 50 }, // Ally1 (right-front)
-            .{ .x = -60, .y = 0, .z = 100 }, // Ally2 (left-back)
-            .{ .x = 0, .y = 0, .z = 120 }, // Healer (center-back)
+            .{ .x = -80, .y = 0, .z = 400 }, // Player (left-front)
+            .{ .x = 80, .y = 0, .z = 400 }, // Ally1 (right-front)
+            .{ .x = -120, .y = 0, .z = 500 }, // Ally2 (left-back)
+            .{ .x = 0, .y = 0, .z = 550 }, // Healer (center-back)
         };
 
-        // Enemy team positions (opposite side)
+        // Enemy team positions (opposite side) - 4x further apart
         const enemy_positions = [_]rl.Vector3{
-            .{ .x = -40, .y = 0, .z = -220 }, // Enemy1
-            .{ .x = 40, .y = 0, .z = -220 }, // Enemy2
-            .{ .x = -60, .y = 0, .z = -270 }, // Enemy3
-            .{ .x = 0, .y = 0, .z = -290 }, // Enemy Healer
+            .{ .x = -80, .y = 0, .z = -400 }, // Enemy1
+            .{ .x = 80, .y = 0, .z = -400 }, // Enemy2
+            .{ .x = -120, .y = 0, .z = -500 }, // Enemy3
+            .{ .x = 0, .y = 0, .z = -550 }, // Enemy Healer
         };
 
         // Generate random builds for player + 2 allies + 3 enemies (6 random, 2 healer)
@@ -181,7 +181,7 @@ pub const GameState = struct {
                 .id = id_gen.generate(),
                 .position = ally_positions[0],
                 .previous_position = ally_positions[0],
-                .radius = 20,
+                .radius = 12,
                 .color = .blue,
                 .school_color = .blue,
                 .position_color = .blue,
@@ -201,7 +201,7 @@ pub const GameState = struct {
                 .id = id_gen.generate(),
                 .position = ally_positions[1],
                 .previous_position = ally_positions[1],
-                .radius = 18,
+                .radius = 10,
                 .color = .blue,
                 .school_color = .blue,
                 .position_color = .blue,
@@ -221,7 +221,7 @@ pub const GameState = struct {
                 .id = id_gen.generate(),
                 .position = ally_positions[2],
                 .previous_position = ally_positions[2],
-                .radius = 18,
+                .radius = 10,
                 .color = .blue,
                 .school_color = .blue,
                 .position_color = .blue,
@@ -241,7 +241,7 @@ pub const GameState = struct {
                 .id = id_gen.generate(),
                 .position = ally_positions[3],
                 .previous_position = ally_positions[3],
-                .radius = 18,
+                .radius = 10,
                 .color = .blue,
                 .school_color = .blue,
                 .position_color = .blue,
@@ -263,7 +263,7 @@ pub const GameState = struct {
                 .id = id_gen.generate(),
                 .position = enemy_positions[0],
                 .previous_position = enemy_positions[0],
-                .radius = 18,
+                .radius = 10,
                 .color = .red,
                 .school_color = .red,
                 .position_color = .red,
@@ -283,7 +283,7 @@ pub const GameState = struct {
                 .id = id_gen.generate(),
                 .position = enemy_positions[1],
                 .previous_position = enemy_positions[1],
-                .radius = 18,
+                .radius = 10,
                 .color = .red,
                 .school_color = .red,
                 .position_color = .red,
@@ -303,7 +303,7 @@ pub const GameState = struct {
                 .id = id_gen.generate(),
                 .position = enemy_positions[2],
                 .previous_position = enemy_positions[2],
-                .radius = 18,
+                .radius = 10,
                 .color = .red,
                 .school_color = .red,
                 .position_color = .red,
@@ -323,7 +323,7 @@ pub const GameState = struct {
                 .id = id_gen.generate(),
                 .position = enemy_positions[3],
                 .previous_position = enemy_positions[3],
-                .radius = 18,
+                .radius = 10,
                 .color = .red,
                 .school_color = .red,
                 .position_color = .red,
@@ -475,23 +475,23 @@ pub const GameState = struct {
         }
 
         // Initialize terrain grid
-        // Create a 20x20 grid with 50 unit cells, covering 1000x1000 world space
-        // Centered around the battlefield (offset by -500, -500)
+        // Create a 40x40 grid with 50 unit cells, covering 2000x2000 world space (4x larger)
+        // Centered around the battlefield (offset by -1000, -1000)
         const terrain_grid = TerrainGrid.init(
             allocator,
-            20, // width
-            20, // height
+            40, // width (doubled)
+            40, // height (doubled)
             50.0, // grid_size (each cell is 50 units)
-            -500.0, // world_offset_x
-            -500.0, // world_offset_z
+            -1000.0, // world_offset_x (doubled)
+            -1000.0, // world_offset_z (doubled)
         ) catch |err| {
             print("Failed to initialize terrain grid: {}\n", .{err});
             @panic("Terrain initialization failed");
         };
 
         print("=== TERRAIN SYSTEM INITIALIZED ===\n", .{});
-        print("Grid: 20x20 cells (50 units each)\n", .{});
-        print("Coverage: 1000x1000 world units\n", .{});
+        print("Grid: 40x40 cells (50 units each)\n", .{});
+        print("Coverage: 2000x2000 world units\n", .{});
         print("Snow accumulation: Active\n", .{});
         print("==================================\n\n", .{});
 
@@ -500,10 +500,10 @@ pub const GameState = struct {
             .controlled_entity_id = player_entity_id,
             .selected_target = null,
             .camera = rl.Camera{
-                .position = .{ .x = 0, .y = 200, .z = 200 },
+                .position = .{ .x = 0, .y = 600, .z = 700 },
                 .target = .{ .x = 0, .y = 0, .z = 0 },
                 .up = .{ .x = 0, .y = 1, .z = 0 },
-                .fovy = 45.0,
+                .fovy = 55.0,
                 .projection = .perspective,
             },
             .input_state = input.InputState{
