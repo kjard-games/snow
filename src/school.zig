@@ -11,14 +11,15 @@ pub const School = enum {
     homeschool, // Black: Sacrifice, Power, Isolation
     waldorf, // Blue: Rhythm, Timing, Harmony
 
-    // Energy generation rates and mechanics
+    // Energy generation rates (per second)
+    // All schools have base regen, but some are more efficient than others
     pub fn getEnergyRegen(self: School) f32 {
         return switch (self) {
-            .private_school => 2.0, // Allowance: steady passive regen
-            .public_school => 0.0, // Grit: no passive regen, combat only
-            .montessori => 1.0, // Balanced regen
-            .homeschool => 0.5, // Low regen, can sacrifice warmth
-            .waldorf => 1.5, // Rhythm: moderate regen
+            .private_school => 1.5, // Allowance: high steady passive regen
+            .public_school => 1.0, // Grit: standard regen, gains bonus from combat
+            .montessori => 1.0, // Focus: balanced regen, bonus from variety
+            .homeschool => 0.75, // Life Force: low regen, must sacrifice warmth
+            .waldorf => 1.25, // Rhythm: good regen, bonus from rhythm stacks
         };
     }
 
@@ -95,11 +96,16 @@ pub const School = enum {
 };
 
 // ============================================================================
-// PRIVATE SCHOOL SKILLS - White: Order, Privilege, Resources
+// PRIVATE SCHOOL SKILLS - Gold: Wealth, Power, Credit
 // ============================================================================
-// Theme: High energy pool, steady regen, defensive, expensive but powerful
-// Synergizes with: Defensive positions, energy management, long cooldowns
-// Cooldowns: 15-30s
+// Mechanic: CREDIT/DEBT - Spend max energy for powerful effects
+// - High base energy pool (60) and regen (1.5/s)
+// - Some skills cost "credit" - temporarily reduce max energy (like spending on credit)
+// - Max energy recovers at 1 point per 3 seconds (paying back debt)
+// - Some skills get bonus effects when you're "in debt" (credit > 0)
+// Theme: "Trust fund spending" - burn through your pool for powerful effects
+// Synergizes with: High burst damage, defensive positions, managing debt
+// Cooldowns: 12-30s
 
 const private_bundled_up = [_]skills.CozyEffect{.{
     .cozy = .bundled_up,
@@ -126,10 +132,10 @@ const private_shield = [_]skills.CozyEffect{.{
 }};
 
 const private_school_skills = [_]Skill{
-    // 1. Energy management - gain energy
+    // 1. Energy management - instant energy
     .{
         .name = "Trust Fund",
-        .description = "Gesture. You gain 10 energy.",
+        .description = "Gesture. You gain 15 energy.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 0,
@@ -137,63 +143,33 @@ const private_school_skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 750,
         .recharge_time_ms = 25000,
-        // TODO: Gain 10 energy immediately
+        .grants_energy_on_hit = 15, // Instant energy gain
     },
 
-    // 2. Expensive powerful shield
+    // 2. Powerful credit attack
     .{
-        .name = "Hire Bodyguard",
-        .description = "Stance. (10 seconds.) You block the next 3 attacks.",
-        .skill_type = .stance,
-        .mechanic = .shift,
-        .energy_cost = 15,
-        .target_type = .self,
-        .activation_time_ms = 0,
-        .aftercast_ms = 0,
-        .recharge_time_ms = 30000,
-        .cozies = &private_shield,
-        // TODO: Block next 3 attacks
-    },
-
-    // 3. Team energy support
-    .{
-        .name = "Share Allowance",
-        .description = "Shout. (20 seconds.) Party members in earshot have +3 energy regeneration.",
-        .skill_type = .call,
-        .mechanic = .shout,
-        .energy_cost = 12,
-        .cast_range = 250.0,
-        .target_type = .ally,
-        .aoe_type = .area,
-        .aoe_radius = 250.0,
-        .activation_time_ms = 0,
-        .aftercast_ms = 0,
-        .recharge_time_ms = 30000,
-        .cozies = &private_insulated,
-    },
-
-    // 4. Defensive buff - padding
-    .{
-        .name = "Designer Jacket",
-        .description = "Stance. (12 seconds.) You have +20 padding and take 33% less damage.",
-        .skill_type = .stance,
-        .mechanic = .shift,
+        .name = "Gold-Plated Throw",
+        .description = "Throw. Deals 35 damage. Credit: 10 energy.",
+        .skill_type = .throw,
+        .mechanic = .windup,
         .energy_cost = 10,
-        .target_type = .self,
-        .activation_time_ms = 0,
-        .aftercast_ms = 0,
-        .recharge_time_ms = 20000,
-        .cozies = &private_bundled_up,
+        .credit_cost = 10, // Reduces max energy by 10
+        .damage = 35.0,
+        .cast_range = 250.0,
+        .activation_time_ms = 1500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000,
     },
 
-    // 5. Expensive AoE damage
+    // 3. Credit AoE nuke
     .{
-        .name = "Hired Pitcher",
-        .description = "Trick. Deals 15 damage to all foes in the area.",
+        .name = "Money Bomb",
+        .description = "Trick. Deals 25 damage to all foes in the area. Credit: 15 energy.",
         .skill_type = .trick,
         .mechanic = .concentrate,
-        .energy_cost = 18,
-        .damage = 15.0,
+        .energy_cost = 15,
+        .credit_cost = 15,
+        .damage = 25.0,
         .cast_range = 250.0,
         .activation_time_ms = 2000,
         .aftercast_ms = 750,
@@ -202,13 +178,45 @@ const private_school_skills = [_]Skill{
         .aoe_radius = 150.0,
     },
 
-    // 6. Healing - can afford the best
+    // 4. Bonus skill when in debt
+    .{
+        .name = "Desperate Spending",
+        .description = "Throw. Deals 20 damage. Deals +15 damage if you are in debt.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 5,
+        .damage = 20.0,
+        .cast_range = 200.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 8000,
+        .bonus_if_in_debt = true, // TODO: Add +15 damage if credit_debt > 0
+    },
+
+    // 5. Defensive credit skill
+    .{
+        .name = "Golden Shield",
+        .description = "Stance. (15 seconds.) You block the next 3 attacks. Credit: 8 energy.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 8,
+        .credit_cost = 8,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 30000,
+        .duration_ms = 15000,
+        .cozies = &private_shield,
+        // TODO: Block next 3 attacks
+    },
+
+    // 6. Healing without credit (can't afford to debt support)
     .{
         .name = "Private Nurse",
-        .description = "Trick. Heals target ally for 50 Health.",
+        .description = "Trick. Heals target ally for 50 Warmth.",
         .skill_type = .trick,
         .mechanic = .concentrate,
-        .energy_cost = 12,
+        .energy_cost = 10,
         .healing = 50.0,
         .cast_range = 200.0,
         .target_type = .ally,
@@ -217,28 +225,30 @@ const private_school_skills = [_]Skill{
         .recharge_time_ms = 18000,
     },
 
-    // 7. Max health buff
+    // 7. Max warmth buff with credit
     .{
-        .name = "Well Fed",
-        .description = "Stance. (18 seconds.) You have +50 maximum Health.",
+        .name = "Luxury Meal",
+        .description = "Stance. (20 seconds.) You have +50 maximum Warmth. Credit: 5 energy.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 10,
+        .credit_cost = 5,
         .target_type = .self,
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 25000,
+        .duration_ms = 20000,
         .cozies = &private_fortitude,
     },
 
     // 8. Condition removal - money solves problems
     .{
         .name = "Call Mom",
-        .description = "Gesture. Heals for 25 Health. Removes all chills.",
+        .description = "Gesture. Heals for 30 Warmth. Removes all Chills.",
         .skill_type = .gesture,
         .mechanic = .ready,
-        .energy_cost = 8,
-        .healing = 25.0,
+        .energy_cost = 5,
+        .healing = 30.0,
         .target_type = .self,
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
@@ -279,23 +289,25 @@ const public_slippery = [_]skills.ChillEffect{.{
 }};
 
 const public_school_skills = [_]Skill{
-    // 1. Gain energy on hit
+    // 1. Grit builder - spam attack
     .{
         .name = "Scrap",
+        .description = "Throw. Deals 10 damage. Gain 2 Grit on hit.",
         .skill_type = .throw,
         .mechanic = .windup,
-        .energy_cost = 0,
+        .energy_cost = 4,
         .damage = 10.0,
         .cast_range = 180.0,
         .activation_time_ms = 500,
         .aftercast_ms = 750,
         .recharge_time_ms = 4000,
-        // TODO: Gain 3 energy if this hits
+        .grants_grit_on_hit = 2,
     },
 
-    // 2. Fast aggressive buff
+    // 2. Fast aggressive buff - instant Grit
     .{
         .name = "Riled Up",
+        .description = "Stance. (8 seconds.) You deal +33% damage. Gain 3 Grit.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,
@@ -304,14 +316,16 @@ const public_school_skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 8000,
         .cozies = &public_fire,
+        .grants_grit_on_cast = 3,
     },
 
     // 3. DoT spam
     .{
         .name = "Dirty Snowball",
+        .description = "Throw. Deals 12 damage. Inflicts Soggy (6 seconds).",
         .skill_type = .throw,
         .mechanic = .windup,
-        .energy_cost = 4,
+        .energy_cost = 5,
         .damage = 12.0,
         .cast_range = 160.0,
         .activation_time_ms = 500,
@@ -320,26 +334,30 @@ const public_school_skills = [_]Skill{
         .chills = &public_soggy,
     },
 
-    // 4. Fast cooldown pressure
+    // 4. Fast cooldown pressure - Grit spender
     .{
         .name = "Relentless",
+        .description = "Throw. Costs 2 Grit. Deals 18 damage. Recharges instantly if it hits.",
         .skill_type = .throw,
         .mechanic = .windup,
-        .energy_cost = 5,
-        .damage = 15.0,
+        .energy_cost = 4,
+        .grit_cost = 2,
+        .damage = 18.0,
         .cast_range = 170.0,
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 3000,
     },
 
-    // 5. Bonus damage if target damaged recently
+    // 5. Bonus damage if target damaged recently - Grit spender
     .{
         .name = "Pile On",
+        .description = "Throw. Costs 3 Grit. Deals 22 damage. +10 damage if target has a Chill.",
         .skill_type = .throw,
         .mechanic = .windup,
-        .energy_cost = 6,
-        .damage = 18.0,
+        .energy_cost = 5,
+        .grit_cost = 3,
+        .damage = 22.0,
         .cast_range = 180.0,
         .activation_time_ms = 750,
         .aftercast_ms = 750,
@@ -350,10 +368,12 @@ const public_school_skills = [_]Skill{
     // 6. Knockdown effect
     .{
         .name = "Tackle",
+        .description = "Throw. Costs 4 Grit. Deals 16 damage. Inflicts Slippery and knockdown (4 seconds).",
         .skill_type = .throw,
         .mechanic = .windup,
-        .energy_cost = 7,
-        .damage = 14.0,
+        .energy_cost = 6,
+        .grit_cost = 4,
+        .damage = 16.0,
         .cast_range = 120.0,
         .activation_time_ms = 500,
         .aftercast_ms = 750,
@@ -365,6 +385,7 @@ const public_school_skills = [_]Skill{
     // 7. Burn through - damage over time
     .{
         .name = "Friction Burn",
+        .description = "Throw. Deals 8 damage. Inflicts Windburn (5 seconds).",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 5,
@@ -376,18 +397,20 @@ const public_school_skills = [_]Skill{
         .chills = &public_windburn,
     },
 
-    // 8. All-in attack - high risk high reward
+    // 8. All-in attack - high risk high reward Grit finisher
     .{
         .name = "All Out",
+        .description = "Elite Throw. Costs 5 Grit. Deals 30 damage. You take double damage for 5 seconds.",
         .skill_type = .throw,
         .mechanic = .windup,
-        .energy_cost = 10,
-        .damage = 25.0,
+        .energy_cost = 5,
+        .grit_cost = 5,
+        .damage = 30.0,
         .cast_range = 150.0,
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
-        // TODO: Deal double damage but take double damage for 3s
+        // TODO: You take double damage for 5s
     },
 };
 
@@ -414,6 +437,7 @@ const montessori_skills = [_]Skill{
     // 1. Variety buff - core mechanic
     .{
         .name = "Self Directed",
+        .description = "Stance. (20 seconds.) Using different skill types grants +1 energy and +10% damage.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,
@@ -422,12 +446,13 @@ const montessori_skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 15000,
         .duration_ms = 20000,
-        // TODO: Next skill of each type deals +50% damage
+        // TODO: Track variety, grant bonuses
     },
 
     // 2. Swiss army knife - does many things
     .{
         .name = "Versatile Throw",
+        .description = "Throw. Deals 14 damage. Inflicts Slippery (3 seconds). Gains +2 energy if last skill was different type.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 6,
@@ -437,15 +462,18 @@ const montessori_skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
         .chills = &montessori_multi_chill,
+        // TODO: +2 energy if variety
     },
 
     // 3. Adapts to situation
     .{
         .name = "Improvise",
+        .description = "Trick. Gain a random beneficial effect based on your current situation.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 7,
         .cast_range = 200.0,
+        .target_type = .self,
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
@@ -455,6 +483,7 @@ const montessori_skills = [_]Skill{
     // 4. Movement skill
     .{
         .name = "Explore",
+        .description = "Stance. (8 seconds.) Move 33% faster.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 4,
@@ -462,13 +491,14 @@ const montessori_skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 10000,
+        .duration_ms = 8000,
         .cozies = &montessori_sure,
     },
 
     // 5. Learns from experience
     .{
         .name = "Growth Mindset",
-        .description = "Stance. (15 seconds.) You gain +2 to all attributes.",
+        .description = "Stance. (15 seconds.) Your skills recharge 20% faster.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 6,
@@ -483,6 +513,7 @@ const montessori_skills = [_]Skill{
     // 6. Does everything okay
     .{
         .name = "Jack of All Trades",
+        .description = "Throw. Deals 15 damage.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 5,
@@ -496,19 +527,23 @@ const montessori_skills = [_]Skill{
     // 7. Utility - can target ally or enemy
     .{
         .name = "Flexible Response",
+        .description = "Trick. Heals ally for 30 Warmth OR deals 20 damage to foe.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 8,
+        .damage = 20.0,
+        .healing = 30.0,
         .cast_range = 200.0,
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        // TODO: Heal ally OR damage enemy
+        // TODO: Heal ally OR damage enemy based on target
     },
 
     // 8. Bonus if haven't repeated skills
     .{
         .name = "Fresh Perspective",
+        .description = "Gesture. Gain 2 energy for each different skill type used in the last 10 seconds (maximum 10 energy).",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 0,
@@ -546,39 +581,47 @@ const homeschool_fire = [_]skills.CozyEffect{.{
 }};
 
 const homeschool_skills = [_]Skill{
-    // 1. Health for damage
+    // 1. Warmth for damage
     .{
         .name = "Blood Pact",
+        .description = "Trick. Sacrifice 15% of your max Warmth. Deals 35 damage.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 5,
+        .warmth_cost_percent = 0.15,
+        .min_warmth_percent = 0.20, // Can't cast below 20% warmth
         .damage = 35.0,
         .cast_range = 220.0,
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 25000,
-        // TODO: Sacrifice 15% max health to cast
     },
 
-    // 2. Convert health to energy
+    // 2. Convert warmth to energy
     .{
         .name = "Isolated Study",
+        .description = "Gesture. Sacrifice 20% of your max Warmth. Gain 15 energy.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 0,
+        .warmth_cost_percent = 0.20,
+        .min_warmth_percent = 0.25, // Can't cast below 25% warmth
         .target_type = .self,
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 30000,
-        // TODO: Sacrifice 20% health, gain 15 energy
+        .grants_energy_on_hit = 15, // Grants on cast complete
     },
 
     // 3. Crippling curse
     .{
         .name = "Malnutrition",
+        .description = "Trick. Sacrifice 10% of your max Warmth. Deals 12 damage. Inflicts Packed Snow (12 seconds).",
         .skill_type = .trick,
         .mechanic = .concentrate,
-        .energy_cost = 10,
+        .energy_cost = 8,
+        .warmth_cost_percent = 0.10,
+        .min_warmth_percent = 0.15,
         .damage = 12.0,
         .cast_range = 200.0,
         .activation_time_ms = 2000,
@@ -587,55 +630,62 @@ const homeschool_skills = [_]Skill{
         .chills = &homeschool_packed,
     },
 
-    // 4. Execute - kills low health targets
+    // 4. Execute - kills low warmth targets (no sacrifice - pure energy)
     .{
         .name = "Final Exam",
-        .description = "Throw. Deals 25 damage. Deals double damage if target foe is below 30% Health. Completely soaks through padding.",
+        .description = "Throw. Deals 25 damage. Deals double damage if target foe is below 30% Warmth. Completely soaks through padding.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 12,
         .damage = 25.0,
+        .bonus_damage_if_foe_below_50_warmth = 25.0, // Double damage vs low warmth
         .cast_range = 220.0,
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 35000,
         .soak = 1.0,
-        // TODO: Deals double damage if target below 30% health
     },
 
-    // 5. Energy drain
+    // 5. Energy drain with sacrifice
     .{
         .name = "Social Anxiety",
+        .description = "Trick. Sacrifice 8% of your max Warmth. Deals 10 damage. Inflicts Brain Freeze and steals 8 energy.",
         .skill_type = .trick,
         .mechanic = .concentrate,
-        .energy_cost = 8,
+        .energy_cost = 6,
+        .warmth_cost_percent = 0.08,
+        .min_warmth_percent = 0.10,
         .damage = 10.0,
         .cast_range = 200.0,
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 20000,
         .chills = &homeschool_brain_freeze,
-        // TODO: Steal 8 energy from target
+        .grants_energy_on_hit = 8, // Steals energy
     },
 
-    // 6. Power at a cost
+    // 6. Power at a cost - constant warmth drain
     .{
         .name = "Obsession",
+        .description = "Stance. Sacrifice 12% of your max Warmth. (12 seconds.) You deal +50% damage. You lose 1 Warmth per second.",
         .skill_type = .stance,
         .mechanic = .shift,
-        .energy_cost = 10,
+        .energy_cost = 8,
+        .warmth_cost_percent = 0.12,
+        .min_warmth_percent = 0.15,
         .target_type = .self,
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 40000,
         .duration_ms = 12000,
         .cozies = &homeschool_fire,
-        // TODO: +50% damage but -1 health per second
+        // TODO: -1 warmth per second while active
     },
 
-    // 7. Life steal
+    // 7. Life steal - no sacrifice, sustain skill
     .{
         .name = "Vampiric Touch",
+        .description = "Throw. Deals 20 damage. You gain 20 Warmth.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 8,
@@ -648,20 +698,22 @@ const homeschool_skills = [_]Skill{
         .recharge_time_ms = 25000,
     },
 
-    // 8. Devastating AOE with health cost
+    // 8. Devastating AoE with massive warmth cost
     .{
         .name = "Meltdown",
+        .description = "Elite Trick. Sacrifice 25% of your max Warmth. Deals 35 damage to target and nearby foes.",
         .skill_type = .trick,
         .mechanic = .concentrate,
-        .energy_cost = 15,
-        .damage = 30.0,
+        .energy_cost = 12,
+        .warmth_cost_percent = 0.25,
+        .min_warmth_percent = 0.30,
+        .damage = 35.0,
         .cast_range = 240.0,
         .activation_time_ms = 3000,
         .aftercast_ms = 750,
         .recharge_time_ms = 40000,
         .aoe_type = .area,
         .aoe_radius = 180.0,
-        // TODO: Sacrifice 25% health to cast
     },
 };
 
@@ -694,6 +746,7 @@ const waldorf_skills = [_]Skill{
     // 1. Rhythm buff - core mechanic
     .{
         .name = "Find Your Rhythm",
+        .description = "Stance. (15 seconds.) Alternating skill types recharge 50% faster and build Rhythm.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,
@@ -702,12 +755,14 @@ const waldorf_skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
         .duration_ms = 15000,
+        .grants_rhythm_on_cast = 1,
         // TODO: Alternating skill types recharge 50% faster
     },
 
     // 2. Team heal - harmony
     .{
         .name = "Circle Time",
+        .description = "Call. Heals party members for 30 Warmth.",
         .skill_type = .call,
         .mechanic = .shout,
         .energy_cost = 10,
@@ -719,25 +774,28 @@ const waldorf_skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 25000,
+        .grants_rhythm_on_cast = 1,
     },
 
-    // 3. Timing-based damage
+    // 3. Timing-based damage - costs rhythm stacks
     .{
         .name = "Perfect Pitch",
+        .description = "Throw. Requires 5 Rhythm. Costs no energy. Deals 20 damage.",
         .skill_type = .throw,
         .mechanic = .windup,
-        .energy_cost = 6,
-        .damage = 12.0,
+        .energy_cost = 0,
+        .requires_rhythm_stacks = 5,
+        .damage = 20.0,
         .cast_range = 200.0,
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
-        // TODO: +100% damage if cast at exactly the right moment
     },
 
     // 4. Support buff
     .{
         .name = "Group Harmony",
+        .description = "Call. (12 seconds.) Party members have Hot Cocoa regeneration.",
         .skill_type = .call,
         .mechanic = .shout,
         .energy_cost = 8,
@@ -748,13 +806,15 @@ const waldorf_skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
+        .duration_ms = 12000,
         .cozies = &waldorf_hot_cocoa,
+        .grants_rhythm_on_cast = 1,
     },
 
-    // 5. Reactive skill - counters
+    // 5. Reactive skill - rhythmic movement
     .{
         .name = "Eurythmy",
-        .description = "Stance. (15 seconds.) Your movement is synchronized. Move 25% faster.",
+        .description = "Stance. (8 seconds.) Move 25% faster. Your next skill activates instantly if you have 3+ Rhythm.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,
@@ -763,12 +823,14 @@ const waldorf_skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 15000,
         .duration_ms = 8000,
-        // TODO: Next skill instant cast
+        .grants_rhythm_on_cast = 1,
+        // TODO: Next skill instant cast if 3+ rhythm
     },
 
     // 6. Artistic trick - control
     .{
         .name = "Flowing Motion",
+        .description = "Trick. Deals 10 damage. Inflicts Slippery (5 seconds).",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 7,
@@ -778,11 +840,13 @@ const waldorf_skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
         .chills = &waldorf_slippery,
+        .grants_rhythm_on_cast = 1,
     },
 
     // 7. Vision support
     .{
         .name = "Clear Mind",
+        .description = "Call. (15 seconds.) Party members gain Snow Goggles.",
         .skill_type = .call,
         .mechanic = .shout,
         .energy_cost = 6,
@@ -793,20 +857,23 @@ const waldorf_skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 25000,
+        .duration_ms = 15000,
         .cozies = &waldorf_goggles,
+        .grants_rhythm_on_cast = 1,
     },
 
-    // 8. Combo finisher
+    // 8. Rhythm finisher - builds with each skill
     .{
         .name = "Crescendo",
+        .description = "Elite Trick. Deals 20 damage +5 damage per Rhythm stack. Consumes all Rhythm.",
         .skill_type = .trick,
         .mechanic = .concentrate,
-        .energy_cost = 10,
+        .energy_cost = 8,
         .damage = 20.0,
         .cast_range = 220.0,
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        // TODO: +5 damage for each skill used in last 5 seconds
+        // TODO: +5 damage per rhythm stack, consume all rhythm
     },
 };

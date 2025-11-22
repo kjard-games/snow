@@ -19,7 +19,7 @@ pub const MAX_SKILLS: usize = 8;
 pub const MAX_ACTIVE_CONDITIONS: usize = 10;
 pub const MAX_RECENT_SKILLS: usize = 5;
 pub const MAX_GRIT_STACKS: u8 = 5;
-pub const MAX_RHYTHM_CHARGE: u8 = 10;
+pub const MAX_RHYTHM_CHARGE: u8 = 5; // Updated to match new rhythm design (0-5 stacks)
 pub const MAX_DAMAGE_SOURCES: usize = 6; // Track last 6 damage sources (GW1 damage monitor size)
 
 // Cast state for GW1-accurate skill timing
@@ -73,7 +73,9 @@ pub const Character = struct {
     energy_accumulator: f32 = 0.0, // Tracks fractional energy for smooth regen
 
     // School-specific secondary mechanics
-    // Private School: Passive regen (no extra state needed)
+    // Private School: Credit/Debt (max energy temporarily reduced)
+    credit_debt: u8 = 0, // How much max energy is locked away (spending on credit)
+    credit_recovery_timer: f32 = 0.0, // Time until next credit recovery (1 per 3s)
 
     // Public School: Grit stacks
     grit_stacks: u8 = 0, // Every 5 stacks = free skill
@@ -83,12 +85,14 @@ pub const Character = struct {
     sacrifice_cooldown: f32 = 0.0, // seconds until can sacrifice again
 
     // Waldorf: Rhythm timing
-    rhythm_charge: u8 = 0, // 0-10, builds with skill casts
+    rhythm_charge: u8 = 0, // 0-10, builds with alternating skill types
     rhythm_perfect_window: f32 = 0.0, // timing window tracker
     max_rhythm_charge: u8 = MAX_RHYTHM_CHARGE,
+    last_skill_type_for_rhythm: ?skills.SkillType = null, // Track last type for rhythm building
 
     // Montessori: Skill variety bonus
-    last_skills_used: [MAX_RECENT_SKILLS]?u8 = [_]?u8{null} ** MAX_RECENT_SKILLS, // tracks last 5 skills
+    last_skill_types_used: [MAX_RECENT_SKILLS]?skills.SkillType = [_]?skills.SkillType{null} ** MAX_RECENT_SKILLS, // tracks last 5 skill types
+    last_skill_type_index: u8 = 0, // circular buffer index
     variety_bonus_damage: f32 = 0.0, // 0.0 to 0.5 (0% to 50% bonus)
 
     skill_bar: [MAX_SKILLS]?*const Skill,
@@ -265,7 +269,14 @@ pub const Character = struct {
         // Update school-specific mechanics
         switch (self.school) {
             .private_school => {
-                // Private school has steady regen (already handled above)
+                // Credit recovery: pay back debt at 1 point per 3 seconds
+                if (self.credit_debt > 0) {
+                    self.credit_recovery_timer += delta_time;
+                    if (self.credit_recovery_timer >= 3.0) {
+                        self.credit_debt -= 1;
+                        self.credit_recovery_timer = 0.0;
+                    }
+                }
             },
             .public_school => {
                 // Grit stacks decay over time if not in combat

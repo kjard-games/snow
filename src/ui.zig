@@ -315,19 +315,30 @@ fn drawEnergyBar(player: *const Character, x: f32, y: f32, width: f32, height: f
     // Draw border
     rl.drawRectangleLines(xi, yi, widthi, heighti, .white);
 
-    // Calculate fill
-    const fill_percent = @as(f32, @floatFromInt(player.energy)) / @as(f32, @floatFromInt(player.max_energy));
+    // Calculate effective max energy (reduced by credit debt)
+    const effective_max = player.max_energy - player.credit_debt;
+
+    // Calculate fill (based on current energy / effective max)
+    const fill_percent = @as(f32, @floatFromInt(player.energy)) / @as(f32, @floatFromInt(effective_max));
     const fill_width = (width - 4) * fill_percent;
 
     // Draw energy fill (blue)
     rl.drawRectangle(xi + 2, yi + 2, toI32(fill_width), heighti - 4, palette.UI.ENERGY_BAR);
 
-    // Draw energy text
+    // Draw credit debt overlay (gray bar showing locked max energy)
+    if (player.credit_debt > 0) {
+        const debt_percent = @as(f32, @floatFromInt(player.credit_debt)) / @as(f32, @floatFromInt(player.max_energy));
+        const debt_start_x = width - 4 - ((width - 4) * debt_percent);
+        const debt_width = (width - 4) * debt_percent;
+        rl.drawRectangle(xi + 2 + toI32(debt_start_x), yi + 2, toI32(debt_width), heighti - 4, rl.Color{ .r = 80, .g = 80, .b = 80, .a = 200 });
+    }
+
+    // Draw energy text (show effective max, not absolute max)
     var energy_buf: [32]u8 = undefined;
     const energy_text = std.fmt.bufPrintZ(
         &energy_buf,
         "{d}/{d}",
-        .{ player.energy, player.max_energy },
+        .{ player.energy, effective_max },
     ) catch unreachable;
 
     const text_width = rl.measureText(energy_text, 10);
@@ -469,6 +480,7 @@ fn drawPartyFrames(entities: []const Character, x: f32, y: f32) void {
 
 // Draw school-specific secondary mechanic
 fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void {
+    _ = width; // May be used by some schools for sizing
     const yi = toI32(y);
 
     switch (player.school) {
@@ -490,26 +502,65 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
             }
         },
         .waldorf => {
-            // Rhythm charge (0-10) - show as bar with text
+            // Rhythm stacks (0-5) - show as filled musical note symbols
             const rhythm_text = "Rhythm:";
             rl.drawText(rhythm_text, toI32(x), yi, 9, palette.UI.TEXT_PRIMARY);
 
-            const bar_x = x + @as(f32, @floatFromInt(rl.measureText(rhythm_text, 9))) + 4;
-            const bar_width = width - (@as(f32, @floatFromInt(rl.measureText(rhythm_text, 9))) + 4);
-            drawResourceBar(@as(f32, @floatFromInt(player.rhythm_charge)), @as(f32, @floatFromInt(player.max_rhythm_charge)), bar_x, @as(f32, @floatFromInt(yi)), bar_width, 10, rl.Color.purple);
+            const circle_size: f32 = 10;
+            const circle_spacing: f32 = 3;
+            var circle_x = x + @as(f32, @floatFromInt(rl.measureText(rhythm_text, 9))) + 4;
+
+            // Show up to 5 rhythm stacks (max for our new design)
+            const max_rhythm: u8 = 5; // Updated from 10 to match new design
+            for (0..max_rhythm) |i| {
+                const is_filled = i < player.rhythm_charge;
+                const color = if (is_filled) rl.Color.purple else palette.UI.EMPTY_BAR_BG;
+
+                // Draw circle for musical note
+                rl.drawCircle(toI32(circle_x + circle_size / 2), yi + 5, circle_size / 2, color);
+                rl.drawCircleLines(toI32(circle_x + circle_size / 2), yi + 5, circle_size / 2, palette.UI.BORDER);
+
+                circle_x += circle_size + circle_spacing;
+            }
+
+            // Show "Perfect!" text if at max rhythm
+            if (player.rhythm_charge >= max_rhythm) {
+                rl.drawText("Perfect!", toI32(circle_x + 4), yi, 9, rl.Color.gold);
+            }
         },
         .montessori => {
-            // Variety bonus (0-50%) - show as percentage
-            const variety_percent = player.variety_bonus_damage * 100.0;
-            var text_buf: [32]u8 = undefined;
-            const text = std.fmt.bufPrintZ(
-                &text_buf,
-                "Variety: +{d:.0}%",
-                .{variety_percent},
-            ) catch unreachable;
+            // Show last 4 skill types used as icons
+            rl.drawText("Variety:", toI32(x), yi, 9, palette.UI.TEXT_PRIMARY);
 
-            const color = if (variety_percent > 0) rl.Color.lime else palette.UI.TEXT_SECONDARY;
-            rl.drawText(text, toI32(x), yi, 9, color);
+            var icon_x = x + @as(f32, @floatFromInt(rl.measureText("Variety:", 9))) + 4;
+            const icon_size: f32 = 12;
+            const icon_spacing: f32 = 2;
+
+            // Draw last 4 skill types (from newest to oldest)
+            var count: usize = 0;
+            var i: usize = 0;
+            while (i < character.MAX_RECENT_SKILLS and count < 4) : (i += 1) {
+                const idx = if (player.last_skill_type_index >= i)
+                    player.last_skill_type_index - i
+                else
+                    character.MAX_RECENT_SKILLS - (i - player.last_skill_type_index);
+
+                if (player.last_skill_types_used[idx]) |skill_type| {
+                    // Draw colored square for skill type
+                    const type_color = switch (skill_type) {
+                        .throw => rl.Color.red,
+                        .trick => rl.Color.purple,
+                        .stance => rl.Color.blue,
+                        .call => rl.Color.green,
+                        .gesture => rl.Color.orange,
+                    };
+                    rl.drawRectangle(toI32(icon_x), yi, toI32(icon_size), toI32(icon_size), type_color);
+                    rl.drawRectangleLines(toI32(icon_x), yi, toI32(icon_size), toI32(icon_size), .white);
+
+                    icon_x += icon_size + icon_spacing;
+                    count += 1;
+                }
+            }
         },
         .homeschool => {
             // Sacrifice cooldown - show timer if on cooldown
@@ -526,8 +577,18 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
             }
         },
         .private_school => {
-            // Private school has passive regen, just show a label
-            rl.drawText("Passive Regen", toI32(x), yi, 9, palette.UI.TEXT_SECONDARY);
+            // Show credit debt if in debt
+            if (player.credit_debt > 0) {
+                var text_buf: [32]u8 = undefined;
+                const text = std.fmt.bufPrintZ(
+                    &text_buf,
+                    "Debt: {d} (-1/3s)",
+                    .{player.credit_debt},
+                ) catch unreachable;
+                rl.drawText(text, toI32(x), yi, 9, rl.Color.red);
+            } else {
+                rl.drawText("Credit: Available", toI32(x), yi, 9, rl.Color.gold);
+            }
         },
     }
 }
@@ -875,6 +936,10 @@ fn drawSkillBar(player: *const Character, input_state: *InputState) void {
     const energy_bar_height: f32 = 15;
     const energy_bar_y = skill_y - energy_bar_height - 5;
     drawEnergyBar(player, skill_x, energy_bar_y, energy_bar_width, energy_bar_height);
+
+    // Draw school-specific mechanic below energy bar
+    const mechanic_y = energy_bar_y - 15;
+    drawSchoolMechanic(player, skill_x, mechanic_y, energy_bar_width);
 
     for (0..4) |i| {
         drawSkillSlot(player, i, skill_x, skill_y, skill_size, input_state);

@@ -216,19 +216,27 @@ pub const Skill = struct {
     // Terrain modification (for ground-targeted skills) - COMPOSITIONAL
     terrain_effect: TerrainEffect = .{},
 
-    // TODO: Warmth as resource (Homeschool mechanic)
-    // Some skills sacrifice warmth for power instead of energy
-    // warmth_cost: f32 = 0.0, // Costs warmth instead of/in addition to energy
-    // min_warmth_percent: f32 = 0.0, // Can't use skill below this warmth % (prevent suicide)
+    // School-specific resource costs
+    grit_cost: u8 = 0, // Public School - adrenaline-like resource
+    warmth_cost_percent: f32 = 0.0, // Homeschool - % of max warmth sacrificed
+    min_warmth_percent: f32 = 0.0, // Homeschool - can't cast below this warmth %
+    credit_cost: u8 = 0, // Private School - reduces max energy temporarily (spending on credit)
+    requires_rhythm_stacks: u8 = 0, // Waldorf - minimum rhythm stacks to cast
 
-    // TODO: Warmth-conditional effects (GW1-style health conditionals)
-    // Skills that deal bonus damage/healing based on warmth thresholds
-    // bonus_if_self_above_50_warmth: f32 = 0.0,
-    // bonus_if_self_below_50_warmth: f32 = 0.0,
-    // bonus_if_foe_above_50_warmth: f32 = 0.0,
-    // bonus_if_foe_below_50_warmth: f32 = 0.0,
-    // requires_self_above_warmth_percent: f32 = 0.0, // Can't use unless above this %
-    // requires_foe_below_warmth_percent: f32 = 1.0, // Can't use unless foe below this %
+    // Private School - Credit bonus effects
+    bonus_if_in_debt: bool = false, // Does this skill get bonus effects when in debt (credit > 0)?
+
+    // Resource gains (on successful cast/hit)
+    grants_grit_on_hit: u8 = 0, // Public School - gain Grit when skill hits
+    grants_grit_on_cast: u8 = 0, // Public School - gain Grit on cast (regardless of hit)
+    grants_energy_on_hit: u8 = 0, // Gain energy when skill hits
+    grants_rhythm_on_cast: u8 = 0, // Waldorf - gain rhythm stacks on cast
+
+    // Warmth-conditional effects (GW1-style health conditionals)
+    bonus_damage_if_self_above_50_warmth: f32 = 0.0,
+    bonus_damage_if_self_below_50_warmth: f32 = 0.0,
+    bonus_damage_if_foe_above_50_warmth: f32 = 0.0,
+    bonus_damage_if_foe_below_50_warmth: f32 = 0.0,
 };
 
 // Example snowball-themed skills
