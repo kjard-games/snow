@@ -26,12 +26,14 @@ pub const TerrainType = enum {
 
     pub fn getColor(self: TerrainType) rl.Color {
         return switch (self) {
-            .cleared_ground => rl.Color{ .r = 80, .g = 70, .b = 60, .a = 255 }, // Dark brown/gray ground
-            .icy_ground => rl.Color{ .r = 220, .g = 235, .b = 255, .a = 255 }, // Pale blue-white (icy)
-            .slushy => rl.Color{ .r = 200, .g = 205, .b = 200, .a = 255 }, // Gray-white (wet, dirty)
-            .packed_snow => rl.Color{ .r = 240, .g = 245, .b = 250, .a = 255 }, // Clean white (compressed)
-            .thick_snow => rl.Color{ .r = 250, .g = 250, .b = 255, .a = 255 }, // Bright white (fluffy)
-            .deep_powder => rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 }, // Pure white (pristine powder)
+            // GoW-inspired natural snow colors: warmer, more realistic
+            // Snow has subtle warm tones (cream/beige) not pure white
+            .cleared_ground => rl.Color{ .r = 95, .g = 80, .b = 70, .a = 255 }, // Rich brown ground with slight warmth
+            .icy_ground => rl.Color{ .r = 215, .g = 225, .b = 235, .a = 255 }, // Cool blue-gray ice (less saturated)
+            .slushy => rl.Color{ .r = 180, .g = 185, .b = 180, .a = 255 }, // Darker gray-green slush (dirty/wet)
+            .packed_snow => rl.Color{ .r = 225, .g = 230, .b = 230, .a = 255 }, // Neutral gray-white (compressed, shadowed)
+            .thick_snow => rl.Color{ .r = 240, .g = 242, .b = 240, .a = 255 }, // Soft white with subtle warm tone
+            .deep_powder => rl.Color{ .r = 248, .g = 250, .b = 248, .a = 255 }, // Near-white but not pure (natural snow)
         };
     }
 
@@ -243,19 +245,21 @@ pub const TerrainGrid = struct {
                 const nx = @as(f32, @floatFromInt(x)) / @as(f32, @floatFromInt(width));
                 const nz = @as(f32, @floatFromInt(z)) / @as(f32, @floatFromInt(height));
 
-                // Create gentle rolling hills
-                // Combine sine waves at different frequencies for natural terrain
-                const wave1 = @sin(nx * 3.14159 * 2.0) * @cos(nz * 3.14159 * 2.0);
-                const wave2 = @sin(nx * 3.14159 * 4.0 + 1.5) * @cos(nz * 3.14159 * 3.0);
-                const wave3 = @sin(nx * 3.14159 * 6.0) * @sin(nz * 3.14159 * 5.0);
+                // Create gentle rolling hills with smooth, natural slopes (GoW-style)
+                // Use multiple octaves of sine waves for natural terrain
+                // Keep frequencies LOW for smooth, rolling hills
+                const wave1 = @sin(nx * 3.14159 * 1.5) * @cos(nz * 3.14159 * 1.5);
+                const wave2 = @sin(nx * 3.14159 * 2.5 + 1.5) * @cos(nz * 3.14159 * 2.0);
+                const wave3 = @sin(nx * 3.14159 * 3.5) * @sin(nz * 3.14159 * 3.0);
 
                 // Blend waves with decreasing amplitude (octaves)
-                var elevation = wave1 * 30.0; // Main hills (±30 units)
-                elevation += wave2 * 15.0; // Medium detail (±15 units)
-                elevation += wave3 * 5.0; // Fine detail (±5 units)
+                // Reduced amplitudes for gentler terrain
+                var elevation = wave1 * 20.0; // Main gentle hills (±20 units)
+                elevation += wave2 * 8.0; // Medium detail (±8 units)
+                elevation += wave3 * 3.0; // Fine detail (±3 units)
 
-                // Add some randomness for texture
-                elevation += (random.float(f32) - 0.5) * 8.0;
+                // Minimal randomness - just enough to break up patterns
+                elevation += (random.float(f32) - 0.5) * 2.0; // Reduced from 8.0 to 2.0
 
                 // Make center arena flatter (for gameplay)
                 const center_x = 0.5;
@@ -289,6 +293,48 @@ pub const TerrainGrid = struct {
                 }
 
                 heightmap[index] = elevation;
+            }
+        }
+
+        // Smoothing pass: average each cell with its neighbors to reduce spikes
+        // This creates more natural, gentle slopes like GoW terrain
+        const smoothed_heightmap = try allocator.alloc(f32, width * height);
+        defer allocator.free(smoothed_heightmap);
+
+        for (0..height) |z| {
+            for (0..width) |x| {
+                const index = z * width + x;
+                var sum: f32 = 0.0;
+                var count: f32 = 0.0;
+
+                // Average with neighbors in a 3x3 kernel
+                const x_start = if (x > 0) x - 1 else x;
+                const x_end = if (x < width - 1) x + 1 else x;
+                const z_start = if (z > 0) z - 1 else z;
+                const z_end = if (z < height - 1) z + 1 else z;
+
+                var nz = z_start;
+                while (nz <= z_end) : (nz += 1) {
+                    var nx = x_start;
+                    while (nx <= x_end) : (nx += 1) {
+                        const neighbor_idx = nz * width + nx;
+                        sum += heightmap[neighbor_idx];
+                        count += 1.0;
+                    }
+                }
+
+                smoothed_heightmap[index] = sum / count;
+            }
+        }
+
+        // Copy smoothed heights back (but preserve boundary walls)
+        for (0..height) |z| {
+            for (0..width) |x| {
+                const index = z * width + x;
+                // Only smooth non-boundary areas (keep walls sharp)
+                if (heightmap[index] < 70.0) {
+                    heightmap[index] = smoothed_heightmap[index];
+                }
             }
         }
 
@@ -404,72 +450,142 @@ pub const TerrainGrid = struct {
         // Allocate and set vertex colors based on terrain type
         mesh.colors = @ptrCast(@alignCast(rl.memAlloc(@intCast(vertex_count * 4 * @sizeOf(u8)))));
 
-        // DEBUG: Track color distribution
-        var color_counts = std.mem.zeroes([6]usize); // One for each terrain type
-        var oob_count: usize = 0;
+        // First pass: find min/max height for normalization
+        var min_height: f32 = std.math.floatMax(f32);
+        var max_height: f32 = std.math.floatMin(f32);
+        i = 0;
+        while (i < vertex_count) : (i += 1) {
+            const vy = mesh.vertices[i * 3 + 1];
+            min_height = @min(min_height, vy);
+            max_height = @max(max_height, vy);
+        }
+        const height_range = max_height - min_height;
 
         i = 0;
         while (i < vertex_count) : (i += 1) {
             const vx = mesh.vertices[i * 3 + 0];
+            const vy = mesh.vertices[i * 3 + 1];
             const vz = mesh.vertices[i * 3 + 2];
 
             // Get terrain cell color
             if (self.getCellAtConst(vx, vz)) |cell| {
-                const color = cell.type.getColor();
+                var color = cell.type.getColor();
+
+                // Add visual detail inspired by GoW approach:
+                // 1. Height-based variation (subtle ambient occlusion-like effect)
+                if (height_range > 1.0) {
+                    const normalized_height = (vy - min_height) / height_range;
+                    // Lower areas slightly darker (ambient occlusion), higher areas slightly brighter
+                    const height_factor = 0.85 + normalized_height * 0.15; // Range: 0.85 to 1.0
+                    color.r = @intFromFloat(@as(f32, @floatFromInt(color.r)) * height_factor);
+                    color.g = @intFromFloat(@as(f32, @floatFromInt(color.g)) * height_factor);
+                    color.b = @intFromFloat(@as(f32, @floatFromInt(color.b)) * height_factor);
+                }
+
+                // 2. Add subtle variation based on position (breaks up flat look)
+                // Use simple hash-like function from position
+                const pos_hash = @sin(vx * 0.1) * @cos(vz * 0.15) + @sin(vx * 0.3 + vz * 0.2);
+                const variation = 0.97 + (pos_hash * 0.5 + 0.5) * 0.06; // Range: 0.97 to 1.03
+                color.r = @intFromFloat(@min(255.0, @as(f32, @floatFromInt(color.r)) * variation));
+                color.g = @intFromFloat(@min(255.0, @as(f32, @floatFromInt(color.g)) * variation));
+                color.b = @intFromFloat(@min(255.0, @as(f32, @floatFromInt(color.b)) * variation));
 
                 mesh.colors[i * 4 + 0] = color.r;
                 mesh.colors[i * 4 + 1] = color.g;
                 mesh.colors[i * 4 + 2] = color.b;
                 mesh.colors[i * 4 + 3] = color.a;
-
-                // DEBUG: Log samples from different terrain types
-                if (cell.type == .thick_snow and color_counts[0] == 0) {
-                    std.log.info("THICK_SNOW sample: getColor()=({}, {}, {}) mesh.colors=({}, {}, {})", .{ color.r, color.g, color.b, mesh.colors[i * 4 + 0], mesh.colors[i * 4 + 1], mesh.colors[i * 4 + 2] });
-                }
-                if (cell.type == .packed_snow and color_counts[1] == 0) {
-                    std.log.info("PACKED_SNOW sample: getColor()=({}, {}, {}) mesh.colors=({}, {}, {})", .{ color.r, color.g, color.b, mesh.colors[i * 4 + 0], mesh.colors[i * 4 + 1], mesh.colors[i * 4 + 2] });
-                }
-
-                mesh.colors[i * 4 + 0] = color.r;
-                mesh.colors[i * 4 + 1] = color.g;
-                mesh.colors[i * 4 + 2] = color.b;
-                mesh.colors[i * 4 + 3] = color.a;
-
-                // DEBUG: Verify what was written
-                if (i < 5) {
-                    std.log.info("  mesh.colors written: r={} g={} b={} a={}", .{ mesh.colors[i * 4 + 0], mesh.colors[i * 4 + 1], mesh.colors[i * 4 + 2], mesh.colors[i * 4 + 3] });
-                }
-
-                // Track distribution
-                const type_idx = @intFromEnum(cell.type);
-                color_counts[type_idx] += 1;
             } else {
                 // Default white for out-of-bounds
                 mesh.colors[i * 4 + 0] = 255;
                 mesh.colors[i * 4 + 1] = 255;
                 mesh.colors[i * 4 + 2] = 255;
                 mesh.colors[i * 4 + 3] = 255;
-                oob_count += 1;
             }
         }
 
-        // DEBUG: Log color distribution
-        std.log.info("Color distribution: thick_snow={} packed_snow={} icy_ground={} deep_powder={} cleared_ground={} slushy={} out_of_bounds={}", .{ color_counts[0], color_counts[1], color_counts[2], color_counts[3], color_counts[4], color_counts[5], oob_count });
-
-        // genMeshPlane already generates normals, but since we modified vertices,
-        // we need to recalculate them. genMeshTangents also recalculates normals.
-        // However, there's no genMeshNormals function, so let's manually calculate simple normals
-
-        // For now, just point all normals straight up (Y+)
-        // This is a simplification but should work for terrain
+        // Calculate proper per-vertex normals for terrain shading
+        // genMeshPlane generates normals, but we modified vertices so they're invalid
         if (mesh.normals == null) {
             mesh.normals = @ptrCast(@alignCast(rl.memAlloc(@intCast(vertex_count * 3 * @sizeOf(f32)))));
         }
-        i = 0;
-        while (i < vertex_count) : (i += 1) {
-            mesh.normals[i * 3 + 0] = 0.0; // X
-            mesh.normals[i * 3 + 1] = 1.0; // Y (pointing up)
-            mesh.normals[i * 3 + 2] = 0.0; // Z
+
+        // Initialize all normals to zero
+        var v_idx: usize = 0;
+        while (v_idx < vertex_count) : (v_idx += 1) {
+            mesh.normals[v_idx * 3 + 0] = 0.0;
+            mesh.normals[v_idx * 3 + 1] = 0.0;
+            mesh.normals[v_idx * 3 + 2] = 0.0;
+        }
+
+        // Calculate face normals and accumulate to vertex normals
+        // genMeshPlane creates triangles with indices, but we can calculate from vertex positions
+        const triangle_count = @as(usize, @intCast(mesh.triangleCount));
+        var tri_idx: usize = 0;
+        while (tri_idx < triangle_count) : (tri_idx += 1) {
+            // Get the three vertex indices for this triangle
+            const idx0 = @as(usize, @intCast(mesh.indices[tri_idx * 3 + 0]));
+            const idx1 = @as(usize, @intCast(mesh.indices[tri_idx * 3 + 1]));
+            const idx2 = @as(usize, @intCast(mesh.indices[tri_idx * 3 + 2]));
+
+            // Get vertex positions
+            const v0x = mesh.vertices[idx0 * 3 + 0];
+            const v0y = mesh.vertices[idx0 * 3 + 1];
+            const v0z = mesh.vertices[idx0 * 3 + 2];
+
+            const v1x = mesh.vertices[idx1 * 3 + 0];
+            const v1y = mesh.vertices[idx1 * 3 + 1];
+            const v1z = mesh.vertices[idx1 * 3 + 2];
+
+            const v2x = mesh.vertices[idx2 * 3 + 0];
+            const v2y = mesh.vertices[idx2 * 3 + 1];
+            const v2z = mesh.vertices[idx2 * 3 + 2];
+
+            // Calculate edge vectors
+            const e1x = v1x - v0x;
+            const e1y = v1y - v0y;
+            const e1z = v1z - v0z;
+
+            const e2x = v2x - v0x;
+            const e2y = v2y - v0y;
+            const e2z = v2z - v0z;
+
+            // Calculate face normal (cross product)
+            const nx = e1y * e2z - e1z * e2y;
+            const ny = e1z * e2x - e1x * e2z;
+            const nz = e1x * e2y - e1y * e2x;
+
+            // Accumulate to all three vertices (weighted by area)
+            mesh.normals[idx0 * 3 + 0] += nx;
+            mesh.normals[idx0 * 3 + 1] += ny;
+            mesh.normals[idx0 * 3 + 2] += nz;
+
+            mesh.normals[idx1 * 3 + 0] += nx;
+            mesh.normals[idx1 * 3 + 1] += ny;
+            mesh.normals[idx1 * 3 + 2] += nz;
+
+            mesh.normals[idx2 * 3 + 0] += nx;
+            mesh.normals[idx2 * 3 + 1] += ny;
+            mesh.normals[idx2 * 3 + 2] += nz;
+        }
+
+        // Normalize all vertex normals
+        v_idx = 0;
+        while (v_idx < vertex_count) : (v_idx += 1) {
+            const nx = mesh.normals[v_idx * 3 + 0];
+            const ny = mesh.normals[v_idx * 3 + 1];
+            const nz = mesh.normals[v_idx * 3 + 2];
+
+            const length = @sqrt(nx * nx + ny * ny + nz * nz);
+            if (length > 0.0001) {
+                mesh.normals[v_idx * 3 + 0] = nx / length;
+                mesh.normals[v_idx * 3 + 1] = ny / length;
+                mesh.normals[v_idx * 3 + 2] = nz / length;
+            } else {
+                // Degenerate normal, point up
+                mesh.normals[v_idx * 3 + 0] = 0.0;
+                mesh.normals[v_idx * 3 + 1] = 1.0;
+                mesh.normals[v_idx * 3 + 2] = 0.0;
+            }
         }
 
         // Now upload mesh to GPU with ALL vertex data including colors
