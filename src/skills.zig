@@ -1,4 +1,5 @@
 const std = @import("std");
+const effects = @import("effects.zig");
 
 pub const SkillTarget = enum {
     enemy,
@@ -214,6 +215,10 @@ pub const Skill = struct {
     // Effects
     chills: []const ChillEffect = &[_]ChillEffect{}, // debuffs to apply
     cozies: []const CozyEffect = &[_]CozyEffect{}, // buffs to apply
+
+    // New composable effects system (future: replace chills/cozies with this)
+    // These are applied when the skill hits a target
+    effects: []const effects.Effect = &[_]effects.Effect{}, // composable effects (damage multipliers, etc.)
 
     // Special properties
     unblockable: bool = false,
@@ -528,6 +533,75 @@ pub const DISRUPTING_THROW = Skill{
     .cast_range = 250.0,
     .interrupts = true,
     .chills = &dazed_chill,
+};
+
+// ============================================================================
+// Example skills using the new composable effects system
+// These demonstrate conditional effects and complex skill mechanics
+// ============================================================================
+
+const weakness_effect_array = [_]effects.Effect{effects.SOAKED_THROUGH_EFFECT};
+
+pub const WEAKNESS_SHOT = Skill{
+    .name = "Soaked Shot",
+    .description = "Throw a wet snowball. Deals 18 damage and leaves target Soaked Through (takes 2x damage) for 5 seconds",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 8,
+    .activation_time_ms = 500,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 10000,
+    .damage = 18.0,
+    .cast_range = 220.0,
+    .effects = &weakness_effect_array,
+};
+
+const haste_effect_array = [_]effects.Effect{effects.MOMENTUM_EFFECT};
+
+pub const SWIFT_BLESSING = Skill{
+    .name = "Get Going",
+    .description = "Shout encouragement. Allies gain Momentum (50% faster movement, 20% quicker skill recharge) for 6 seconds",
+    .skill_type = .call,
+    .mechanic = .shout,
+    .energy_cost = 12,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 25000,
+    .target_type = .ally,
+    .aoe_type = .area,
+    .aoe_radius = 200.0,
+    .effects = &haste_effect_array,
+};
+
+const fragile_effect_array = [_]effects.Effect{effects.COLD_STIFF_EFFECT};
+
+pub const EXPLOIT_WEAKNESS = Skill{
+    .name = "Cold Snap",
+    .description = "Strike at frozen muscles. Deals 22 damage. If target is badly hurt (below 50% warmth), inflicts Cold Stiff (padding 50% less effective) for 8 seconds",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 10,
+    .activation_time_ms = 750,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 12000,
+    .damage = 22.0,
+    .cast_range = 250.0,
+    .effects = &fragile_effect_array,
+};
+
+const quickened_effect_array = [_]effects.Effect{effects.IN_THE_ZONE_EFFECT};
+
+pub const QUICKSTEP = Skill{
+    .name = "Rhythm Running",
+    .description = "Get In The Zone (attack and cast 30% faster) for 12 seconds",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 6,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 18000,
+    .target_type = .self,
+    .effects = &quickened_effect_array,
 };
 
 // Default skill bar for new characters

@@ -6,6 +6,7 @@ const skills = @import("skills.zig");
 const equipment = @import("equipment.zig");
 const gear_slot = @import("gear_slot.zig");
 const entity = @import("entity.zig");
+const effects = @import("effects.zig");
 
 const print = std.debug.print;
 
@@ -140,6 +141,10 @@ pub const Character = struct {
     // Active cozies (buffs) on this character
     active_cozies: [MAX_ACTIVE_CONDITIONS]?skills.ActiveCozy = [_]?skills.ActiveCozy{null} ** MAX_ACTIVE_CONDITIONS,
     active_cozy_count: u8 = 0,
+
+    // Active composable effects (new system - replaces chills/cozies in future)
+    active_effects: [MAX_ACTIVE_CONDITIONS]?effects.ActiveEffect = [_]?effects.ActiveEffect{null} ** MAX_ACTIVE_CONDITIONS,
+    active_effect_count: u8 = 0,
 
     // Death state
     is_dead: bool = false,
@@ -615,6 +620,46 @@ pub const Character = struct {
             };
             self.active_cozy_count += 1;
             self.recalculateWarmthPips(); // New cozy added!
+        }
+        // Silently ignore if array is full - this is a game, not critical
+    }
+
+    /// Add a composable effect to this character
+    /// Handles stacking behavior (refresh duration, add intensity, or ignore)
+    pub fn addEffect(self: *Character, effect: *const effects.Effect, source_id: ?u32) void {
+        // Check if effect already exists (handle stacking)
+        for (self.active_effects[0..self.active_effect_count]) |*maybe_active| {
+            if (maybe_active.*) |*active| {
+                // Match by effect pointer
+                if (active.effect == effect) {
+                    // Apply stacking behavior
+                    switch (effect.stack_behavior) {
+                        .refresh_duration => {
+                            active.time_remaining_ms = @max(active.time_remaining_ms, effect.duration_ms);
+                        },
+                        .add_intensity => {
+                            active.stack_count = @min(effect.max_stacks, active.stack_count + 1);
+                            active.time_remaining_ms = effect.duration_ms; // Reset duration when stacking
+                        },
+                        .ignore_if_active => {
+                            // Do nothing - keep existing effect
+                            return;
+                        },
+                    }
+                    return;
+                }
+            }
+        }
+
+        // Add new effect if we have space
+        if (self.active_effect_count < self.active_effects.len) {
+            self.active_effects[self.active_effect_count] = .{
+                .effect = effect,
+                .time_remaining_ms = effect.duration_ms,
+                .stack_count = 1,
+                .source_character_id = source_id,
+            };
+            self.active_effect_count += 1;
         }
         // Silently ignore if array is full - this is a game, not critical
     }

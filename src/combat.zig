@@ -2,6 +2,7 @@ const std = @import("std");
 const rl = @import("raylib");
 const character = @import("character.zig");
 const skills = @import("skills.zig");
+const effects = @import("effects.zig");
 const entity_types = @import("entity.zig");
 const vfx = @import("vfx.zig");
 const palette = @import("color_palette.zig");
@@ -261,10 +262,12 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         }
 
         // Apply armor/padding reduction (GW1-inspired formula)
-        // damage_reduction = armor / (armor + 40)
-        // final_damage = base_damage * (1 - damage_reduction)
+        // Simplified from GW1: damage = base × strike_level / (strike_level + armor)
+        // We assume constant effective strike level of 100, so:
+        // damage_reduction = armor / (armor + 100)
+        // final_damage = base_damage × (1 - damage_reduction)
         const target_padding = tgt.getTotalPadding();
-        const armor_reduction = target_padding / (target_padding + 40.0);
+        const armor_reduction = target_padding / (target_padding + 100.0);
         final_damage *= (1.0 - armor_reduction);
 
         // Apply soak (armor penetration - reduces effective armor)
@@ -272,7 +275,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             // Soak penetrates a percentage of armor
             // effective_armor = armor * (1 - soak)
             const effective_padding = target_padding * (1.0 - skill.soak);
-            const soaked_reduction = effective_padding / (effective_padding + 40.0);
+            const soaked_reduction = effective_padding / (effective_padding + 100.0);
             final_damage = skill.damage * (1.0 - soaked_reduction);
             if (caster.hasCozy(.fire_inside)) {
                 final_damage *= 1.3; // Re-apply fire inside bonus after soak
@@ -407,6 +410,26 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
                 tgt.name,
                 @tagName(cozy_effect.cozy),
                 cozy_effect.duration_ms,
+            });
+        }
+
+        // Apply new composable effects
+        for (skill.effects) |effect| {
+            // Check if condition is met
+            const caster_hp_percent = caster.warmth / caster.max_warmth;
+            const target_hp_percent = tgt.warmth / tgt.max_warmth;
+            if (!effects.evaluateCondition(effect.condition, caster_hp_percent, target_hp_percent)) {
+                continue;
+            }
+
+            // Apply effect to target
+            tgt.addEffect(&effect, caster.id);
+
+            print("{s} applied effect {s} to {s} for {d}ms\n", .{
+                caster.name,
+                effect.name,
+                tgt.name,
+                effect.duration_ms,
             });
         }
 
