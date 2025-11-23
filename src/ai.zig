@@ -333,6 +333,36 @@ pub const Conditions = struct {
         const roll = ctx.rng.intRangeAtMost(u32, 0, 100);
         return if (roll < 20) .success else .failure;
     }
+
+    // Check if there's an enemy wall blocking our target
+    pub fn enemyWallBlocking(ctx: *BehaviorContext) NodeStatus {
+        if (ctx.target == null) return .failure;
+        const target = ctx.target.?;
+
+        const has_wall = ctx.terrain_grid.hasWallBetween(
+            ctx.self.position.x,
+            ctx.self.position.z,
+            target.position.x,
+            target.position.z,
+            10.0,
+        );
+
+        return if (has_wall) .success else .failure;
+    }
+
+    // Check if we should build a defensive wall (under threat)
+    pub fn shouldBuildDefensiveWall(ctx: *BehaviorContext) NodeStatus {
+        const health_pct = ctx.self.warmth / ctx.self.max_warmth;
+        const under_fire = ctx.self.damage_source_count > 0; // Being hit by enemies
+
+        // Build wall if low health AND under fire
+        if (health_pct < 0.5 and under_fire) {
+            // 50% chance to prioritize wall
+            return if (ctx.rng.boolean()) .success else .failure;
+        }
+
+        return .failure;
+    }
 };
 
 // Helper functions for terrain skill placement
@@ -408,6 +438,40 @@ fn findBestUtilityTerrainLocation(ctx: *BehaviorContext) ?rl.Vector3 {
     };
 }
 
+fn findBestDefensiveWallPosition(ctx: *BehaviorContext) rl.Vector3 {
+    // Place wall between self and nearest enemy
+    if (ctx.enemies_count == 0) {
+        // No enemies, place wall slightly in front (default forward direction)
+        return rl.Vector3{
+            .x = ctx.self.position.x + 40.0,
+            .y = 0,
+            .z = ctx.self.position.z,
+        };
+    }
+
+    // Find closest enemy
+    var closest_enemy = ctx.enemies[0];
+    var closest_dist = ctx.self.distanceTo(closest_enemy.*);
+
+    for (ctx.enemies[1..ctx.enemies_count]) |enemy| {
+        const dist = ctx.self.distanceTo(enemy.*);
+        if (dist < closest_dist) {
+            closest_dist = dist;
+            closest_enemy = enemy;
+        }
+    }
+
+    // Place wall 40% of the way toward closest enemy (defensive position)
+    const dx = closest_enemy.position.x - ctx.self.position.x;
+    const dz = closest_enemy.position.z - ctx.self.position.z;
+
+    return rl.Vector3{
+        .x = ctx.self.position.x + dx * 0.4,
+        .y = 0,
+        .z = ctx.self.position.z + dz * 0.4,
+    };
+}
+
 // Actions (can return success/failure/running)
 pub const Actions = struct {
     // Move toward target
@@ -417,11 +481,21 @@ pub const Actions = struct {
         return .success;
     }
 
-    // Cast best damage skill on target
+    // Cast best damage skill on target (cover-aware)
     pub fn castDamageSkill(ctx: *BehaviorContext) NodeStatus {
         if (ctx.target == null) return .failure;
+        const target = ctx.target.?;
 
-        if (selectDamageSkill(ctx.self, ctx.target.?, ctx.rng)) |skill_idx| {
+        // Check if target has cover (wall between us)
+        const target_has_cover = ctx.terrain_grid.hasWallBetween(
+            ctx.self.position.x,
+            ctx.self.position.z,
+            target.position.x,
+            target.position.z,
+            10.0,
+        );
+
+        if (selectDamageSkillWithCover(ctx.self, target, ctx.rng, target_has_cover)) |skill_idx| {
             const result = combat.tryStartCast(
                 ctx.self,
                 skill_idx,
@@ -499,7 +573,7 @@ pub const Actions = struct {
                             .name = "Ground",
                             .warmth = 100,
                             .max_warmth = 100,
-                            .is_enemy = false,
+                            .team = .red,
                             .school = .private_school,
                             .player_position = .pitcher,
                             .energy = 0,
@@ -575,6 +649,85 @@ pub const Actions = struct {
 
         return .failure;
     }
+
+    // Cast wall-building skill to protect self or allies
+    pub fn castDefensiveWall(ctx: *BehaviorContext) NodeStatus {
+        // Find wall-building skill
+        for (ctx.self.skill_bar, 0..) |maybe_skill, idx| {
+            if (maybe_skill) |skill| {
+                if (skill.creates_wall and ctx.self.canUseSkill(@intCast(idx))) {
+                    // Calculate position: Between self and enemies
+                    const target_pos = if (ctx.enemies_count > 0)
+                        findBestDefensiveWallPosition(ctx)
+                    else
+                        ctx.self.position;
+
+                    const result = combat.tryStartCastAtGround(
+                        ctx.self,
+                        @intCast(idx),
+                        target_pos,
+                        ctx.rng,
+                        ctx.vfx_manager,
+                        @constCast(ctx.terrain_grid),
+                    );
+
+                    if (result == .success or result == .casting_started) {
+                        ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown * 2.0; // Longer CD for walls
+                        return .success;
+                    }
+                }
+            }
+        }
+
+        return .failure;
+    }
+
+    // Cast wall-breaking skill on enemy walls
+    pub fn castWallBreaker(ctx: *BehaviorContext) NodeStatus {
+        if (ctx.target == null) return .failure;
+        const target = ctx.target.?;
+
+        // Check if there's a wall between us and target
+        const has_wall = ctx.terrain_grid.hasWallBetween(
+            ctx.self.position.x,
+            ctx.self.position.z,
+            target.position.x,
+            target.position.z,
+            10.0,
+        );
+
+        if (!has_wall) return .failure;
+
+        // Find wall-breaking skill
+        for (ctx.self.skill_bar, 0..) |maybe_skill, idx| {
+            if (maybe_skill) |skill| {
+                if (skill.destroys_walls and ctx.self.canUseSkill(@intCast(idx))) {
+                    // Cast at midpoint between self and target (where wall likely is)
+                    const wall_pos = rl.Vector3{
+                        .x = (ctx.self.position.x + target.position.x) * 0.5,
+                        .y = 0,
+                        .z = (ctx.self.position.z + target.position.z) * 0.5,
+                    };
+
+                    const result = combat.tryStartCastAtGround(
+                        ctx.self,
+                        @intCast(idx),
+                        wall_pos,
+                        ctx.rng,
+                        ctx.vfx_manager,
+                        @constCast(ctx.terrain_grid),
+                    );
+
+                    if (result == .success or result == .casting_started) {
+                        ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown;
+                        return .success;
+                    }
+                }
+            }
+        }
+
+        return .failure;
+    }
 };
 
 pub const SkillDecision = struct {
@@ -586,8 +739,18 @@ pub const SkillDecision = struct {
 // ROLE-SPECIFIC BEHAVIOR TREES
 // ============================================================================
 
-// Damage Dealer: Interrupt > Terrain (opportunistic) > Damage > Move to target
+// Damage Dealer: Defensive wall > Break walls > Interrupt > Terrain > Damage > Move
 const DamageDealerTree = Selector(&[_]BehaviorNodeFn{
+    Sequence(&[_]BehaviorNodeFn{
+        Conditions.canCastSkill,
+        Conditions.shouldBuildDefensiveWall,
+        Actions.castDefensiveWall,
+    }),
+    Sequence(&[_]BehaviorNodeFn{
+        Conditions.canCastSkill,
+        Conditions.enemyWallBlocking,
+        Actions.castWallBreaker,
+    }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
         Conditions.targetCasting,
@@ -606,12 +769,17 @@ const DamageDealerTree = Selector(&[_]BehaviorNodeFn{
     Actions.moveToTarget,
 });
 
-// Support: Heal allies > Healing Terrain > Buff/Terrain > Damage > Move
+// Support: Heal allies > Protective walls > Healing Terrain > Buff/Terrain > Damage > Move
 const SupportTree = Selector(&[_]BehaviorNodeFn{
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
         Conditions.allyNeedsHealing,
         Actions.castHeal,
+    }),
+    Sequence(&[_]BehaviorNodeFn{
+        Conditions.canCastSkill,
+        Conditions.underThreat, // Build wall when allies under threat
+        Actions.castDefensiveWall,
     }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
@@ -631,12 +799,17 @@ const SupportTree = Selector(&[_]BehaviorNodeFn{
     Actions.moveToTarget,
 });
 
-// Disruptor: Always interrupt > Terrain (opportunistic) > Debuff > Damage
+// Disruptor: Always interrupt > Break walls > Terrain > Debuff > Damage
 const DisruptorTree = Selector(&[_]BehaviorNodeFn{
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
         Conditions.targetCasting,
         Actions.castInterrupt,
+    }),
+    Sequence(&[_]BehaviorNodeFn{
+        Conditions.canCastSkill,
+        Conditions.enemyWallBlocking,
+        Actions.castWallBreaker,
     }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
@@ -662,7 +835,8 @@ fn selectSkillWithBehaviorTree(
 ) ?SkillDecision {
     switch (role) {
         .damage_dealer => {
-            if (selectDamageSkill(caster, target, rng)) |idx| {
+            // No terrain grid here, assume no cover for fallback path
+            if (selectDamageSkillWithCover(caster, target, rng, false)) |idx| {
                 return SkillDecision{ .skill_idx = idx, .target_ally = false };
             }
             return null;
@@ -677,8 +851,25 @@ fn selectSkillWithBehaviorTree(
     }
 }
 
-// Damage dealer: prioritize high damage, use interrupts on casting targets
-fn selectDamageSkill(caster: *Character, target: *Character, _: *std.Random) ?u8 {
+// Damage dealer: prioritize high damage, use interrupts on casting targets, build walls defensively
+// Cover-aware: prefers arcing projectiles when target has cover
+fn selectDamageSkillWithCover(caster: *Character, target: *Character, rng: *std.Random, target_has_cover: bool) ?u8 {
+    // Check if we should build a defensive wall (low health + being attacked)
+    const health_pct = caster.warmth / caster.max_warmth;
+    if (health_pct < 0.5 and caster.damage_source_count > 0) {
+        // Look for wall-building skill
+        for (caster.skill_bar, 0..) |maybe_skill, idx| {
+            if (maybe_skill) |skill| {
+                if (skill.creates_wall and caster.canUseSkill(@intCast(idx))) {
+                    // 50% chance to build defensive wall when low
+                    if (rng.boolean()) {
+                        return @intCast(idx);
+                    }
+                }
+            }
+        }
+    }
+
     // Check if target is casting - use interrupt if available
     if (target.cast_state == .activating) {
         for (caster.skill_bar, 0..) |maybe_skill, idx| {
@@ -690,15 +881,26 @@ fn selectDamageSkill(caster: *Character, target: *Character, _: *std.Random) ?u8
         }
     }
 
-    // Use highest damage skill available
+    // Use highest damage skill available, with cover awareness
     var best_skill: ?u8 = null;
     var best_damage: f32 = 0.0;
 
     for (caster.skill_bar, 0..) |maybe_skill, idx| {
         if (maybe_skill) |skill| {
-            if (skill.damage > best_damage and caster.canUseSkill(@intCast(idx))) {
-                best_damage = skill.damage;
-                best_skill = @intCast(idx);
+            if (skill.damage > 0 and caster.canUseSkill(@intCast(idx))) {
+                var effective_damage = skill.damage;
+
+                // Prefer arcing projectiles when target has cover (they ignore walls)
+                if (target_has_cover and skill.projectile_type == .arcing) {
+                    effective_damage *= 1.5; // 50% preference boost for arcing when cover exists
+                } else if (skill.projectile_type == .arcing) {
+                    effective_damage *= 1.1; // Slight general preference for arcing
+                }
+
+                if (effective_damage > best_damage) {
+                    best_damage = effective_damage;
+                    best_skill = @intCast(idx);
+                }
             }
         }
     }
@@ -717,23 +919,65 @@ fn selectDamageSkill(caster: *Character, target: *Character, _: *std.Random) ?u8
     return best_skill;
 }
 
-// Support: heal low health allies, buff team
+// Wall-breaking specialist: Use demolition/breakthrough skills to destroy enemy walls
+fn selectWallBreakingSkill(caster: *Character, terrain_grid: *const @import("terrain.zig").TerrainGrid, target: *Character) ?u8 {
+    // Check if there's a wall between us and the target
+    const has_blocking_wall = terrain_grid.hasWallBetween(
+        caster.position.x,
+        caster.position.z,
+        target.position.x,
+        target.position.z,
+        10.0, // Min wall height to care about
+    );
+
+    if (!has_blocking_wall) return null;
+
+    // Find wall-breaking skill
+    for (caster.skill_bar, 0..) |maybe_skill, idx| {
+        if (maybe_skill) |skill| {
+            if (skill.destroys_walls and caster.canUseSkill(@intCast(idx))) {
+                // Found a wall-breaker! Use it!
+                return @intCast(idx);
+            }
+        }
+    }
+
+    return null;
+}
+
+// Support: heal low health allies, buff team, protect with walls
 // Returns skill index and whether it should be cast on an ally (true) or enemy (false)
-fn selectSupportSkill(caster: *Character, all_entities: []Character, _: *std.Random) ?SkillDecision {
+fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.Random) ?SkillDecision {
 
     // Find lowest health ally (check all entities - player is in entities array now!)
     var lowest_health_pct: f32 = 1.0;
     var needs_healing = false;
+    var ally_under_fire = false;
 
     // Check all allies in entities
     for (all_entities) |ent| {
-        if (!ent.is_enemy and ent.isAlive()) {
+        if (caster.isAlly(ent) and ent.isAlive()) {
             const health_pct = ent.warmth / ent.max_warmth;
             if (health_pct < lowest_health_pct) {
                 lowest_health_pct = health_pct;
             }
             if (health_pct < 0.6) {
                 needs_healing = true;
+            }
+            // Check if ally is taking damage (has active damage sources)
+            if (health_pct < 0.7 and ent.damage_source_count > 0) {
+                ally_under_fire = true;
+            }
+        }
+    }
+
+    // Build protective wall for ally if they're under fire (30% chance)
+    if (ally_under_fire and rng.intRangeAtMost(u32, 0, 100) < 30) {
+        for (caster.skill_bar, 0..) |maybe_skill, idx| {
+            if (maybe_skill) |skill| {
+                if (skill.creates_wall and caster.canUseSkill(@intCast(idx))) {
+                    return SkillDecision{ .skill_idx = @intCast(idx), .target_ally = false };
+                }
             }
         }
     }
@@ -787,8 +1031,8 @@ fn selectDisruptorSkill(caster: *Character, target: *Character, rng: *std.Random
         }
     }
 
-    // Fallback to damage
-    return selectDamageSkill(caster, target, rng);
+    // Fallback to damage (assume no cover for disruptor fallback)
+    return selectDamageSkillWithCover(caster, target, rng, false);
 }
 
 // Calculate movement intent for AI based on formation role and tactical situation
@@ -972,7 +1216,7 @@ fn populateContext(ctx: *BehaviorContext) void {
     for (ctx.all_entities) |*ent| {
         if (!ent.isAlive()) continue;
 
-        if (ent.is_enemy == ctx.self.is_enemy) {
+        if (ctx.self.isAlly(ent.*)) {
             // Same team = ally
             if (ctx.allies_count < ctx.allies.len) {
                 ctx.allies[ctx.allies_count] = ent;
@@ -1025,26 +1269,26 @@ pub fn updateAI(
         var target: ?*Character = null;
         var target_id: ?EntityId = null;
 
-        if (ent.is_enemy) {
-            // Enemies target player
-            if (player_ent) |player| {
+        if (player_ent) |player| {
+            if (ent.isEnemy(player.*)) {
+                // Enemies target player
                 target = player;
                 target_id = player.id;
-            }
-        } else {
-            // Allies target nearest enemy
-            if (targeting.getNearestEnemy(ent.*, entities)) |enemy_id| {
-                // Find entity by ID
-                for (entities) |*e| {
-                    if (e.id == enemy_id) {
-                        target = e;
-                        target_id = enemy_id;
-                        break;
-                    }
-                }
             } else {
-                // No enemies, follow player
-                target = player_ent;
+                // Allies target nearest enemy
+                if (targeting.getNearestEnemy(ent.*, entities)) |enemy_id| {
+                    // Find entity by ID
+                    for (entities) |*e| {
+                        if (e.id == enemy_id) {
+                            target = e;
+                            target_id = enemy_id;
+                            break;
+                        }
+                    }
+                } else {
+                    // No enemies, follow player
+                    target = player_ent;
+                }
             }
         }
 

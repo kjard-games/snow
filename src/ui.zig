@@ -189,7 +189,7 @@ pub fn drawUI(player: *const Character, entities: []const Character, selected_ta
         }
 
         if (target) |tgt| {
-            drawTargetFrame(&tgt, 10, 10);
+            drawTargetFrame(player, &tgt, 10, 10);
         }
     }
 
@@ -346,7 +346,7 @@ fn drawEnergyBar(player: *const Character, x: f32, y: f32, width: f32, height: f
 }
 
 // Draw a proper MMO-style target frame
-fn drawTargetFrame(target: *const Character, x: f32, y: f32) void {
+fn drawTargetFrame(player: *const Character, target: *const Character, x: f32, y: f32) void {
     const frame_width: f32 = 280;
     const frame_height: f32 = 110;
     const padding: f32 = 8;
@@ -367,8 +367,8 @@ fn drawTargetFrame(target: *const Character, x: f32, y: f32) void {
 
     // Target type indicator
     const type_x = x + padding + @as(f32, @floatFromInt(rl.measureText(target.name, 14))) + 8;
-    const type_text = if (target.is_enemy) "Enemy" else "Ally";
-    const type_color = if (target.is_enemy) palette.UI.TEXT_SECONDARY else rl.Color.green;
+    const type_text = if (player.isEnemy(target.*)) "Enemy" else "Ally";
+    const type_color = if (player.isEnemy(target.*)) palette.UI.TEXT_SECONDARY else rl.Color.green;
     rl.drawText(type_text, toI32(type_x), toI32(current_y), 12, type_color);
 
     current_y += 20;

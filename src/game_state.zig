@@ -192,7 +192,7 @@ pub const GameState = struct {
                 .name = "Player",
                 .warmth = 100,
                 .max_warmth = 100,
-                .is_enemy = false,
+                .team = .red,
                 .school = player_school,
                 .player_position = player_position,
                 .energy = player_school.getMaxEnergy(),
@@ -212,7 +212,7 @@ pub const GameState = struct {
                 .name = "Ally 1",
                 .warmth = 100,
                 .max_warmth = 100,
-                .is_enemy = false,
+                .team = .red,
                 .school = pickRandomSchool(&random),
                 .player_position = pickRandomPosition(&random),
                 .energy = 0, // Set after school
@@ -232,7 +232,7 @@ pub const GameState = struct {
                 .name = "Ally 2",
                 .warmth = 100,
                 .max_warmth = 100,
-                .is_enemy = false,
+                .team = .red,
                 .school = pickRandomSchool(&random),
                 .player_position = pickRandomPosition(&random),
                 .energy = 0,
@@ -252,7 +252,7 @@ pub const GameState = struct {
                 .name = "Ally Healer",
                 .warmth = 100,
                 .max_warmth = 100,
-                .is_enemy = false,
+                .team = .red,
                 .school = pickRandomSchool(&random),
                 .player_position = .thermos, // Always healer
                 .energy = 0,
@@ -274,7 +274,7 @@ pub const GameState = struct {
                 .name = "Enemy 1",
                 .warmth = 100,
                 .max_warmth = 100,
-                .is_enemy = true,
+                .team = .blue,
                 .school = pickRandomSchool(&random),
                 .player_position = pickRandomPosition(&random),
                 .energy = 0,
@@ -294,7 +294,7 @@ pub const GameState = struct {
                 .name = "Enemy 2",
                 .warmth = 100,
                 .max_warmth = 100,
-                .is_enemy = true,
+                .team = .blue,
                 .school = pickRandomSchool(&random),
                 .player_position = pickRandomPosition(&random),
                 .energy = 0,
@@ -314,7 +314,7 @@ pub const GameState = struct {
                 .name = "Enemy 3",
                 .warmth = 100,
                 .max_warmth = 100,
-                .is_enemy = true,
+                .team = .blue,
                 .school = pickRandomSchool(&random),
                 .player_position = pickRandomPosition(&random),
                 .energy = 0,
@@ -334,7 +334,7 @@ pub const GameState = struct {
                 .name = "Enemy Healer",
                 .warmth = 100,
                 .max_warmth = 100,
-                .is_enemy = true,
+                .team = .blue,
                 .school = pickRandomSchool(&random),
                 .player_position = .thermos, // Always healer
                 .energy = 0,
@@ -353,45 +353,39 @@ pub const GameState = struct {
             ent.energy = ent.school.getMaxEnergy();
             ent.max_energy = ent.school.getMaxEnergy();
 
-            // Load skills: Random 3 from position, 1 guaranteed terrain skill, random 4 from school
+            // Load skills: Guarantee 1 wall skill in slot 0 (from position), then random fill
             const position_skills = ent.player_position.getSkills();
             const school_skills = ent.school.getSkills();
 
-            // Slot 4 FIRST: Guarantee at least 1 terrain skill
-            var terrain_skill_loaded = false;
-            var guaranteed_terrain_idx: ?usize = null;
-
-            // Find all terrain skills
+            // FIRST: Find a wall-building skill in position skills
+            var wall_skill_idx: ?usize = null;
             for (position_skills, 0..) |skill, skill_idx| {
-                if (skill.terrain_effect.shape != .none) {
-                    // Pick a random terrain skill
-                    if (random.boolean()) {
-                        guaranteed_terrain_idx = skill_idx;
-                    } else if (guaranteed_terrain_idx == null) {
-                        guaranteed_terrain_idx = skill_idx; // First one as fallback
+                if (skill.creates_wall) {
+                    // Found a wall-building skill - randomly decide if we use it
+                    if (random.boolean() or wall_skill_idx == null) {
+                        wall_skill_idx = skill_idx;
                     }
                 }
             }
 
-            if (guaranteed_terrain_idx) |terrain_idx| {
-                ent.skill_bar[3] = &position_skills[terrain_idx];
-                terrain_skill_loaded = true;
+            // Guarantee at least 1 wall skill in slot 0 (from position)
+            var wall_skill_loaded = false;
+            if (wall_skill_idx) |idx| {
+                ent.skill_bar[0] = &position_skills[idx];
+                wall_skill_loaded = true;
             }
 
-            // Slots 1-3: Randomly pick 3 position skills (excluding the guaranteed terrain skill)
-            var selected_count: usize = 0;
+            // Slots 1-3: Randomly pick 3 more position skills (can include more walls by chance)
+            var selected_count: usize = if (wall_skill_loaded) 1 else 0; // Start at 1 if we loaded wall
             var attempts: usize = 0;
-            const max_attempts = position_skills.len * 3; // Avoid infinite loop
+            const max_attempts = position_skills.len * 3;
 
-            while (selected_count < 3 and attempts < max_attempts) : (attempts += 1) {
+            while (selected_count < 4 and attempts < max_attempts) : (attempts += 1) {
                 if (position_skills.len == 0) break;
 
                 const random_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
 
-                // Skip if this is the guaranteed terrain skill slot
-                if (terrain_skill_loaded and random_idx == guaranteed_terrain_idx.?) continue;
-
-                // Check if already loaded in slots 0-2
+                // Check if already loaded in slots 0-3
                 var already_loaded = false;
                 for (0..selected_count) |check_idx| {
                     if (ent.skill_bar[check_idx] == &position_skills[random_idx]) {
@@ -406,10 +400,11 @@ pub const GameState = struct {
                 }
             }
 
-            // Fallback: if no terrain skill found, fill slot 4 with random position skill
-            if (!terrain_skill_loaded and position_skills.len > 0) {
+            // Fallback: if no wall skill found in position, fill slot 0 with random position skill
+            // (Pitcher and Sledder don't have wall builders, only wall breakers)
+            if (!wall_skill_loaded and position_skills.len > 0) {
                 const fallback_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
-                ent.skill_bar[3] = &position_skills[fallback_idx];
+                ent.skill_bar[0] = &position_skills[fallback_idx];
             }
 
             // Slots 5-8: Randomly pick 4 school skills
@@ -483,20 +478,21 @@ pub const GameState = struct {
         // Centered around the battlefield (offset by -1000, -1000)
         const terrain_grid = TerrainGrid.init(
             allocator,
-            40, // width (doubled)
-            40, // height (doubled)
-            50.0, // grid_size (each cell is 50 units)
-            -1000.0, // world_offset_x (doubled)
-            -1000.0, // world_offset_z (doubled)
+            100, // width (increased for better detail)
+            100, // height (increased for better detail)
+            20.0, // grid_size (each cell is 20 units - matches character scale)
+            -1000.0, // world_offset_x
+            -1000.0, // world_offset_z
         ) catch |err| {
             print("Failed to initialize terrain grid: {}\n", .{err});
             @panic("Terrain initialization failed");
         };
 
         print("=== TERRAIN SYSTEM INITIALIZED ===\n", .{});
-        print("Grid: 40x40 cells (50 units each)\n", .{});
+        print("Grid: 100x100 cells (20 units each)\n", .{});
         print("Coverage: 2000x2000 world units\n", .{});
         print("Snow accumulation: Active\n", .{});
+        print("Memory: ~340 KB grid data\n", .{});
         print("==================================\n\n", .{});
 
         return GameState{
@@ -675,7 +671,7 @@ pub const GameState = struct {
         var all_enemies_dead = true;
         var alive_enemy_count: u32 = 0;
         for (self.entities) |ent| {
-            if (ent.is_enemy and ent.isAlive()) {
+            if (player.isEnemy(ent) and ent.isAlive()) {
                 all_enemies_dead = false;
                 alive_enemy_count += 1;
             }

@@ -215,6 +215,89 @@ fn drawTerrainGrid(grid: *const TerrainGrid) void {
                     color,
                 );
             }
+
+            // Draw wall if present (on top of snow layer)
+            if (cell.wall_height > 5.0) {
+                const wall_base_y = elevation + snow_height; // Wall sits on top of snow
+                const wall_center_y = wall_base_y + cell.wall_height / 2.0;
+
+                // Subtle wall color - blend with snow but slightly darker/tinted
+                // Very subtle team tint to distinguish ownership
+                var wall_color = rl.Color{ .r = 210, .g = 215, .b = 225, .a = 255 };
+
+                // Apply very subtle team tint (10% influence)
+                switch (cell.wall_team) {
+                    .red => {
+                        wall_color.r = @min(255, @as(u16, wall_color.r) + 15);
+                        wall_color.g = if (wall_color.g > 8) wall_color.g - 8 else 0;
+                        wall_color.b = if (wall_color.b > 8) wall_color.b - 8 else 0;
+                    },
+                    .blue => {
+                        wall_color.r = if (wall_color.r > 8) wall_color.r - 8 else 0;
+                        wall_color.g = if (wall_color.g > 8) wall_color.g - 8 else 0;
+                        wall_color.b = @min(255, @as(u16, wall_color.b) + 15);
+                    },
+                    .yellow => {
+                        wall_color.r = @min(255, @as(u16, wall_color.r) + 15);
+                        wall_color.g = @min(255, @as(u16, wall_color.g) + 15);
+                        wall_color.b = if (wall_color.b > 8) wall_color.b - 8 else 0;
+                    },
+                    .green => {
+                        wall_color.r = if (wall_color.r > 8) wall_color.r - 8 else 0;
+                        wall_color.g = @min(255, @as(u16, wall_color.g) + 15);
+                        wall_color.b = if (wall_color.b > 8) wall_color.b - 8 else 0;
+                    },
+                    .none => {}, // Neutral gray
+                }
+
+                // Darken wall based on age (older = darker/weathered)
+                const age_factor = @min(1.0, cell.wall_age / 30.0); // Max darkening at 30s
+                const age_darken = @as(u8, @intFromFloat(20.0 * age_factor));
+                wall_color.r = if (wall_color.r > age_darken) wall_color.r - age_darken else 0;
+                wall_color.g = if (wall_color.g > age_darken) wall_color.g - age_darken else 0;
+                wall_color.b = if (wall_color.b > age_darken) wall_color.b - age_darken else 0;
+
+                // Height-based shading (taller = slightly darker at base)
+                const height_shading = @as(u8, @intFromFloat(@min(15.0, cell.wall_height * 0.2)));
+
+                // Draw wall cube (slightly smaller than tile for distinction)
+                rl.drawCube(
+                    rl.Vector3{ .x = world_pos.x, .y = wall_center_y, .z = world_pos.z },
+                    tile_size - 2.0, // Smaller than tile
+                    cell.wall_height,
+                    tile_size - 2.0,
+                    wall_color,
+                );
+
+                // Draw top surface (lighter for height perception)
+                var wall_top_color = wall_color;
+                wall_top_color.r = @min(255, @as(u16, wall_top_color.r) + 20);
+                wall_top_color.g = @min(255, @as(u16, wall_top_color.g) + 20);
+                wall_top_color.b = @min(255, @as(u16, wall_top_color.b) + 20);
+
+                rl.drawCube(
+                    rl.Vector3{ .x = world_pos.x, .y = wall_base_y + cell.wall_height + 0.1, .z = world_pos.z },
+                    tile_size - 2.0,
+                    0.3, // Thin top cap
+                    tile_size - 2.0,
+                    wall_top_color,
+                );
+
+                // Draw wall edges/wireframe for structure definition
+                var wall_edge_color = wall_color;
+                const edge_darken = 40 + height_shading;
+                wall_edge_color.r = if (wall_edge_color.r > edge_darken) wall_edge_color.r - edge_darken else 0;
+                wall_edge_color.g = if (wall_edge_color.g > edge_darken) wall_edge_color.g - edge_darken else 0;
+                wall_edge_color.b = if (wall_edge_color.b > edge_darken) wall_edge_color.b - edge_darken else 0;
+
+                rl.drawCubeWires(
+                    rl.Vector3{ .x = world_pos.x, .y = wall_center_y, .z = world_pos.z },
+                    tile_size - 2.0,
+                    cell.wall_height,
+                    tile_size - 2.0,
+                    wall_edge_color,
+                );
+            }
         }
     }
 }
@@ -355,7 +438,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
             const snow_height = terrain_grid.getSnowHeightAt(render_pos.x, render_pos.z);
             render_pos.y = elevation + snow_height - sink_depth + ent.radius;
 
-            const team_color = palette.getOutlineColor(ent.is_enemy, false);
+            const team_color = palette.getOutlineColor(ent.team, player.*.team, false);
             rl.drawSphere(render_pos, ent.radius, team_color);
         }
 
@@ -365,7 +448,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         const p_sink = terrain_grid.getSinkDepthAt(player_pos.x, player_pos.z);
         const p_snow = terrain_grid.getSnowHeightAt(player_pos.x, player_pos.z);
         player_pos.y = p_elevation + p_snow - p_sink + player.*.radius;
-        const player_team_color = palette.getOutlineColor(player.*.is_enemy, true);
+        const player_team_color = palette.getOutlineColor(player.*.team, player.*.team, true);
         rl.drawSphere(player_pos, player.*.radius, player_team_color);
 
         rl.endMode3D();
@@ -434,7 +517,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
             // Health fill
             const health_percent = ent.warmth / ent.max_warmth;
             const fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(ui.bar_width - 2)) * health_percent));
-            const health_color = if (ent.is_enemy) rl.Color.red else rl.Color.green;
+            const health_color = if (player.isEnemy(ent)) rl.Color.red else rl.Color.green;
             rl.drawRectangle(bar_x + 1, current_y + 1, fill_width, ui.bar_height - 2, health_color);
 
             // Border

@@ -7,6 +7,13 @@ pub const SkillTarget = enum {
     ground,
 };
 
+// Projectile trajectory type (for cover mechanics)
+pub const ProjectileType = enum {
+    direct, // Straight line (fastball) - affected by cover
+    arcing, // Arcing trajectory (lob) - ignores cover, arcs over walls
+    instant, // No projectile (instant hit) - affected by cover
+};
+
 // Skill mechanics - determines casting behavior (snowball fight timing!)
 // These describe HOW the skill executes (timing), not WHAT it is (that's SkillType)
 pub const SkillMechanic = enum {
@@ -213,8 +220,22 @@ pub const Skill = struct {
     soak: f32 = 0.0, // percentage (0.0 to 1.0) - soaks through padding/layers
     interrupts: bool = false, // Does this skill interrupt target's casting?
 
+    // Projectile type (for cover mechanics)
+    projectile_type: ProjectileType = .direct, // Direct (fastball) or arcing (lob)
+
     // Terrain modification (for ground-targeted skills) - COMPOSITIONAL
     terrain_effect: TerrainEffect = .{},
+
+    // Wall building (perpendicular to caster facing)
+    creates_wall: bool = false,
+    wall_length: f32 = 0.0, // Length of wall segment
+    wall_height: f32 = 0.0, // Height of wall
+    wall_thickness: f32 = 20.0, // Thickness of wall (default 20 units)
+    wall_distance_from_caster: f32 = 40.0, // How far in front to place wall
+
+    // Wall destruction
+    destroys_walls: bool = false,
+    wall_damage_multiplier: f32 = 1.0, // Damage multiplier against walls
 
     // School-specific resource costs
     grit_cost: u8 = 0, // Public School - adrenaline-like resource

@@ -13,6 +13,7 @@ pub const Position = position.Position;
 pub const Skill = skills.Skill;
 pub const Equipment = equipment.Equipment;
 pub const EntityId = entity.EntityId;
+pub const Team = entity.Team;
 
 // Character configuration constants
 pub const MAX_SKILLS: usize = 8;
@@ -56,7 +57,7 @@ pub const Character = struct {
     name: [:0]const u8,
     warmth: f32,
     max_warmth: f32,
-    is_enemy: bool,
+    team: Team, // Which team this character belongs to
 
     // Skill system components
     school: School,
@@ -158,6 +159,16 @@ pub const Character = struct {
 
     pub fn isAlive(self: Character) bool {
         return !self.is_dead and self.warmth > 0;
+    }
+
+    /// Check if another character is an ally
+    pub fn isAlly(self: Character, other: Character) bool {
+        return self.team.isAlly(other.team);
+    }
+
+    /// Check if another character is an enemy
+    pub fn isEnemy(self: Character, other: Character) bool {
+        return self.team.isEnemy(other.team);
     }
 
     /// Check if character is freezing (below 25% warmth)

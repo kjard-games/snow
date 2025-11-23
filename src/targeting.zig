@@ -17,7 +17,7 @@ pub fn cycleEnemies(player: Character, entities: []const Character, selected_tar
 
     for (entities) |ent| {
         if (ent.id == player.id) continue; // Skip self
-        if (!ent.is_enemy) continue; // Only enemies
+        if (!player.isEnemy(ent)) continue; // Only enemies
         if (!ent.isAlive()) continue; // Only alive
 
         const dx = ent.position.x - player.position.x;
@@ -87,7 +87,7 @@ pub fn cycleAllies(player: Character, entities: []const Character, selected_targ
     var ally_count: usize = 0;
 
     for (entities) |ent| {
-        if (ent.is_enemy) continue; // Only allies
+        if (!player.isAlly(ent)) continue; // Only allies
         if (!ent.isAlive()) continue; // Only alive
 
         const dx = ent.position.x - player.position.x;
@@ -187,7 +187,7 @@ pub fn getNearestEnemy(player: Character, entities: []const Character) ?EntityId
     var min_dist: f32 = std.math.floatMax(f32);
 
     for (entities) |ent| {
-        if (!ent.is_enemy) continue;
+        if (!player.isEnemy(ent)) continue;
         if (!ent.isAlive()) continue; // Skip dead entities
 
         const dx = ent.position.x - player.position.x;
@@ -219,7 +219,7 @@ pub fn getNearestAlly(player: Character, entities: []const Character) ?EntityId 
     var min_dist: f32 = std.math.floatMax(f32);
 
     for (entities) |ent| {
-        if (ent.is_enemy) continue;
+        if (!player.isAlly(ent)) continue;
         if (!ent.isAlive()) continue; // Skip dead entities
 
         const dx = ent.position.x - player.position.x;
@@ -258,7 +258,7 @@ pub fn getLowestHealthAlly(player: Character, entities: []const Character) ?Enti
     }
 
     for (entities) |ent| {
-        if (ent.is_enemy) continue;
+        if (!player.isAlly(ent)) continue;
         if (!ent.isAlive()) continue;
 
         const health_percent = ent.warmth / ent.max_warmth;

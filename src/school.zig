@@ -255,6 +255,27 @@ const private_school_skills = [_]Skill{
         .recharge_time_ms = 20000,
         // TODO: Remove all chills from self
     },
+
+    // 9. WALL: Security Fence - expensive but sturdy wall
+    .{
+        .name = "Security Fence",
+        .description = "Stance. Credit: 12 energy. Build a tall reinforced wall. Blocks projectiles.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 10,
+        .credit_cost = 12,
+        .target_type = .ground,
+        .cast_range = 120.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 30000,
+        .creates_wall = true,
+        .wall_length = 75.0, // Longer wall
+        .wall_height = 50.0, // Tallest wall - premium quality
+        .wall_thickness = 30.0,
+        .wall_distance_from_caster = 50.0,
+        .cozies = &private_insulated, // Also grants protection buff
+    },
 };
 
 // ============================================================================
@@ -412,6 +433,27 @@ const public_school_skills = [_]Skill{
         .recharge_time_ms = 8000,
         // TODO: You take double damage for 5s
     },
+
+    // 9. WALL: Scrappy Barricade - fast, aggressive wall
+    .{
+        .name = "Scrappy Barricade",
+        .description = "Trick. Costs 3 Grit. Build a rough barricade. Gain 2 Grit on cast.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 6,
+        .grit_cost = 3,
+        .target_type = .ground,
+        .cast_range = 100.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000, // Fast cooldown
+        .creates_wall = true,
+        .wall_length = 50.0,
+        .wall_height = 28.0,
+        .wall_thickness = 18.0, // Thinner, scrappier wall
+        .wall_distance_from_caster = 35.0,
+        .grants_grit_on_cast = 2, // Get some Grit back
+    },
 };
 
 // ============================================================================
@@ -552,6 +594,26 @@ const montessori_skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         // TODO: Gain energy equal to number of different skill types used recently
+    },
+
+    // 9. WALL: Adaptive Barrier - wall that changes based on situation
+    .{
+        .name = "Adaptive Barrier",
+        .description = "Stance. Build a versatile wall. Shape and height adapt to terrain.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 7,
+        .target_type = .ground,
+        .cast_range = 120.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 18000,
+        .creates_wall = true,
+        .wall_length = 60.0,
+        .wall_height = 30.0,
+        .wall_thickness = 20.0,
+        .wall_distance_from_caster = 40.0,
+        // TODO: Wall height/shape adapts to underlying terrain
     },
 };
 
@@ -715,6 +777,28 @@ const homeschool_skills = [_]Skill{
         .aoe_type = .area,
         .aoe_radius = 180.0,
     },
+
+    // 9. WALL: Blood Wall - powerful wall at health cost
+    .{
+        .name = "Blood Wall",
+        .description = "Trick. Sacrifice 18% of your max Warmth. Build a tall, jagged wall of frozen blood.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 8,
+        .warmth_cost_percent = 0.18,
+        .min_warmth_percent = 0.22,
+        .target_type = .ground,
+        .cast_range = 150.0,
+        .activation_time_ms = 1500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 35000,
+        .creates_wall = true,
+        .wall_length = 70.0,
+        .wall_height = 45.0, // Very tall wall - paid in blood
+        .wall_thickness = 22.0,
+        .wall_distance_from_caster = 45.0,
+        // TODO: Wall damages enemies who touch it (life steal theme)
+    },
 };
 
 // ============================================================================
@@ -875,5 +959,27 @@ const waldorf_skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         // TODO: +5 damage per rhythm stack, consume all rhythm
+    },
+
+    // 9. WALL: Harmonic Wall - rhythmic wall that pulses
+    .{
+        .name = "Harmonic Wall",
+        .description = "Call. Build a resonant wall. Grants 1 Rhythm on cast. Party members near the wall gain Hot Cocoa regeneration.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 9,
+        .target_type = .ground,
+        .cast_range = 140.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 22000,
+        .creates_wall = true,
+        .wall_length = 65.0,
+        .wall_height = 32.0,
+        .wall_thickness = 20.0,
+        .wall_distance_from_caster = 45.0,
+        .grants_rhythm_on_cast = 1,
+        .cozies = &waldorf_hot_cocoa, // Healing aura near wall
+        // TODO: AOE healing aura around the wall for allies
     },
 };

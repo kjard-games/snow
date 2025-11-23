@@ -157,7 +157,7 @@ fn executeAutoAttack(attacker: *Character, target: *Character, rng: *std.Random,
     }
 
     // Spawn projectile visual
-    const color = if (attacker.is_enemy) palette.VFX.PROJECTILE_AUTO_ENEMY else palette.VFX.PROJECTILE_AUTO_ALLY;
+    const color = if (attacker.team == .blue) palette.VFX.PROJECTILE_AUTO_ENEMY else palette.VFX.PROJECTILE_AUTO_ALLY;
     vfx_manager.spawnProjectile(attacker.position, target.position, attacker.id, target.id, is_ranged, color);
 
     // Apply miss chance from chills

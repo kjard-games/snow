@@ -441,7 +441,7 @@ pub fn handleInput(
     player: *Character,
     entities: []Character,
     selected_target: *?EntityId,
-    _: *rl.Camera,
+    camera: *rl.Camera,
     input_state: *InputState,
     rng: *std.Random,
     vfx_manager: *@import("vfx.zig").VFXManager,
@@ -475,7 +475,7 @@ pub fn handleInput(
     // === SKILL USAGE (from buffered inputs) ===
     for (input_state.buffered_skills, 0..) |pressed, i| {
         if (pressed) {
-            useSkill(player, entities, selected_target.*, @intCast(i), rng, vfx_manager, terrain_grid);
+            useSkill(player, entities, selected_target.*, @intCast(i), rng, vfx_manager, terrain_grid, input_state, camera);
             input_state.buffered_skills[i] = false; // Consume the input
         }
     }
@@ -820,15 +820,92 @@ pub fn handleInput(
     };
 }
 
-fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityId, skill_index: u8, rng: *std.Random, vfx_manager: *@import("vfx.zig").VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) void {
+fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityId, skill_index: u8, rng: *std.Random, vfx_manager: *@import("vfx.zig").VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid, input_state: *InputState, camera: *const rl.Camera) void {
     if (skill_index >= player.skill_bar.len) return;
 
-    if (player.skill_bar[skill_index] == null) {
+    const skill = player.skill_bar[skill_index] orelse {
         print("No skill in slot {d}\n", .{skill_index});
+        return;
+    };
+
+    // QUICK-CAST for ground-targeted skills
+    if (skill.target_type == .ground) {
+        var ground_position: rl.Vector3 = undefined;
+
+        // Determine quick-cast position based on input method
+        if (input_state.action_camera or rl.isGamepadAvailable(0)) {
+            // Controller/Action Camera: Cast at fixed distance in front of player
+            const cast_distance = @min(skill.cast_range * 0.6, 80.0); // 60% of max range or 80 units
+            const forward_x = @sin(input_state.camera_angle);
+            const forward_z = @cos(input_state.camera_angle);
+
+            ground_position = .{
+                .x = player.position.x + forward_x * cast_distance,
+                .y = 0,
+                .z = player.position.z + forward_z * cast_distance,
+            };
+
+            print("Quick-cast {s} at {d:.0} units ahead\n", .{ skill.name, cast_distance });
+        } else {
+            // Mouse/Keyboard: Cast at mouse cursor position (raycast to ground)
+            const mouse_pos = rl.getMousePosition();
+            const ray = rl.getScreenToWorldRay(mouse_pos, camera.*);
+
+            if (ray.direction.y != 0.0) {
+                const t = -ray.position.y / ray.direction.y;
+                if (t > 0.0) {
+                    ground_position = .{
+                        .x = ray.position.x + ray.direction.x * t,
+                        .y = 0.0,
+                        .z = ray.position.z + ray.direction.z * t,
+                    };
+
+                    // Clamp to max range
+                    const dx = ground_position.x - player.position.x;
+                    const dz = ground_position.z - player.position.z;
+                    const distance = @sqrt(dx * dx + dz * dz);
+
+                    if (distance > skill.cast_range) {
+                        // Clamp to max range
+                        const scale = skill.cast_range / distance;
+                        ground_position.x = player.position.x + dx * scale;
+                        ground_position.z = player.position.z + dz * scale;
+                        print("Quick-cast {s} at mouse cursor (clamped to {d:.0} range)\n", .{ skill.name, skill.cast_range });
+                    } else {
+                        print("Quick-cast {s} at mouse cursor ({d:.0} units away)\n", .{ skill.name, distance });
+                    }
+                } else {
+                    // Raycast failed, fall back to in-front position
+                    const cast_distance = @min(skill.cast_range * 0.6, 80.0);
+                    const forward_x = @sin(input_state.camera_angle);
+                    const forward_z = @cos(input_state.camera_angle);
+                    ground_position = .{
+                        .x = player.position.x + forward_x * cast_distance,
+                        .y = 0,
+                        .z = player.position.z + forward_z * cast_distance,
+                    };
+                    print("Quick-cast {s} (raycast failed, using fallback position)\n", .{skill.name});
+                }
+            } else {
+                // Raycast failed, fall back to in-front position
+                const cast_distance = @min(skill.cast_range * 0.6, 80.0);
+                const forward_x = @sin(input_state.camera_angle);
+                const forward_z = @cos(input_state.camera_angle);
+                ground_position = .{
+                    .x = player.position.x + forward_x * cast_distance,
+                    .y = 0,
+                    .z = player.position.z + forward_z * cast_distance,
+                };
+                print("Quick-cast {s} (raycast failed, using fallback position)\n", .{skill.name});
+            }
+        }
+
+        // Cast immediately at the determined position
+        _ = combat.tryStartCastAtGround(player, skill_index, ground_position, rng, vfx_manager, terrain_grid);
         return;
     }
 
-    // Get target entity by ID
+    // Regular targeting (entity-targeted or self-targeted skills)
     var target: ?*Character = null;
     if (selected_target) |target_id| {
         // Check if targeting player

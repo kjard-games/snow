@@ -1,6 +1,9 @@
 // Color palette for consistent UI/VFX styling
 // Centralizes all color definitions for easy tweaking and theming
 const rl = @import("raylib");
+const entity = @import("entity.zig");
+
+const Team = entity.Team;
 
 // UI Colors
 pub const UI = struct {
@@ -149,8 +152,8 @@ pub fn getCharacterColor(school: @import("school.zig").School, position: @import
 }
 
 /// Get outline color for character based on team
-pub fn getOutlineColor(is_enemy: bool, is_player: bool) rl.Color {
+pub fn getOutlineColor(team: Team, player_team: Team, is_player: bool) rl.Color {
     if (is_player) return OUTLINE.PLAYER;
-    if (is_enemy) return OUTLINE.ENEMY;
+    if (team.isEnemy(player_team)) return OUTLINE.ENEMY;
     return OUTLINE.ALLY;
 }
