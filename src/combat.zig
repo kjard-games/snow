@@ -260,9 +260,23 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             final_damage *= 0.75; // Bundled Up reduces incoming damage by 25%
         }
 
-        // Apply soak (penetrates padding/layers)
+        // Apply armor/padding reduction (GW1-inspired formula)
+        // damage_reduction = armor / (armor + 40)
+        // final_damage = base_damage * (1 - damage_reduction)
+        const target_padding = tgt.getTotalPadding();
+        const armor_reduction = target_padding / (target_padding + 40.0);
+        final_damage *= (1.0 - armor_reduction);
+
+        // Apply soak (armor penetration - reduces effective armor)
         if (skill.soak > 0) {
-            // TODO: implement padding system and soak mechanic
+            // Soak penetrates a percentage of armor
+            // effective_armor = armor * (1 - soak)
+            const effective_padding = target_padding * (1.0 - skill.soak);
+            const soaked_reduction = effective_padding / (effective_padding + 40.0);
+            final_damage = skill.damage * (1.0 - soaked_reduction);
+            if (caster.hasCozy(.fire_inside)) {
+                final_damage *= 1.3; // Re-apply fire inside bonus after soak
+            }
         }
 
         // Apply cover mechanics (walls provide defense against direct projectiles)

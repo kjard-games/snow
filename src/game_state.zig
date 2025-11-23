@@ -15,6 +15,7 @@ const auto_attack = @import("auto_attack.zig");
 const vfx = @import("vfx.zig");
 const terrain = @import("terrain.zig");
 const equipment = @import("equipment.zig");
+const gear_slot = @import("gear_slot.zig");
 const palette = @import("color_palette.zig");
 
 const print = std.debug.print;
@@ -70,6 +71,56 @@ pub const GameState = struct {
     allocator: std.mem.Allocator,
 
     // Helper function to assign equipment loadouts to characters
+    /// Assign random gear to a character (6 gear slots: toque, scarf, jacket, gloves, pants, boots)
+    /// Creates 3 gear archetypes: Light (DPS/Speed), Medium (Balanced), Heavy (Tank)
+    fn assignGear(char: *Character, rng: *std.Random) void {
+        const roll = rng.intRangeAtMost(u8, 0, 100);
+
+        // Choose a gear tier/archetype
+        if (roll < 33) {
+            // Light build: Low padding, high speed, some energy regen
+            const light_set = [_]*const gear_slot.Gear{
+                &gear_slot.WoolCap,
+                &gear_slot.LightScarf,
+                &gear_slot.Hoodie,
+                &gear_slot.Mittens,
+                &gear_slot.Joggers,
+                &gear_slot.Sneakers,
+            };
+            for (light_set, 0..) |gear_piece, slot_idx| {
+                char.gear[slot_idx] = gear_piece;
+            }
+        } else if (roll < 66) {
+            // Medium build: Balanced padding, normal speed, good warmth regen
+            const medium_set = [_]*const gear_slot.Gear{
+                &gear_slot.SkiBeanie,
+                &gear_slot.PuffyScarf,
+                &gear_slot.SkiJacket,
+                &gear_slot.InsulatedGloves,
+                &gear_slot.SnowPants,
+                &gear_slot.InsulatedBoots,
+            };
+            for (medium_set, 0..) |gear_piece, slot_idx| {
+                char.gear[slot_idx] = gear_piece;
+            }
+        } else {
+            // Heavy build: High padding (tank), low speed, high warmth regen
+            const heavy_set = [_]*const gear_slot.Gear{
+                &gear_slot.WinterParkaHood,
+                &gear_slot.WoolNeckGuard,
+                &gear_slot.HeavyParka,
+                &gear_slot.ThermalGauntlets,
+                &gear_slot.ThermalLeggings,
+                &gear_slot.IceClimbingBoots,
+            };
+            for (heavy_set, 0..) |gear_piece, slot_idx| {
+                char.gear[slot_idx] = gear_piece;
+            }
+        }
+
+        char.recalculatePadding();
+    }
+
     fn assignEquipment(char: *Character, rng: *std.Random) void {
         // Define equipment pools
         const melee_weapons = [_]*const equipment.Equipment{ &equipment.BigShovel, &equipment.IceScraper };
@@ -123,6 +174,9 @@ pub const GameState = struct {
         if (rng.boolean()) {
             char.worn = worn_items[rng.intRangeAtMost(usize, 0, worn_items.len - 1)];
         }
+
+        // Assign gear (armor padding) separately
+        assignGear(char, rng);
     }
 
     /// Initialize a new game state with a 4v4 team setup.
@@ -445,13 +499,13 @@ pub const GameState = struct {
             ent.position_color = palette.getPositionColor(ent.player_position);
             ent.color = palette.getCharacterColor(ent.school, ent.player_position);
 
-            print("#{d} {s}: {s}/{s} ({d} skills) [{s}]\n", .{
+            print("#{d} {s}: {s}/{s} ({d} skills) [Padding: {d:.1}]\n", .{
                 i,
                 ent.name,
                 @tagName(ent.school),
                 @tagName(ent.player_position),
                 skill_count,
-                if (ent.main_hand) |mh| mh.name else "bare hands",
+                ent.getTotalPadding(),
             });
         }
 

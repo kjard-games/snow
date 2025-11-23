@@ -4,6 +4,7 @@ const school = @import("school.zig");
 const position = @import("position.zig");
 const skills = @import("skills.zig");
 const equipment = @import("equipment.zig");
+const gear_slot = @import("gear_slot.zig");
 const entity = @import("entity.zig");
 
 const print = std.debug.print;
@@ -12,6 +13,8 @@ pub const School = school.School;
 pub const Position = position.Position;
 pub const Skill = skills.Skill;
 pub const Equipment = equipment.Equipment;
+pub const Gear = gear_slot.Gear;
+pub const GearSlot = gear_slot.GearSlot;
 pub const EntityId = entity.EntityId;
 pub const Team = entity.Team;
 
@@ -63,7 +66,11 @@ pub const Character = struct {
     school: School,
     player_position: Position,
 
-    // Equipment system (flexible hand slots + worn)
+    // Gear system (6 slots: toque, scarf, jacket, gloves, pants, boots)
+    gear: [gear_slot.SLOT_COUNT]?*const Gear = [_]?*const Gear{null} ** gear_slot.SLOT_COUNT,
+    total_padding: f32 = 0.0, // Cached total armor value from equipped gear
+
+    // Equipment system (flexible hand slots + worn) - separate from gear padding system
     main_hand: ?*const equipment.Equipment = null,
     off_hand: ?*const equipment.Equipment = null,
     worn: ?*const equipment.Equipment = null, // Mittens, Blanket, etc.
@@ -186,7 +193,73 @@ pub const Character = struct {
         // TODO: Apply slippery chill slow
         // TODO: Apply sure_footed cozy speed boost
 
-        return 1.0;
+        // Apply gear speed modifiers
+        var speed_mult: f32 = 1.0;
+        for (self.gear) |maybe_gear| {
+            if (maybe_gear) |g| {
+                speed_mult *= g.speed_modifier;
+            }
+        }
+
+        return speed_mult;
+    }
+
+    /// Recalculate total padding from equipped gear
+    pub fn recalculatePadding(self: *Character) void {
+        var total: f32 = 0.0;
+        for (self.gear) |maybe_gear| {
+            if (maybe_gear) |g| {
+                total += g.padding;
+            }
+        }
+        self.total_padding = total;
+    }
+
+    /// Get total padding (armor rating) from all equipped gear
+    pub fn getTotalPadding(self: Character) f32 {
+        return self.total_padding;
+    }
+
+    /// Equip gear in a specific slot
+    pub fn equipGear(self: *Character, gear_to_equip: *const Gear) void {
+        const slot_index = @intFromEnum(gear_to_equip.slot);
+        self.gear[slot_index] = gear_to_equip;
+        self.recalculatePadding();
+    }
+
+    /// Unequip gear from a specific slot
+    pub fn unequipGear(self: *Character, slot: GearSlot) void {
+        const slot_index = @intFromEnum(slot);
+        self.gear[slot_index] = null;
+        self.recalculatePadding();
+    }
+
+    /// Get gear in a specific slot (or null if empty)
+    pub fn getGearInSlot(self: Character, slot: GearSlot) ?*const Gear {
+        const slot_index = @intFromEnum(slot);
+        return self.gear[slot_index];
+    }
+
+    /// Calculate total warmth regen bonus from all equipped gear
+    pub fn getGearWarmthRegen(self: Character) f32 {
+        var total: f32 = 0.0;
+        for (self.gear) |maybe_gear| {
+            if (maybe_gear) |g| {
+                total += g.warmth_regen_bonus;
+            }
+        }
+        return total;
+    }
+
+    /// Calculate total energy regen bonus from all equipped gear (per tick)
+    pub fn getGearEnergyRegen(self: Character) f32 {
+        var total: f32 = 0.0;
+        for (self.gear) |maybe_gear| {
+            if (maybe_gear) |g| {
+                total += g.energy_regen_bonus;
+            }
+        }
+        return total;
     }
 
     /// Get interpolated position for smooth rendering between ticks
@@ -265,10 +338,16 @@ pub const Character = struct {
 
     pub fn updateEnergy(self: *Character, delta_time: f32) void {
         // Passive energy regeneration based on school
-        const regen = self.school.getEnergyRegen() * delta_time;
+        var regen = self.school.getEnergyRegen();
+
+        // Add gear energy regen bonus
+        regen += self.getGearEnergyRegen();
+
+        // Apply delta time
+        const energy_delta = regen * delta_time;
 
         // Accumulate fractional energy
-        self.energy_accumulator += regen;
+        self.energy_accumulator += energy_delta;
 
         // Convert whole points to energy
         if (self.energy_accumulator >= 1.0) {
@@ -340,8 +419,8 @@ pub const Character = struct {
         }
     }
 
-    /// Recalculate warmth regen/degen pips from active conditions
-    /// Call this whenever conditions change (add/remove/expire)
+    /// Recalculate warmth regen/degen pips from active conditions and gear
+    /// Call this whenever conditions change (add/remove/expire) or gear is equipped/unequipped
     pub fn recalculateWarmthPips(self: *Character) void {
         var total_pips: i16 = 0; // Use i16 to detect overflow before clamping
 
@@ -369,6 +448,12 @@ pub const Character = struct {
                 total_pips += pips;
             }
         }
+
+        // Add gear warmth regen bonus (convert warmth/sec to pips)
+        // 1 pip = 2 warmth/sec, so gear_regen/2 = pips
+        const gear_warmth_regen = self.getGearWarmthRegen();
+        const gear_warmth_pips = @as(i16, @intFromFloat(gear_warmth_regen / 2.0));
+        total_pips += gear_warmth_pips;
 
         // TODO: Add natural regeneration pips (GW1 out-of-combat regen)
         // if (self.time_safe_for_natural_regen >= 5.0) {
