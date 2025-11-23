@@ -4,7 +4,9 @@ const school = @import("school.zig");
 const position = @import("position.zig");
 const skills = @import("skills.zig");
 const equipment = @import("equipment.zig");
+const gear_slot = @import("gear_slot.zig");
 const entity = @import("entity.zig");
+const effects = @import("effects.zig");
 
 const print = std.debug.print;
 
@@ -12,6 +14,8 @@ pub const School = school.School;
 pub const Position = position.Position;
 pub const Skill = skills.Skill;
 pub const Equipment = equipment.Equipment;
+pub const Gear = gear_slot.Gear;
+pub const GearSlot = gear_slot.GearSlot;
 pub const EntityId = entity.EntityId;
 pub const Team = entity.Team;
 
@@ -63,7 +67,11 @@ pub const Character = struct {
     school: School,
     player_position: Position,
 
-    // Equipment system (flexible hand slots + worn)
+    // Gear system (6 slots: toque, scarf, jacket, gloves, pants, boots)
+    gear: [gear_slot.SLOT_COUNT]?*const Gear = [_]?*const Gear{null} ** gear_slot.SLOT_COUNT,
+    total_padding: f32 = 0.0, // Cached total armor value from equipped gear
+
+    // Equipment system (flexible hand slots + worn) - separate from gear padding system
     main_hand: ?*const equipment.Equipment = null,
     off_hand: ?*const equipment.Equipment = null,
     worn: ?*const equipment.Equipment = null, // Mittens, Blanket, etc.
@@ -72,6 +80,10 @@ pub const Character = struct {
     energy: u8,
     max_energy: u8,
     energy_accumulator: f32 = 0.0, // Tracks fractional energy for smooth regen
+
+    // Facing angle (decoupled from camera - for deterministic movement/targeting)
+    // This is the entity's actual facing direction, independent of camera angle
+    facing_angle: f32 = 0.0,
 
     // School-specific secondary mechanics
     // Private School: Credit/Debt (max energy temporarily reduced)
@@ -134,6 +146,10 @@ pub const Character = struct {
     active_cozies: [MAX_ACTIVE_CONDITIONS]?skills.ActiveCozy = [_]?skills.ActiveCozy{null} ** MAX_ACTIVE_CONDITIONS,
     active_cozy_count: u8 = 0,
 
+    // Active composable effects (new system - replaces chills/cozies in future)
+    active_effects: [MAX_ACTIVE_CONDITIONS]?effects.ActiveEffect = [_]?effects.ActiveEffect{null} ** MAX_ACTIVE_CONDITIONS,
+    active_effect_count: u8 = 0,
+
     // Death state
     is_dead: bool = false,
 
@@ -186,7 +202,77 @@ pub const Character = struct {
         // TODO: Apply slippery chill slow
         // TODO: Apply sure_footed cozy speed boost
 
-        return 1.0;
+        // Apply gear speed modifiers
+        var speed_mult: f32 = 1.0;
+        for (self.gear) |maybe_gear| {
+            if (maybe_gear) |g| {
+                speed_mult *= g.speed_modifier;
+            }
+        }
+
+        // Apply active effect move speed multipliers
+        const effect_speed_mult = effects.calculateMoveSpeedMultiplier(&self.active_effects, self.active_effect_count);
+        speed_mult *= effect_speed_mult;
+
+        return speed_mult;
+    }
+
+    /// Recalculate total padding from equipped gear
+    pub fn recalculatePadding(self: *Character) void {
+        var total: f32 = 0.0;
+        for (self.gear) |maybe_gear| {
+            if (maybe_gear) |g| {
+                total += g.padding;
+            }
+        }
+        self.total_padding = total;
+    }
+
+    /// Get total padding (armor rating) from all equipped gear
+    pub fn getTotalPadding(self: Character) f32 {
+        return self.total_padding;
+    }
+
+    /// Equip gear in a specific slot
+    pub fn equipGear(self: *Character, gear_to_equip: *const Gear) void {
+        const slot_index = @intFromEnum(gear_to_equip.slot);
+        self.gear[slot_index] = gear_to_equip;
+        self.recalculatePadding();
+    }
+
+    /// Unequip gear from a specific slot
+    pub fn unequipGear(self: *Character, slot: GearSlot) void {
+        const slot_index = @intFromEnum(slot);
+        self.gear[slot_index] = null;
+        self.recalculatePadding();
+    }
+
+    /// Get gear in a specific slot (or null if empty)
+    pub fn getGearInSlot(self: Character, slot: GearSlot) ?*const Gear {
+        const slot_index = @intFromEnum(slot);
+        return self.gear[slot_index];
+    }
+
+    /// Calculate total warmth regen bonus from all equipped gear
+    pub fn getGearWarmthRegen(self: Character) f32 {
+        var total: f32 = 0.0;
+        for (self.gear) |maybe_gear| {
+            if (maybe_gear) |g| {
+                total += g.warmth_regen_bonus;
+            }
+        }
+        return total;
+    }
+
+    /// Calculate total energy regen bonus from all equipped gear (per tick)
+    pub fn getGearEnergyRegen(self: Character) f32 {
+        var total: f32 = 0.0;
+        for (self.gear) |maybe_gear| {
+            if (maybe_gear) |g| {
+                total += g.energy_regen_bonus;
+            }
+        }
+        return total;
     }
 
     /// Get interpolated position for smooth rendering between ticks
@@ -265,10 +351,20 @@ pub const Character = struct {
 
     pub fn updateEnergy(self: *Character, delta_time: f32) void {
         // Passive energy regeneration based on school
-        const regen = self.school.getEnergyRegen() * delta_time;
+        var regen = self.school.getEnergyRegen();
+
+        // Add gear energy regen bonus
+        regen += self.getGearEnergyRegen();
+
+        // Apply energy regen multipliers from effects
+        const regen_mult = effects.calculateEnergyRegenMultiplier(&self.active_effects, self.active_effect_count);
+        regen *= regen_mult;
+
+        // Apply delta time
+        const energy_delta = regen * delta_time;
 
         // Accumulate fractional energy
-        self.energy_accumulator += regen;
+        self.energy_accumulator += energy_delta;
 
         // Convert whole points to energy
         if (self.energy_accumulator >= 1.0) {
@@ -340,8 +436,8 @@ pub const Character = struct {
         }
     }
 
-    /// Recalculate warmth regen/degen pips from active conditions
-    /// Call this whenever conditions change (add/remove/expire)
+    /// Recalculate warmth regen/degen pips from active conditions and gear
+    /// Call this whenever conditions change (add/remove/expire) or gear is equipped/unequipped
     pub fn recalculateWarmthPips(self: *Character) void {
         var total_pips: i16 = 0; // Use i16 to detect overflow before clamping
 
@@ -369,6 +465,12 @@ pub const Character = struct {
                 total_pips += pips;
             }
         }
+
+        // Add gear warmth regen bonus (convert warmth/sec to pips)
+        // 1 pip = 2 warmth/sec, so gear_regen/2 = pips
+        const gear_warmth_regen = self.getGearWarmthRegen();
+        const gear_warmth_pips = @as(i16, @intFromFloat(gear_warmth_regen / 2.0));
+        total_pips += gear_warmth_pips;
 
         // TODO: Add natural regeneration pips (GW1 out-of-combat regen)
         // if (self.time_safe_for_natural_regen >= 5.0) {
@@ -443,6 +545,25 @@ pub const Character = struct {
                     // Don't increment i since we need to check the swapped element
                 } else {
                     cozy.time_remaining_ms -= delta_time_ms;
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+
+        // Update active effects, removing expired ones
+        i = 0;
+        while (i < self.active_effect_count) {
+            if (self.active_effects[i]) |*effect| {
+                if (effect.time_remaining_ms <= delta_time_ms) {
+                    // Effect expired, remove it by swapping with last element
+                    self.active_effect_count -= 1;
+                    self.active_effects[i] = self.active_effects[self.active_effect_count];
+                    self.active_effects[self.active_effect_count] = null;
+                    // Don't increment i since we need to check the swapped element
+                } else {
+                    effect.time_remaining_ms -= delta_time_ms;
                     i += 1;
                 }
             } else {
@@ -534,6 +655,46 @@ pub const Character = struct {
         // Silently ignore if array is full - this is a game, not critical
     }
 
+    /// Add a composable effect to this character
+    /// Handles stacking behavior (refresh duration, add intensity, or ignore)
+    pub fn addEffect(self: *Character, effect: *const effects.Effect, source_id: ?u32) void {
+        // Check if effect already exists (handle stacking)
+        for (self.active_effects[0..self.active_effect_count]) |*maybe_active| {
+            if (maybe_active.*) |*active| {
+                // Match by effect pointer
+                if (active.effect == effect) {
+                    // Apply stacking behavior
+                    switch (effect.stack_behavior) {
+                        .refresh_duration => {
+                            active.time_remaining_ms = @max(active.time_remaining_ms, effect.duration_ms);
+                        },
+                        .add_intensity => {
+                            active.stack_count = @min(effect.max_stacks, active.stack_count + 1);
+                            active.time_remaining_ms = effect.duration_ms; // Reset duration when stacking
+                        },
+                        .ignore_if_active => {
+                            // Do nothing - keep existing effect
+                            return;
+                        },
+                    }
+                    return;
+                }
+            }
+        }
+
+        // Add new effect if we have space
+        if (self.active_effect_count < self.active_effects.len) {
+            self.active_effects[self.active_effect_count] = .{
+                .effect = effect,
+                .time_remaining_ms = effect.duration_ms,
+                .stack_count = 1,
+                .source_character_id = source_id,
+            };
+            self.active_effect_count += 1;
+        }
+        // Silently ignore if array is full - this is a game, not critical
+    }
+
     pub fn canUseSkill(self: Character, skill_index: u8) bool {
         if (skill_index >= MAX_SKILLS) return false;
         // Can't use skills while casting or in aftercast
@@ -554,8 +715,10 @@ pub const Character = struct {
         self.cast_time_remaining = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
         self.skill_executed = false;
 
-        // Consume energy immediately (even if cancelled later)
-        self.energy -= skill.energy_cost;
+        // Consume energy immediately (even if cancelled later), applying modifiers from effects
+        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&self.active_effects, self.active_effect_count);
+        const energy_cost = @as(u8, @intFromFloat(@as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult));
+        self.energy -= energy_cost;
     }
 
     /// Cancel current cast (GW1-accurate)

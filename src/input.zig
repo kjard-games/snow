@@ -435,6 +435,159 @@ pub fn pollInput(
     }
 }
 
+/// applyAutoMovement - Handle automatic movement logic (auto-chase, skill queue, click-to-move)
+/// This is separate from handleInput so it can be replaced by AI behavior in headless mode
+fn applyAutoMovement(
+    player: *Character,
+    entities: []Character,
+    input_state: *InputState,
+    move_x: *f32,
+    move_z: *f32,
+    has_keyboard_input: bool,
+    rng: *std.Random,
+    vfx_manager: *@import("vfx.zig").VFXManager,
+    terrain_grid: *@import("terrain.zig").TerrainGrid,
+) bool {
+    // Returns true if any automatic movement was activated
+
+    // === AUTO-ATTACK CHASE ===
+    // If auto-attacking and out of range, move towards target automatically
+    // BUT: Don't move if casting (would cancel the cast!)
+    if (player.is_auto_attacking and player.auto_attack_target_id != null and !player.isCasting()) {
+        const target_id = player.auto_attack_target_id.?;
+
+        // Find the target entity
+        for (entities) |*ent| {
+            if (ent.id == target_id) {
+                if (ent.isAlive()) {
+                    const distance = player.distanceTo(ent.*);
+                    const attack_range = player.getAutoAttackRange();
+
+                    // If out of range and no manual input, chase
+                    if (distance > attack_range and move_x.* == 0.0 and move_z.* == 0.0 and !has_keyboard_input) {
+                        const dx = ent.position.x - player.position.x;
+                        const dz = ent.position.z - player.position.z;
+
+                        // Calculate world-space movement direction
+                        const move_dir_x = dx / distance;
+                        const move_dir_z = dz / distance;
+
+                        // Convert world movement to local space (inverse of camera rotation)
+                        const cos_angle = @cos(input_state.camera_angle);
+                        const sin_angle = @sin(input_state.camera_angle);
+                        move_x.* = move_dir_x * cos_angle - move_dir_z * sin_angle;
+                        move_z.* = move_dir_x * sin_angle + move_dir_z * cos_angle;
+
+                        return true;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // === SKILL QUEUE APPROACH (GW1-style: run into range to cast) ===
+    // If we have a queued skill and we're out of range, approach the target
+    skill_queue_block: {
+        if (player.hasQueuedSkill() and !player.isCasting()) {
+            if (player.queued_skill_index) |skill_idx| {
+                if (player.queued_skill_target_id) |target_id| {
+                    // Get skill or clear queue if invalid (defensive programming - shouldn't happen)
+                    const skill = player.skill_bar[skill_idx] orelse {
+                        player.clearSkillQueue();
+                        break :skill_queue_block;
+                    };
+
+                    // Find the target entity
+                    for (entities) |*ent| {
+                        if (ent.id == target_id) {
+                            if (!ent.isAlive()) {
+                                print("Queued skill target died\n", .{});
+                                player.clearSkillQueue();
+                                break;
+                            }
+
+                            const distance = player.distanceTo(ent.*);
+
+                            // Check if we're in range now
+                            if (distance <= skill.cast_range) {
+                                // In range! Try to cast the queued skill
+                                print("In range - casting queued skill: {s}\n", .{skill.name});
+                                const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager, terrain_grid, null);
+                                player.clearSkillQueue();
+
+                                if (result == .out_of_range) {
+                                    // Still somehow out of range? (shouldn't happen)
+                                    print("Still out of range after approach?\n", .{});
+                                }
+                            } else {
+                                // Still out of range - keep approaching (only if no manual input)
+                                if (move_x.* == 0.0 and move_z.* == 0.0 and !has_keyboard_input) {
+                                    const dx = ent.position.x - player.position.x;
+                                    const dz = ent.position.z - player.position.z;
+
+                                    // Calculate world-space movement direction
+                                    const move_dir_x = dx / distance;
+                                    const move_dir_z = dz / distance;
+
+                                    // Convert world movement to local space (inverse of camera rotation)
+                                    const cos_angle = @cos(input_state.camera_angle);
+                                    const sin_angle = @sin(input_state.camera_angle);
+                                    move_x.* = move_dir_x * cos_angle - move_dir_z * sin_angle;
+                                    move_z.* = move_dir_x * sin_angle + move_dir_z * cos_angle;
+
+                                    return true;
+                                } else {
+                                    // Manual input cancels skill queue
+                                    print("Skill queue cancelled by manual input\n", .{});
+                                    player.clearSkillQueue();
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // === CLICK-TO-MOVE ===
+    // Check if we should use click-to-move instead
+    if (input_state.move_target) |target| {
+        const dx = target.x - player.position.x;
+        const dz = target.z - player.position.z;
+        const distance = @sqrt(dx * dx + dz * dz);
+
+        // Stop when close enough (within 2 units)
+        if (distance < 2.0) {
+            input_state.move_target = null;
+            print("Reached click target\n", .{});
+        } else {
+            // Move toward target (only if no manual input occurred)
+            if (move_x.* == 0.0 and move_z.* == 0.0 and !has_keyboard_input) {
+                // Calculate world-space movement direction
+                // Then convert to local space for MovementIntent
+                const move_dir_x = dx / distance;
+                const move_dir_z = dz / distance;
+
+                // Convert world movement to local space (inverse of camera rotation)
+                const cos_angle = @cos(input_state.camera_angle);
+                const sin_angle = @sin(input_state.camera_angle);
+                move_x.* = move_dir_x * cos_angle - move_dir_z * sin_angle;
+                move_z.* = move_dir_x * sin_angle + move_dir_z * cos_angle;
+
+                return true;
+            } else {
+                // Manual input cancels click-to-move
+                input_state.move_target = null;
+                print("Click-to-move cancelled by manual input\n", .{});
+            }
+        }
+    }
+
+    return false;
+}
+
 // handleInput - Called EVERY TICK (20Hz) to process game logic
 // Consumes buffered inputs and applies them to game state
 pub fn handleInput(
@@ -634,142 +787,8 @@ pub fn handleInput(
         move_z -= 1.0;
     }
 
-    // === AUTO-ATTACK CHASE ===
-    // If auto-attacking and out of range, move towards target automatically
-    // BUT: Don't move if casting (would cancel the cast!)
-    var auto_chase_active = false;
-    if (player.is_auto_attacking and player.auto_attack_target_id != null and !player.isCasting()) {
-        const target_id = player.auto_attack_target_id.?;
-
-        // Find the target entity
-        for (entities) |*ent| {
-            if (ent.id == target_id) {
-                if (ent.isAlive()) {
-                    const distance = player.distanceTo(ent.*);
-                    const attack_range = player.getAutoAttackRange();
-
-                    // If out of range and no manual input, chase
-                    if (distance > attack_range and move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
-                        const dx = ent.position.x - player.position.x;
-                        const dz = ent.position.z - player.position.z;
-
-                        // Calculate world-space movement direction
-                        const move_dir_x = dx / distance;
-                        const move_dir_z = dz / distance;
-
-                        // Convert world movement to local space (inverse of camera rotation)
-                        const cos_angle = @cos(input_state.camera_angle);
-                        const sin_angle = @sin(input_state.camera_angle);
-                        move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
-                        move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
-
-                        auto_chase_active = true;
-                    }
-                }
-                break;
-            }
-        }
-    }
-
-    // === SKILL QUEUE APPROACH (GW1-style: run into range to cast) ===
-    // If we have a queued skill and we're out of range, approach the target
-    var skill_approach_active = false;
-    skill_queue_block: {
-        if (!auto_chase_active and player.hasQueuedSkill() and !player.isCasting()) {
-            if (player.queued_skill_index) |skill_idx| {
-                if (player.queued_skill_target_id) |target_id| {
-                    // Get skill or clear queue if invalid (defensive programming - shouldn't happen)
-                    const skill = player.skill_bar[skill_idx] orelse {
-                        player.clearSkillQueue();
-                        break :skill_queue_block;
-                    };
-
-                    // Find the target entity
-                    for (entities) |*ent| {
-                        if (ent.id == target_id) {
-                            if (!ent.isAlive()) {
-                                print("Queued skill target died\n", .{});
-                                player.clearSkillQueue();
-                                break;
-                            }
-
-                            const distance = player.distanceTo(ent.*);
-
-                            // Check if we're in range now
-                            if (distance <= skill.cast_range) {
-                                // In range! Try to cast the queued skill
-                                print("In range - casting queued skill: {s}\n", .{skill.name});
-                                const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager, terrain_grid);
-                                player.clearSkillQueue();
-
-                                if (result == .out_of_range) {
-                                    // Still somehow out of range? (shouldn't happen)
-                                    print("Still out of range after approach?\n", .{});
-                                }
-                            } else {
-                                // Still out of range - keep approaching (only if no manual input)
-                                if (move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
-                                    const dx = ent.position.x - player.position.x;
-                                    const dz = ent.position.z - player.position.z;
-
-                                    // Calculate world-space movement direction
-                                    const move_dir_x = dx / distance;
-                                    const move_dir_z = dz / distance;
-
-                                    // Convert world movement to local space (inverse of camera rotation)
-                                    const cos_angle = @cos(input_state.camera_angle);
-                                    const sin_angle = @sin(input_state.camera_angle);
-                                    move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
-                                    move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
-
-                                    skill_approach_active = true;
-                                } else {
-                                    // Manual input cancels skill queue
-                                    print("Skill queue cancelled by manual input\n", .{});
-                                    player.clearSkillQueue();
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // === CLICK-TO-MOVE ===
-    // Check if we should use click-to-move instead (unless auto-chasing or skill-approaching)
-    if (!auto_chase_active and !skill_approach_active) {
-        if (input_state.move_target) |target| {
-            const dx = target.x - player.position.x;
-            const dz = target.z - player.position.z;
-            const distance = @sqrt(dx * dx + dz * dz);
-
-            // Stop when close enough (within 2 units)
-            if (distance < 2.0) {
-                input_state.move_target = null;
-                print("Reached click target\n", .{});
-            } else {
-                // Move toward target (only if no manual input occurred)
-                if (move_x == 0.0 and move_z == 0.0 and !has_keyboard_input) {
-                    // Calculate world-space movement direction
-                    // Then convert to local space for MovementIntent
-                    const move_dir_x = dx / distance;
-                    const move_dir_z = dz / distance;
-
-                    // Convert world movement to local space (inverse of camera rotation)
-                    const cos_angle = @cos(input_state.camera_angle);
-                    const sin_angle = @sin(input_state.camera_angle);
-                    move_x = move_dir_x * cos_angle - move_dir_z * sin_angle;
-                    move_z = move_dir_x * sin_angle + move_dir_z * cos_angle;
-                } else {
-                    // Manual input cancels click-to-move
-                    input_state.move_target = null;
-                    print("Click-to-move cancelled by manual input\n", .{});
-                }
-            }
-        }
-    }
+    // === APPLY AUTOMATIC MOVEMENT (auto-chase, skill queue, click-to-move) ===
+    _ = applyAutoMovement(player, entities, input_state, &move_x, &move_z, has_keyboard_input, rng, vfx_manager, terrain_grid);
 
     // === CLICK-TO-TARGET & CLICK-TO-MOVE (from buffered inputs) ===
     if (input_state.buffered_click_entity) |entity_id| {
@@ -901,7 +920,7 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityI
         }
 
         // Cast immediately at the determined position
-        _ = combat.tryStartCastAtGround(player, skill_index, ground_position, rng, vfx_manager, terrain_grid);
+        _ = combat.tryStartCastAtGround(player, skill_index, ground_position, rng, vfx_manager, terrain_grid, null);
         return;
     }
 
@@ -922,7 +941,7 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityI
         }
     }
 
-    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng, vfx_manager, terrain_grid);
+    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng, vfx_manager, terrain_grid, null);
 }
 
 // Update camera to follow player (called every frame for smooth interpolation)
