@@ -26,28 +26,28 @@ pub const TerrainType = enum {
 
     pub fn getColor(self: TerrainType) rl.Color {
         return switch (self) {
-            // GoW-style bright snow colors - much closer to white for realistic snow
-            // Key insight from GoW: fresh snow should be VERY bright (250-255), not gray
-            // Lighting/shading creates depth, not dark base colors
-            .cleared_ground => rl.Color{ .r = 85, .g = 70, .b = 60, .a = 255 }, // Dark brown ground (reveals under snow)
-            .icy_ground => rl.Color{ .r = 235, .g = 242, .b = 248, .a = 255 }, // Very light blue-white ice (bright, reflective)
-            .slushy => rl.Color{ .r = 200, .g = 205, .b = 200, .a = 255 }, // Light gray slush (dirty but still bright)
-            .packed_snow => rl.Color{ .r = 245, .g = 248, .b = 248, .a = 255 }, // Very bright white (compressed but clean)
-            .thick_snow => rl.Color{ .r = 252, .g = 253, .b = 252, .a = 255 }, // Near-white (fresh unpacked snow)
-            .deep_powder => rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 }, // Pure white (pristine deep powder)
+            // EMPHASIZED layer differences - dramatic color shifts as snow is displaced
+            // GoW approach: clear visual feedback shows player impact on terrain
+            .cleared_ground => rl.Color{ .r = 75, .g = 60, .b = 50, .a = 255 }, // DARK brown ground (clear contrast)
+            .icy_ground => rl.Color{ .r = 220, .g = 230, .b = 240, .a = 255 }, // Light blue ice (compressed to glass)
+            .slushy => rl.Color{ .r = 180, .g = 185, .b = 180, .a = 255 }, // Medium gray slush (dirty/wet)
+            .packed_snow => rl.Color{ .r = 235, .g = 240, .b = 240, .a = 255 }, // Light gray-white (visibly compressed)
+            .thick_snow => rl.Color{ .r = 250, .g = 252, .b = 250, .a = 255 }, // Nearly white (slightly trampled)
+            .deep_powder => rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 }, // PURE WHITE (pristine untouched)
         };
     }
 
     // Get visual height/depth of snow (in world units)
-    // Characters are radius 10-12 (diameter ~20-24), so these depths are relative to that scale
+    // EMPHASIZED height differences - dramatic visual displacement as snow is trampled
+    // GoW approach: height changes reinforce the layer system
     pub fn getSnowHeight(self: TerrainType) f32 {
         return switch (self) {
-            .cleared_ground => 0.0, // Ground level (no snow)
-            .icy_ground => 2.0, // Very thin compressed layer
-            .slushy => 5.0, // Shallow slush
-            .packed_snow => 8.0, // Ankle-deep (characters sink in slightly)
-            .thick_snow => 15.0, // Knee-deep (characters sink in noticeably)
-            .deep_powder => 25.0, // Thigh-deep (characters wade through)
+            .cleared_ground => 0.0, // Ground level (completely cleared - HUGE difference)
+            .icy_ground => 3.0, // Very thin compressed layer (packed flat)
+            .slushy => 6.0, // Shallow slush (compressed but wet)
+            .packed_snow => 10.0, // Ankle-deep (visibly trampled down)
+            .thick_snow => 18.0, // Knee-deep (slightly packed)
+            .deep_powder => 28.0, // Thigh-deep (pristine, untouched - MAXIMUM height)
         };
     }
 
@@ -301,44 +301,58 @@ pub const TerrainGrid = struct {
             }
         }
 
-        // Smoothing pass: average each cell with its neighbors to reduce spikes
-        // This creates more natural, gentle slopes like GoW terrain
+        // Multiple smoothing passes for very gentle, rolling terrain (GoW-style)
+        // GoW emphasizes smooth, natural slopes that feel hand-sculpted
         const smoothed_heightmap = try allocator.alloc(f32, width * height);
         defer allocator.free(smoothed_heightmap);
 
-        for (0..height) |z| {
-            for (0..width) |x| {
-                const index = z * width + x;
-                var sum: f32 = 0.0;
-                var count: f32 = 0.0;
+        // Run 3 smoothing passes for extremely gentle terrain
+        var pass: usize = 0;
+        while (pass < 3) : (pass += 1) {
+            for (0..height) |z| {
+                for (0..width) |x| {
+                    const index = z * width + x;
 
-                // Average with neighbors in a 3x3 kernel
-                const x_start = if (x > 0) x - 1 else x;
-                const x_end = if (x < width - 1) x + 1 else x;
-                const z_start = if (z > 0) z - 1 else z;
-                const z_end = if (z < height - 1) z + 1 else z;
-
-                var nz = z_start;
-                while (nz <= z_end) : (nz += 1) {
-                    var nx = x_start;
-                    while (nx <= x_end) : (nx += 1) {
-                        const neighbor_idx = nz * width + nx;
-                        sum += heightmap[neighbor_idx];
-                        count += 1.0;
+                    // Skip boundary walls - keep them sharp
+                    if (heightmap[index] > 70.0) {
+                        smoothed_heightmap[index] = heightmap[index];
+                        continue;
                     }
+
+                    var sum: f32 = 0.0;
+                    var count: f32 = 0.0;
+
+                    // Larger 5x5 kernel for more aggressive smoothing
+                    const x_start = if (x > 1) x - 2 else x;
+                    const x_end = if (x < width - 2) x + 2 else x;
+                    const z_start = if (z > 1) z - 2 else z;
+                    const z_end = if (z < height - 2) z + 2 else z;
+
+                    var nz = z_start;
+                    while (nz <= z_end) : (nz += 1) {
+                        var nx = x_start;
+                        while (nx <= x_end) : (nx += 1) {
+                            const neighbor_idx = nz * width + nx;
+                            // Weight by distance (Gaussian-like)
+                            const dx = @as(f32, @floatFromInt(if (nx > x) nx - x else x - nx));
+                            const dz = @as(f32, @floatFromInt(if (nz > z) nz - z else z - nz));
+                            const weight = 1.0 / (1.0 + dx + dz);
+                            sum += heightmap[neighbor_idx] * weight;
+                            count += weight;
+                        }
+                    }
+
+                    smoothed_heightmap[index] = sum / count;
                 }
-
-                smoothed_heightmap[index] = sum / count;
             }
-        }
 
-        // Copy smoothed heights back (but preserve boundary walls)
-        for (0..height) |z| {
-            for (0..width) |x| {
-                const index = z * width + x;
-                // Only smooth non-boundary areas (keep walls sharp)
-                if (heightmap[index] < 70.0) {
-                    heightmap[index] = smoothed_heightmap[index];
+            // Copy smoothed heights back for next pass
+            for (0..height) |z| {
+                for (0..width) |x| {
+                    const index = z * width + x;
+                    if (heightmap[index] < 70.0) {
+                        heightmap[index] = smoothed_heightmap[index];
+                    }
                 }
             }
         }
@@ -349,23 +363,19 @@ pub const TerrainGrid = struct {
                 const index = z * width + x;
                 const elevation = heightmap[index];
 
-                // High elevation = massive snowdrift walls (impassable)
+                // Start with pristine deep powder everywhere (GoW-style fresh snowfall)
+                // Players will pack it down as they move, revealing layers
+                // Boundary walls (high elevation) are impassable
                 if (elevation > 70.0) {
                     cells[index] = TerrainCell{
-                        .type = .deep_powder, // Impassable deep snow
+                        .type = .deep_powder, // Impassable boundary walls
                         .snow_depth = 3.0, // Extra deep
                     };
                 } else {
-                    // Normal playable area - start with mostly thick snow (70%), some packed (20%), some deep powder (10%)
-                    const rand = random.float(f32);
+                    // Playable area: all pristine deep powder
                     cells[index] = TerrainCell{
-                        .type = if (rand < 0.7)
-                            .thick_snow
-                        else if (rand < 0.9)
-                            .packed_snow
-                        else
-                            .deep_powder,
-                        .snow_depth = 1.0 + random.float(f32) * 0.5, // 1.0 to 1.5 depth
+                        .type = .deep_powder, // Pure white pristine snow
+                        .snow_depth = 1.5, // Deep fresh snow
                     };
                 }
             }
@@ -513,21 +523,22 @@ pub const TerrainGrid = struct {
                     color.b = if (color.b > age_darken) color.b - age_darken else 0;
                 }
 
-                // Add visual detail inspired by GoW approach:
-                // 1. Height-based variation (subtle ambient occlusion-like effect)
-                if (height_range > 1.0) {
+                // GoW approach: Keep vertex colors BRIGHT, let the shader handle lighting!
+                // Only VERY minimal variation to break up flatness
+
+                // 1. MINIMAL height-based variation (just a hint of AO in deep valleys)
+                if (height_range > 10.0) { // Only apply if significant height variation
                     const normalized_height = (vy - min_height) / height_range;
-                    // Lower areas slightly darker (ambient occlusion), higher areas slightly brighter
-                    const height_factor = 0.85 + normalized_height * 0.15; // Range: 0.85 to 1.0
+                    // Much less darkening: 0.95 to 1.0 (max 5% darkening)
+                    const height_factor = 0.95 + normalized_height * 0.05;
                     color.r = @intFromFloat(@as(f32, @floatFromInt(color.r)) * height_factor);
                     color.g = @intFromFloat(@as(f32, @floatFromInt(color.g)) * height_factor);
                     color.b = @intFromFloat(@as(f32, @floatFromInt(color.b)) * height_factor);
                 }
 
-                // 2. Add subtle variation based on position (breaks up flat look)
-                // Use simple hash-like function from position
+                // 2. VERY subtle position variation (1% variation max)
                 const pos_hash = @sin(vx * 0.1) * @cos(vz * 0.15) + @sin(vx * 0.3 + vz * 0.2);
-                const variation = 0.97 + (pos_hash * 0.5 + 0.5) * 0.06; // Range: 0.97 to 1.03
+                const variation = 0.99 + (pos_hash * 0.5 + 0.5) * 0.02; // Range: 0.99 to 1.01
                 color.r = @intFromFloat(@min(255.0, @as(f32, @floatFromInt(color.r)) * variation));
                 color.g = @intFromFloat(@min(255.0, @as(f32, @floatFromInt(color.g)) * variation));
                 color.b = @intFromFloat(@min(255.0, @as(f32, @floatFromInt(color.b)) * variation));
