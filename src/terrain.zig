@@ -26,14 +26,15 @@ pub const TerrainType = enum {
 
     pub fn getColor(self: TerrainType) rl.Color {
         return switch (self) {
-            // GoW-inspired natural snow colors: warmer, more realistic
-            // Snow has subtle warm tones (cream/beige) not pure white
-            .cleared_ground => rl.Color{ .r = 95, .g = 80, .b = 70, .a = 255 }, // Rich brown ground with slight warmth
-            .icy_ground => rl.Color{ .r = 215, .g = 225, .b = 235, .a = 255 }, // Cool blue-gray ice (less saturated)
-            .slushy => rl.Color{ .r = 180, .g = 185, .b = 180, .a = 255 }, // Darker gray-green slush (dirty/wet)
-            .packed_snow => rl.Color{ .r = 225, .g = 230, .b = 230, .a = 255 }, // Neutral gray-white (compressed, shadowed)
-            .thick_snow => rl.Color{ .r = 240, .g = 242, .b = 240, .a = 255 }, // Soft white with subtle warm tone
-            .deep_powder => rl.Color{ .r = 248, .g = 250, .b = 248, .a = 255 }, // Near-white but not pure (natural snow)
+            // GoW-style bright snow colors - much closer to white for realistic snow
+            // Key insight from GoW: fresh snow should be VERY bright (250-255), not gray
+            // Lighting/shading creates depth, not dark base colors
+            .cleared_ground => rl.Color{ .r = 85, .g = 70, .b = 60, .a = 255 }, // Dark brown ground (reveals under snow)
+            .icy_ground => rl.Color{ .r = 235, .g = 242, .b = 248, .a = 255 }, // Very light blue-white ice (bright, reflective)
+            .slushy => rl.Color{ .r = 200, .g = 205, .b = 200, .a = 255 }, // Light gray slush (dirty but still bright)
+            .packed_snow => rl.Color{ .r = 245, .g = 248, .b = 248, .a = 255 }, // Very bright white (compressed but clean)
+            .thick_snow => rl.Color{ .r = 252, .g = 253, .b = 252, .a = 255 }, // Near-white (fresh unpacked snow)
+            .deep_powder => rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 }, // Pure white (pristine deep powder)
         };
     }
 
@@ -111,7 +112,7 @@ pub const TerrainCell = struct {
     wall_age: f32 = 0.0, // Time since wall built (for decay/effects)
     wall_team: Team = .none, // Which team built this wall
 
-    pub fn applyTraffic(self: *TerrainCell, amount: f32) void {
+    pub fn applyTraffic(self: *TerrainCell, amount: f32) ?TerrainType {
         self.traffic_accumulator += amount;
         self.last_traffic_time = 0.0; // Reset idle timer when walked on
 
@@ -119,17 +120,19 @@ pub const TerrainCell = struct {
         if (self.type.canBePackedBy(self.traffic_accumulator)) |new_type| {
             self.type = new_type;
             self.traffic_accumulator = 0.0; // Reset after transition
+            return new_type; // Return new type to signal mesh needs updating
         }
+        return null; // No change
     }
 
-    pub fn updateAccumulation(self: *TerrainCell, dt: f32, accumulation_rate: f32) void {
+    pub fn updateAccumulation(self: *TerrainCell, dt: f32, accumulation_rate: f32) bool {
         self.last_traffic_time += dt;
 
         // Only accumulate in areas that haven't been walked on recently
         const idle_threshold = 30.0; // 30 seconds without traffic
-        if (self.last_traffic_time < idle_threshold) return;
+        if (self.last_traffic_time < idle_threshold) return false;
 
-        if (!self.type.canAccumulateSnow()) return;
+        if (!self.type.canAccumulateSnow()) return false;
 
         self.accumulation_timer += dt;
 
@@ -139,7 +142,9 @@ pub const TerrainCell = struct {
             self.accumulation_timer = 0.0;
             self.type = self.type.getAccumulatedType();
             self.snow_depth = @min(2.0, self.snow_depth + 0.05); // Slower depth increase
+            return true; // Changed - signal mesh update needed
         }
+        return false;
     }
 
     // Get total height of this cell (base + wall + snow)
@@ -435,12 +440,14 @@ pub const TerrainGrid = struct {
             const world_x = vx + self.world_offset_x + world_width * 0.5;
             const world_z = vz + self.world_offset_z + world_length * 0.5;
 
-            // Get elevation and snow height at this position
+            // Get elevation, snow height, and wall height at this position
             const elevation = self.getElevationAt(world_x, world_z);
             const snow_height = self.getSnowHeightAt(world_x, world_z);
+            const wall_height = self.getWallHeightAt(world_x, world_z);
 
-            // Set Y coordinate to elevation + snow height
-            mesh.vertices[i * 3 + 1] = elevation + snow_height;
+            // Set Y coordinate to elevation + snow height + wall height
+            // GoW approach: walls are just snow displacement (height field)
+            mesh.vertices[i * 3 + 1] = elevation + snow_height + wall_height;
 
             // Update X and Z to world coordinates
             mesh.vertices[i * 3 + 0] = world_x;
@@ -470,6 +477,41 @@ pub const TerrainGrid = struct {
             // Get terrain cell color
             if (self.getCellAtConst(vx, vz)) |cell| {
                 var color = cell.type.getColor();
+
+                // GoW approach: Walls are just tinted snow (very subtle team color)
+                if (cell.wall_height > 5.0) {
+                    // Apply subtle team tint to wall snow (5% influence)
+                    switch (cell.wall_team) {
+                        .red => {
+                            color.r = @min(255, @as(u16, color.r) + 8);
+                            color.g = if (color.g > 4) color.g - 4 else 0;
+                            color.b = if (color.b > 4) color.b - 4 else 0;
+                        },
+                        .blue => {
+                            color.r = if (color.r > 4) color.r - 4 else 0;
+                            color.g = if (color.g > 4) color.g - 4 else 0;
+                            color.b = @min(255, @as(u16, color.b) + 8);
+                        },
+                        .yellow => {
+                            color.r = @min(255, @as(u16, color.r) + 8);
+                            color.g = @min(255, @as(u16, color.g) + 8);
+                            color.b = if (color.b > 4) color.b - 4 else 0;
+                        },
+                        .green => {
+                            color.r = if (color.r > 4) color.r - 4 else 0;
+                            color.g = @min(255, @as(u16, color.g) + 8);
+                            color.b = if (color.b > 4) color.b - 4 else 0;
+                        },
+                        .none => {},
+                    }
+
+                    // Darken slightly based on wall age (weathering)
+                    const age_factor = @min(1.0, cell.wall_age / 30.0);
+                    const age_darken = @as(u8, @intFromFloat(10.0 * age_factor));
+                    color.r = if (color.r > age_darken) color.r - age_darken else 0;
+                    color.g = if (color.g > age_darken) color.g - age_darken else 0;
+                    color.b = if (color.b > age_darken) color.b - age_darken else 0;
+                }
 
                 // Add visual detail inspired by GoW approach:
                 // 1. Height-based variation (subtle ambient occlusion-like effect)
@@ -650,15 +692,26 @@ pub const TerrainGrid = struct {
     // Apply traffic from entity movement (packs snow down over time)
     pub fn applyMovementTraffic(self: *TerrainGrid, world_x: f32, world_z: f32, traffic_amount: f32) void {
         if (self.getCellAt(world_x, world_z)) |cell| {
-            cell.applyTraffic(traffic_amount);
+            if (cell.applyTraffic(traffic_amount)) |_| {
+                // Terrain type changed - mark mesh for regeneration
+                self.markMeshDirty();
+            }
         }
     }
 
     // Update all terrain (accumulation, melting, walls, etc.)
     pub fn update(self: *TerrainGrid, dt: f32) void {
+        var any_changed = false;
         for (self.cells) |*cell| {
-            cell.updateAccumulation(dt, self.accumulation_rate);
+            if (cell.updateAccumulation(dt, self.accumulation_rate)) {
+                any_changed = true;
+            }
             cell.updateWall(dt);
+        }
+
+        // Mark mesh dirty if any cell changed
+        if (any_changed) {
+            self.markMeshDirty();
         }
 
         // Rebuild mesh if dirty (during update phase, not render phase)
@@ -920,8 +973,8 @@ pub const TerrainGrid = struct {
             }
         }
 
-        // Walls don't affect the base terrain mesh (separate rendering layer)
-        // But mark as dirty anyway for now (could optimize later)
+        // Walls are height displacement in the mesh (GoW approach)
+        // Mark mesh for regeneration to include new wall geometry
         self.markMeshDirty();
     }
 

@@ -358,6 +358,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     drawSkybox(camera);
 
     // Draw terrain mesh with vertex colors (GoW-style)
+    // Walls are part of the mesh as height displacement (GoW approach)
     if (terrain_grid.terrain_mesh) |mesh| {
         if (terrain_material) |material| {
             rl.drawMesh(mesh, material, rl.Matrix.identity());
