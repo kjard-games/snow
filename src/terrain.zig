@@ -26,12 +26,12 @@ pub const TerrainType = enum {
 
     pub fn getColor(self: TerrainType) rl.Color {
         return switch (self) {
-            .thick_snow => rl.Color{ .r = 240, .g = 240, .b = 255, .a = 255 }, // Soft white
-            .packed_snow => rl.Color{ .r = 200, .g = 210, .b = 220, .a = 255 }, // Grayish white
-            .icy_ground => rl.Color{ .r = 180, .g = 200, .b = 230, .a = 255 }, // Blue-white
-            .deep_powder => rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 }, // Pure white
-            .cleared_ground => rl.Color{ .r = 140, .g = 140, .b = 140, .a = 255 }, // Gray
-            .slushy => rl.Color{ .r = 190, .g = 200, .b = 210, .a = 255 }, // Dull white-gray
+            .cleared_ground => rl.Color{ .r = 80, .g = 70, .b = 60, .a = 255 }, // Dark brown/gray ground
+            .icy_ground => rl.Color{ .r = 220, .g = 235, .b = 255, .a = 255 }, // Pale blue-white (icy)
+            .slushy => rl.Color{ .r = 200, .g = 205, .b = 200, .a = 255 }, // Gray-white (wet, dirty)
+            .packed_snow => rl.Color{ .r = 240, .g = 245, .b = 250, .a = 255 }, // Clean white (compressed)
+            .thick_snow => rl.Color{ .r = 250, .g = 250, .b = 255, .a = 255 }, // Bright white (fluffy)
+            .deep_powder => rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 }, // Pure white (pristine powder)
         };
     }
 
@@ -214,6 +214,10 @@ pub const TerrainGrid = struct {
     // Snow accumulation settings
     accumulation_rate: f32 = 0.1, // Multiplier for how fast snow falls (0.0 = off, 0.1 = light, 1.0 = heavy, 2.0 = blizzard)
 
+    // Mesh-based rendering (GoW-style approach)
+    terrain_mesh: ?rl.Mesh = null, // Single mesh for entire terrain base
+    mesh_dirty: bool = true, // Track if mesh needs rebuilding
+
     pub fn init(
         allocator: std.mem.Allocator,
         width: usize,
@@ -328,9 +332,163 @@ pub const TerrainGrid = struct {
         };
     }
 
+    /// Mark mesh as dirty (needs regeneration)
+    pub fn markMeshDirty(self: *TerrainGrid) void {
+        self.mesh_dirty = true;
+    }
+
+    /// Generate a single mesh from the entire terrain grid (GoW-style approach)
+    /// Uses raylib's genMeshPlane and modifies vertices based on heightmap
+    pub fn generateTerrainMesh(self: *TerrainGrid) void {
+        // Clean up existing mesh
+        if (self.terrain_mesh) |mesh| {
+            rl.unloadMesh(mesh);
+            self.terrain_mesh = null;
+        }
+
+        // Generate a plane mesh with our grid resolution
+        // genMeshPlane parameters: width, length, resX, resZ
+        const world_width = @as(f32, @floatFromInt(self.width)) * self.grid_size;
+        const world_length = @as(f32, @floatFromInt(self.height)) * self.grid_size;
+
+        // Generate a plane mesh (this will auto-upload to GPU WITHOUT colors)
+        var mesh = rl.genMeshPlane(
+            world_width,
+            world_length,
+            @intCast(self.width),
+            @intCast(self.height),
+        );
+
+        // genMeshPlane auto-uploads, but without color data
+        // We need to unload that GPU data and re-upload with colors
+        if (mesh.vaoId > 0) {
+            // Create a temporary mesh struct with just the GPU IDs to unload
+            var temp_mesh = std.mem.zeroes(rl.Mesh);
+            temp_mesh.vaoId = mesh.vaoId;
+            temp_mesh.vboId = mesh.vboId;
+            rl.unloadMesh(temp_mesh); // Unload GPU data only
+
+            // Reset IDs so uploadMesh will create new VAO with all attributes
+            mesh.vaoId = 0;
+            mesh.vboId = null;
+        }
+
+        // Mesh is centered at origin, we need to translate it to our world offset
+        // and modify Y coordinates based on heightmap + snow
+        const vertex_count = @as(usize, @intCast(mesh.vertexCount));
+
+        // Modify vertices to match our terrain heightmap and snow
+        var i: usize = 0;
+        while (i < vertex_count) : (i += 1) {
+            // Get vertex position (XYZ)
+            const vx = mesh.vertices[i * 3 + 0];
+            const vz = mesh.vertices[i * 3 + 2];
+
+            // Transform from centered plane coordinates to our grid coordinates
+            // genMeshPlane creates a plane from -width/2 to width/2, -length/2 to length/2
+            const world_x = vx + self.world_offset_x + world_width * 0.5;
+            const world_z = vz + self.world_offset_z + world_length * 0.5;
+
+            // Get elevation and snow height at this position
+            const elevation = self.getElevationAt(world_x, world_z);
+            const snow_height = self.getSnowHeightAt(world_x, world_z);
+
+            // Set Y coordinate to elevation + snow height
+            mesh.vertices[i * 3 + 1] = elevation + snow_height;
+
+            // Update X and Z to world coordinates
+            mesh.vertices[i * 3 + 0] = world_x;
+            mesh.vertices[i * 3 + 2] = world_z;
+        }
+
+        // Allocate and set vertex colors based on terrain type
+        mesh.colors = @ptrCast(@alignCast(rl.memAlloc(@intCast(vertex_count * 4 * @sizeOf(u8)))));
+
+        // DEBUG: Track color distribution
+        var color_counts = std.mem.zeroes([6]usize); // One for each terrain type
+        var oob_count: usize = 0;
+
+        i = 0;
+        while (i < vertex_count) : (i += 1) {
+            const vx = mesh.vertices[i * 3 + 0];
+            const vz = mesh.vertices[i * 3 + 2];
+
+            // Get terrain cell color
+            if (self.getCellAtConst(vx, vz)) |cell| {
+                const color = cell.type.getColor();
+
+                mesh.colors[i * 4 + 0] = color.r;
+                mesh.colors[i * 4 + 1] = color.g;
+                mesh.colors[i * 4 + 2] = color.b;
+                mesh.colors[i * 4 + 3] = color.a;
+
+                // DEBUG: Log samples from different terrain types
+                if (cell.type == .thick_snow and color_counts[0] == 0) {
+                    std.log.info("THICK_SNOW sample: getColor()=({}, {}, {}) mesh.colors=({}, {}, {})", .{ color.r, color.g, color.b, mesh.colors[i * 4 + 0], mesh.colors[i * 4 + 1], mesh.colors[i * 4 + 2] });
+                }
+                if (cell.type == .packed_snow and color_counts[1] == 0) {
+                    std.log.info("PACKED_SNOW sample: getColor()=({}, {}, {}) mesh.colors=({}, {}, {})", .{ color.r, color.g, color.b, mesh.colors[i * 4 + 0], mesh.colors[i * 4 + 1], mesh.colors[i * 4 + 2] });
+                }
+
+                mesh.colors[i * 4 + 0] = color.r;
+                mesh.colors[i * 4 + 1] = color.g;
+                mesh.colors[i * 4 + 2] = color.b;
+                mesh.colors[i * 4 + 3] = color.a;
+
+                // DEBUG: Verify what was written
+                if (i < 5) {
+                    std.log.info("  mesh.colors written: r={} g={} b={} a={}", .{ mesh.colors[i * 4 + 0], mesh.colors[i * 4 + 1], mesh.colors[i * 4 + 2], mesh.colors[i * 4 + 3] });
+                }
+
+                // Track distribution
+                const type_idx = @intFromEnum(cell.type);
+                color_counts[type_idx] += 1;
+            } else {
+                // Default white for out-of-bounds
+                mesh.colors[i * 4 + 0] = 255;
+                mesh.colors[i * 4 + 1] = 255;
+                mesh.colors[i * 4 + 2] = 255;
+                mesh.colors[i * 4 + 3] = 255;
+                oob_count += 1;
+            }
+        }
+
+        // DEBUG: Log color distribution
+        std.log.info("Color distribution: thick_snow={} packed_snow={} icy_ground={} deep_powder={} cleared_ground={} slushy={} out_of_bounds={}", .{ color_counts[0], color_counts[1], color_counts[2], color_counts[3], color_counts[4], color_counts[5], oob_count });
+
+        // genMeshPlane already generates normals, but since we modified vertices,
+        // we need to recalculate them. genMeshTangents also recalculates normals.
+        // However, there's no genMeshNormals function, so let's manually calculate simple normals
+
+        // For now, just point all normals straight up (Y+)
+        // This is a simplification but should work for terrain
+        if (mesh.normals == null) {
+            mesh.normals = @ptrCast(@alignCast(rl.memAlloc(@intCast(vertex_count * 3 * @sizeOf(f32)))));
+        }
+        i = 0;
+        while (i < vertex_count) : (i += 1) {
+            mesh.normals[i * 3 + 0] = 0.0; // X
+            mesh.normals[i * 3 + 1] = 1.0; // Y (pointing up)
+            mesh.normals[i * 3 + 2] = 0.0; // Z
+        }
+
+        // Now upload mesh to GPU with ALL vertex data including colors
+        rl.uploadMesh(&mesh, false);
+
+        std.log.info("Terrain mesh generated: {} vertices, {} triangles", .{ vertex_count, mesh.triangleCount });
+
+        self.terrain_mesh = mesh;
+        self.mesh_dirty = false;
+    }
+
     pub fn deinit(self: *TerrainGrid) void {
         self.allocator.free(self.cells);
         self.allocator.free(self.heightmap);
+
+        // Clean up mesh if allocated
+        if (self.terrain_mesh) |mesh| {
+            rl.unloadMesh(mesh);
+        }
     }
 
     // Convert world position to grid coordinates
@@ -385,6 +543,11 @@ pub const TerrainGrid = struct {
         for (self.cells) |*cell| {
             cell.updateAccumulation(dt, self.accumulation_rate);
             cell.updateWall(dt);
+        }
+
+        // Rebuild mesh if dirty (during update phase, not render phase)
+        if (self.mesh_dirty) {
+            self.generateTerrainMesh();
         }
     }
 
@@ -474,6 +637,7 @@ pub const TerrainGrid = struct {
             cell.type = terrain_type;
             cell.traffic_accumulator = 0.0; // Reset traffic
             cell.last_traffic_time = 0.0; // Mark as recently modified
+            self.markMeshDirty(); // Mesh needs rebuilding
         }
     }
 
@@ -525,6 +689,8 @@ pub const TerrainGrid = struct {
                 }
             }
         }
+
+        self.markMeshDirty(); // Mesh needs rebuilding
     }
 
     // Create a rectangular wall of terrain (for ice walls, snow barriers)
@@ -558,6 +724,8 @@ pub const TerrainGrid = struct {
                 }
             }
         }
+
+        self.markMeshDirty(); // Mesh needs rebuilding
     }
 
     // Clear terrain in an area (for explosions, shoveling)
@@ -635,6 +803,10 @@ pub const TerrainGrid = struct {
                 }
             }
         }
+
+        // Walls don't affect the base terrain mesh (separate rendering layer)
+        // But mark as dirty anyway for now (could optimize later)
+        self.markMeshDirty();
     }
 
     /// Build wall perpendicular to facing direction (for skills)

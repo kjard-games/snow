@@ -50,6 +50,10 @@ pub var outline_shader: ?rl.Shader = null;
 var resolution_loc: i32 = 0;
 var thickness_loc: i32 = 0;
 
+// Vertex color shader for terrain rendering
+var vertex_color_shader: ?rl.Shader = null;
+var terrain_material: ?rl.Material = null;
+
 /// Initialize the outline shader system for team-based silhouette rendering.
 /// Returns an error if shader resources fail to load.
 pub fn initOutlineShader(screen_width: i32, screen_height: i32) !void {
@@ -71,6 +75,15 @@ pub fn initOutlineShader(screen_width: i32, screen_height: i32) !void {
     }
 }
 
+/// Initialize terrain material with vertex color shader
+pub fn initTerrainMaterial() !void {
+    vertex_color_shader = try rl.loadShader("shaders/vertex_color.vs", "shaders/vertex_color.fs");
+    terrain_material = try rl.loadMaterialDefault();
+    if (vertex_color_shader) |shader| {
+        terrain_material.?.shader = shader;
+    }
+}
+
 /// Clean up outline shader resources. Safe to call multiple times.
 pub fn deinitOutlineShader() void {
     if (outline_render_texture) |tex| {
@@ -80,6 +93,14 @@ pub fn deinitOutlineShader() void {
     if (outline_shader) |shader| {
         rl.unloadShader(shader);
         outline_shader = null;
+    }
+    if (vertex_color_shader) |shader| {
+        rl.unloadShader(shader);
+        vertex_color_shader = null;
+    }
+    if (terrain_material) |mat| {
+        rl.unloadMaterial(mat);
+        terrain_material = null;
     }
 }
 
@@ -336,8 +357,12 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     // Draw skybox (simple gradient sphere around camera)
     drawSkybox(camera);
 
-    // Draw terrain grid with 3D snow depth and elevation
-    drawTerrainGrid(terrain_grid);
+    // Draw terrain mesh with vertex colors (GoW-style)
+    if (terrain_grid.terrain_mesh) |mesh| {
+        if (terrain_material) |material| {
+            rl.drawMesh(mesh, material, rl.Matrix.identity());
+        }
+    }
 
     // Draw entities (interpolated for smooth movement, adjusted for snow depth)
     for (entities) |ent| {

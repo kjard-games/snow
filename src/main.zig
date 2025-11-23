@@ -19,6 +19,12 @@ pub fn main() !void {
     };
     defer render.deinitOutlineShader();
 
+    // Initialize terrain material with vertex color shader
+    render.initTerrainMaterial() catch |err| {
+        std.log.err("Failed to initialize terrain material: {}", .{err});
+        return err;
+    };
+
     // Enable window resizing and toggling fullscreen
     rl.setWindowState(rl.ConfigFlags{ .window_resizable = true });
 

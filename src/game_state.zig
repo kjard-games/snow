@@ -476,7 +476,7 @@ pub const GameState = struct {
         // Initialize terrain grid
         // Create a 40x40 grid with 50 unit cells, covering 2000x2000 world space (4x larger)
         // Centered around the battlefield (offset by -1000, -1000)
-        const terrain_grid = TerrainGrid.init(
+        var terrain_grid = TerrainGrid.init(
             allocator,
             100, // width (increased for better detail)
             100, // height (increased for better detail)
@@ -487,6 +487,9 @@ pub const GameState = struct {
             print("Failed to initialize terrain grid: {}\n", .{err});
             @panic("Terrain initialization failed");
         };
+
+        // Generate initial terrain mesh
+        terrain_grid.generateTerrainMesh();
 
         print("=== TERRAIN SYSTEM INITIALIZED ===\n", .{});
         print("Grid: 100x100 cells (20 units each)\n", .{});
