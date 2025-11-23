@@ -74,49 +74,45 @@ pub const GameState = struct {
     /// Assign random gear to a character (6 gear slots: toque, scarf, jacket, gloves, pants, boots)
     /// Creates 3 gear archetypes: Light (DPS/Speed), Medium (Balanced), Heavy (Tank)
     fn assignGear(char: *Character, rng: *std.Random) void {
-        const roll = rng.intRangeAtMost(u8, 0, 100);
+        // Define gear pools for each slot
+        const head_pieces = [_]*const gear_slot.Gear{
+            &gear_slot.WoolCap,
+            &gear_slot.SkiBeanie,
+            &gear_slot.WinterParkaHood,
+        };
+        const neck_pieces = [_]*const gear_slot.Gear{
+            &gear_slot.LightScarf,
+            &gear_slot.PuffyScarf,
+            &gear_slot.WoolNeckGuard,
+        };
+        const torso_pieces = [_]*const gear_slot.Gear{
+            &gear_slot.Hoodie,
+            &gear_slot.SkiJacket,
+            &gear_slot.HeavyParka,
+        };
+        const hands_pieces = [_]*const gear_slot.Gear{
+            &gear_slot.Mittens,
+            &gear_slot.InsulatedGloves,
+            &gear_slot.ThermalGauntlets,
+        };
+        const legs_pieces = [_]*const gear_slot.Gear{
+            &gear_slot.Joggers,
+            &gear_slot.SnowPants,
+            &gear_slot.ThermalLeggings,
+        };
+        const feet_pieces = [_]*const gear_slot.Gear{
+            &gear_slot.Sneakers,
+            &gear_slot.InsulatedBoots,
+            &gear_slot.IceClimbingBoots,
+        };
 
-        // Choose a gear tier/archetype
-        if (roll < 33) {
-            // Light build: Low padding, high speed, some energy regen
-            const light_set = [_]*const gear_slot.Gear{
-                &gear_slot.WoolCap,
-                &gear_slot.LightScarf,
-                &gear_slot.Hoodie,
-                &gear_slot.Mittens,
-                &gear_slot.Joggers,
-                &gear_slot.Sneakers,
-            };
-            for (light_set, 0..) |gear_piece, slot_idx| {
-                char.gear[slot_idx] = gear_piece;
-            }
-        } else if (roll < 66) {
-            // Medium build: Balanced padding, normal speed, good warmth regen
-            const medium_set = [_]*const gear_slot.Gear{
-                &gear_slot.SkiBeanie,
-                &gear_slot.PuffyScarf,
-                &gear_slot.SkiJacket,
-                &gear_slot.InsulatedGloves,
-                &gear_slot.SnowPants,
-                &gear_slot.InsulatedBoots,
-            };
-            for (medium_set, 0..) |gear_piece, slot_idx| {
-                char.gear[slot_idx] = gear_piece;
-            }
-        } else {
-            // Heavy build: High padding (tank), low speed, high warmth regen
-            const heavy_set = [_]*const gear_slot.Gear{
-                &gear_slot.WinterParkaHood,
-                &gear_slot.WoolNeckGuard,
-                &gear_slot.HeavyParka,
-                &gear_slot.ThermalGauntlets,
-                &gear_slot.ThermalLeggings,
-                &gear_slot.IceClimbingBoots,
-            };
-            for (heavy_set, 0..) |gear_piece, slot_idx| {
-                char.gear[slot_idx] = gear_piece;
-            }
-        }
+        // Randomly select one piece from each slot pool
+        char.gear[0] = head_pieces[rng.intRangeAtMost(usize, 0, head_pieces.len - 1)];
+        char.gear[1] = neck_pieces[rng.intRangeAtMost(usize, 0, neck_pieces.len - 1)];
+        char.gear[2] = torso_pieces[rng.intRangeAtMost(usize, 0, torso_pieces.len - 1)];
+        char.gear[3] = hands_pieces[rng.intRangeAtMost(usize, 0, hands_pieces.len - 1)];
+        char.gear[4] = legs_pieces[rng.intRangeAtMost(usize, 0, legs_pieces.len - 1)];
+        char.gear[5] = feet_pieces[rng.intRangeAtMost(usize, 0, feet_pieces.len - 1)];
 
         char.recalculatePadding();
     }
