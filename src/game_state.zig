@@ -70,6 +70,9 @@ pub const GameState = struct {
     terrain_grid: TerrainGrid,
     allocator: std.mem.Allocator,
 
+    // Simulation mode: when true, skip raylib input polling (for headless battle simulation)
+    simulation_mode: bool = false,
+
     // Helper function to assign equipment loadouts to characters
     /// Assign random gear to a character (6 gear slots: toque, scarf, jacket, gloves, pants, boots)
     /// Creates 3 gear archetypes: Light (DPS/Speed), Medium (Balanced), Heavy (Tank)
@@ -619,7 +622,10 @@ pub const GameState = struct {
 
         // Poll input EVERY FRAME (60fps) to buffer all inputs
         // This prevents missing rapid inputs like Tab presses between ticks
-        input.pollInput(&self.entities, &self.camera, &self.input_state);
+        // In simulation mode, skip polling to avoid raylib calls
+        if (!self.simulation_mode) {
+            input.pollInput(&self.entities, &self.camera, &self.input_state);
+        }
 
         // Accumulate time for tick loop
         self.tick_accumulator += frame_time;
@@ -654,8 +660,14 @@ pub const GameState = struct {
             // Get player-controlled entity
             const player = self.getPlayer();
 
-            // Get player movement intent from input
-            const player_movement = input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state, &self.vfx_manager, &self.terrain_grid);
+            // Update player's facing angle from camera (camera is player-specific)
+            player.facing_angle = self.input_state.camera_angle;
+
+            // Get player movement intent from input (only if not in simulation mode)
+            const player_movement = if (!self.simulation_mode)
+                input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state, &self.vfx_manager, &self.terrain_grid)
+            else
+                movement.MovementIntent{ .local_x = 0, .local_z = 0, .facing_angle = player.facing_angle, .apply_penalties = true };
 
             // Only apply movement if not casting (GW1 rule: can't move while casting)
             if (player.cast_state == .idle) {

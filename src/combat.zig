@@ -40,9 +40,11 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     // Get the skill
     const skill = caster.skill_bar[skill_index] orelse return .no_target;
 
-    // Check energy
-    if (caster.energy < skill.energy_cost) {
-        print("{s} not enough energy ({d}/{d})\n", .{ caster.name, caster.energy, skill.energy_cost });
+    // Check energy (accounting for energy cost multipliers from effects)
+    const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.active_effects, caster.active_effect_count);
+    const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
+    if (@as(f32, @floatFromInt(caster.energy)) < adjusted_energy_cost) {
+        print("{s} not enough energy ({d:.1}/{d:.1})\n", .{ caster.name, caster.energy, adjusted_energy_cost });
         return .no_energy;
     }
 
@@ -97,9 +99,11 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
     // Get the skill
     const skill = caster.skill_bar[skill_index] orelse return .no_target;
 
-    // Check energy
-    if (caster.energy < skill.energy_cost) {
-        print("{s} not enough energy ({d}/{d})\n", .{ caster.name, caster.energy, skill.energy_cost });
+    // Check energy (accounting for energy cost multipliers from effects)
+    const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.active_effects, caster.active_effect_count);
+    const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
+    if (@as(f32, @floatFromInt(caster.energy)) < adjusted_energy_cost) {
+        print("{s} not enough energy ({d:.1}/{d:.1})\n", .{ caster.name, caster.energy, adjusted_energy_cost });
         return .no_energy;
     }
 
@@ -141,8 +145,11 @@ fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.
     _ = rng;
     _ = vfx_manager;
 
-    // Set cooldown
-    caster.skill_cooldowns[skill_index] = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
+    // Set cooldown, applying cooldown reduction from effects
+    var cooldown_time = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
+    const cooldown_reduction = effects.calculateCooldownReductionPercent(&caster.active_effects, caster.active_effect_count);
+    cooldown_time *= (1.0 - cooldown_reduction);
+    caster.skill_cooldowns[skill_index] = cooldown_time;
 
     print("{s} used {s} on ground at ({d:.1}, {d:.1})\n", .{
         caster.name,
@@ -236,8 +243,11 @@ fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.
 /// Execute a skill's effects (damage, healing, conditions, terrain). Called after cast completes.
 /// Applies all modifiers from caster and target conditions (buffs/debuffs).
 pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) void {
-    // Set cooldown
-    caster.skill_cooldowns[skill_index] = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
+    // Set cooldown, applying cooldown reduction from effects
+    var cooldown_time = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
+    const cooldown_reduction = effects.calculateCooldownReductionPercent(&caster.active_effects, caster.active_effect_count);
+    cooldown_time *= (1.0 - cooldown_reduction);
+    caster.skill_cooldowns[skill_index] = cooldown_time;
 
     // Get target if needed
     if (skill.target_type == .enemy or skill.target_type == .ally) {
@@ -261,12 +271,26 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             final_damage *= 0.75; // Bundled Up reduces incoming damage by 25%
         }
 
+        // Apply active effect damage multipliers from caster
+        const caster_damage_mult = effects.calculateDamageMultiplier(&caster.active_effects, caster.active_effect_count);
+        final_damage *= caster_damage_mult;
+
+        // Apply active effect damage multipliers against target (negative multipliers)
+        // Note: Some effects on target make them take MORE damage
+        const target_damage_mult = effects.calculateDamageMultiplier(&tgt.active_effects, tgt.active_effect_count);
+        final_damage *= target_damage_mult;
+
         // Apply armor/padding reduction (GW1-inspired formula)
         // Simplified from GW1: damage = base × strike_level / (strike_level + armor)
         // We assume constant effective strike level of 100, so:
         // damage_reduction = armor / (armor + 100)
         // final_damage = base_damage × (1 - damage_reduction)
-        const target_padding = tgt.getTotalPadding();
+        var target_padding = tgt.getTotalPadding();
+
+        // Apply active effect armor multipliers to target's padding
+        const target_armor_mult = effects.calculateArmorMultiplier(&tgt.active_effects, tgt.active_effect_count);
+        target_padding *= target_armor_mult;
+
         const armor_reduction = target_padding / (target_padding + 100.0);
         final_damage *= (1.0 - armor_reduction);
 

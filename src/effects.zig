@@ -302,3 +302,122 @@ pub const FIRED_UP_EFFECT = Effect{
     .max_stacks = 1,
     .stack_behavior = .refresh_duration,
 };
+
+// ============================================================================
+// Helper functions to query and apply effects
+// ============================================================================
+
+/// Query a specific modifier type from an effect
+/// Returns the modifier value if found, or null if not present
+pub fn getModifier(effect: *const Effect, modifier_type: EffectModifier) ?ModifierValue {
+    for (effect.modifiers) |mod| {
+        if (mod.effect_type == modifier_type) {
+            return mod.value;
+        }
+    }
+    return null;
+}
+
+/// Calculate aggregate damage multiplier from active effects
+/// Combines all damage_multiplier modifiers on a character
+pub fn calculateDamageMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .damage_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
+}
+
+/// Calculate aggregate armor/padding multiplier from active effects
+pub fn calculateArmorMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .armor_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
+}
+
+/// Calculate aggregate movement speed multiplier from active effects
+pub fn calculateMoveSpeedMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .move_speed_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
+}
+
+/// Calculate aggregate energy cost multiplier from active effects
+pub fn calculateEnergyCostMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .energy_cost_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
+}
+
+/// Calculate aggregate energy regen multiplier from active effects
+pub fn calculateEnergyRegenMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .energy_regen_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
+}
+
+/// Calculate aggregate cooldown reduction percent from active effects
+pub fn calculateCooldownReductionPercent(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_reduction: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .cooldown_reduction_percent)) |value| {
+                if (value == .float) {
+                    total_reduction += value.float;
+                }
+            }
+        }
+    }
+
+    // Cap at 80% reduction (can't go below 20% of original cooldown)
+    return @min(total_reduction, 0.8);
+}

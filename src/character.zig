@@ -81,6 +81,10 @@ pub const Character = struct {
     max_energy: u8,
     energy_accumulator: f32 = 0.0, // Tracks fractional energy for smooth regen
 
+    // Facing angle (decoupled from camera - for deterministic movement/targeting)
+    // This is the entity's actual facing direction, independent of camera angle
+    facing_angle: f32 = 0.0,
+
     // School-specific secondary mechanics
     // Private School: Credit/Debt (max energy temporarily reduced)
     credit_debt: u8 = 0, // How much max energy is locked away (spending on credit)
@@ -205,6 +209,10 @@ pub const Character = struct {
                 speed_mult *= g.speed_modifier;
             }
         }
+
+        // Apply active effect move speed multipliers
+        const effect_speed_mult = effects.calculateMoveSpeedMultiplier(&self.active_effects, self.active_effect_count);
+        speed_mult *= effect_speed_mult;
 
         return speed_mult;
     }
@@ -347,6 +355,10 @@ pub const Character = struct {
 
         // Add gear energy regen bonus
         regen += self.getGearEnergyRegen();
+
+        // Apply energy regen multipliers from effects
+        const regen_mult = effects.calculateEnergyRegenMultiplier(&self.active_effects, self.active_effect_count);
+        regen *= regen_mult;
 
         // Apply delta time
         const energy_delta = regen * delta_time;
@@ -540,6 +552,25 @@ pub const Character = struct {
             }
         }
 
+        // Update active effects, removing expired ones
+        i = 0;
+        while (i < self.active_effect_count) {
+            if (self.active_effects[i]) |*effect| {
+                if (effect.time_remaining_ms <= delta_time_ms) {
+                    // Effect expired, remove it by swapping with last element
+                    self.active_effect_count -= 1;
+                    self.active_effects[i] = self.active_effects[self.active_effect_count];
+                    self.active_effects[self.active_effect_count] = null;
+                    // Don't increment i since we need to check the swapped element
+                } else {
+                    effect.time_remaining_ms -= delta_time_ms;
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+
         // Recalculate warmth pips if any conditions expired
         if (conditions_changed) {
             self.recalculateWarmthPips();
@@ -684,8 +715,10 @@ pub const Character = struct {
         self.cast_time_remaining = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
         self.skill_executed = false;
 
-        // Consume energy immediately (even if cancelled later)
-        self.energy -= skill.energy_cost;
+        // Consume energy immediately (even if cancelled later), applying modifiers from effects
+        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&self.active_effects, self.active_effect_count);
+        const energy_cost = @as(u8, @intFromFloat(@as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult));
+        self.energy -= energy_cost;
     }
 
     /// Cancel current cast (GW1-accurate)
