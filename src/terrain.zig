@@ -224,6 +224,7 @@ pub const TerrainGrid = struct {
     // Mesh-based rendering (GoW-style approach)
     terrain_mesh: ?rl.Mesh = null, // Single mesh for entire terrain base
     mesh_dirty: bool = true, // Track if mesh needs rebuilding
+    headless_mode: bool = false, // Skip GPU mesh generation in headless mode
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -391,6 +392,19 @@ pub const TerrainGrid = struct {
             .world_offset_x = world_offset_x,
             .world_offset_z = world_offset_z,
         };
+    }
+
+    pub fn initHeadless(
+        allocator: std.mem.Allocator,
+        width: usize,
+        height: usize,
+        grid_size: f32,
+        world_offset_x: f32,
+        world_offset_z: f32,
+    ) !TerrainGrid {
+        var grid = try init(allocator, width, height, grid_size, world_offset_x, world_offset_z);
+        grid.headless_mode = true;
+        return grid;
     }
 
     /// Mark mesh as dirty (needs regeneration)
@@ -726,7 +740,8 @@ pub const TerrainGrid = struct {
         }
 
         // Rebuild mesh if dirty (during update phase, not render phase)
-        if (self.mesh_dirty) {
+        // Skip in headless mode to avoid GPU calls
+        if (self.mesh_dirty and !self.headless_mode) {
             self.generateTerrainMesh();
         }
     }

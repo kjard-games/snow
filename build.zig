@@ -31,4 +31,25 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    // Headless battle simulation test
+    const sim_test = b.addExecutable(.{
+        .name = "test-simulation",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/test_simulation.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    sim_test.linkLibrary(raylib_dep.artifact("raylib"));
+    sim_test.root_module.addImport("raylib", raylib_dep.module("raylib"));
+
+    b.installArtifact(sim_test);
+
+    const test_cmd = b.addRunArtifact(sim_test);
+    test_cmd.step.dependOn(b.getInstallStep());
+
+    const test_step = b.step("test-sim", "Run headless AI vs AI battle simulation");
+    test_step.dependOn(&test_cmd.step);
 }
