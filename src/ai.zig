@@ -1080,10 +1080,15 @@ fn calculateFormationMovementIntent(
             // - Press forward toward enemies (within melee range)
             // - Stay between enemy and ally backline
 
-            const optimal_range = ent.player_position.getRangeMin();
-            const comfort_zone = 20.0;
+            // Use actual skill range - must be IN RANGE to cast!
+            const max_skill_range = getMaxSkillRange(ent);
+            // Use max skill range, not min, so frontline can actually reach targets!
+            const optimal_range = max_skill_range;
+            const comfort_zone = 10.0;
+            // Less aggressive buffer - push closer to ensure in-range
+            const desired_range = optimal_range - 50.0;
 
-            if (distance_to_target > optimal_range + comfort_zone) {
+            if (distance_to_target > desired_range + comfort_zone) {
                 // Too far, close distance aggressively
                 move_world_x = dir_to_target_x;
                 move_world_z = dir_to_target_z;
@@ -1288,6 +1293,18 @@ pub fn updateAI(
                 } else {
                     // No enemies, follow player
                     target = player_ent;
+                }
+            }
+        } else {
+            // AI-only mode: no player, so everyone targets nearest enemy
+            if (targeting.getNearestEnemy(ent.*, entities)) |enemy_id| {
+                // Find entity by ID
+                for (entities) |*e| {
+                    if (e.id == enemy_id) {
+                        target = e;
+                        target_id = enemy_id;
+                        break;
+                    }
                 }
             }
         }
