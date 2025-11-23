@@ -43,7 +43,7 @@ pub fn executeCommand(
 
                 // Try to cast the skill
                 if (target) |tgt| {
-                    _ = combat.tryStartCast(actor, skill_index, tgt, tgt.id, rng, vfx_manager, terrain_grid);
+                    _ = combat.tryStartCast(actor, skill_index, tgt, tgt.id, rng, vfx_manager, terrain_grid, null);
                 }
             }
         }

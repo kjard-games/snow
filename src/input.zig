@@ -513,7 +513,7 @@ fn applyAutoMovement(
                             if (distance <= skill.cast_range) {
                                 // In range! Try to cast the queued skill
                                 print("In range - casting queued skill: {s}\n", .{skill.name});
-                                const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager, terrain_grid);
+                                const result = combat.tryStartCast(player, skill_idx, ent, target_id, rng, vfx_manager, terrain_grid, null);
                                 player.clearSkillQueue();
 
                                 if (result == .out_of_range) {
@@ -920,7 +920,7 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityI
         }
 
         // Cast immediately at the determined position
-        _ = combat.tryStartCastAtGround(player, skill_index, ground_position, rng, vfx_manager, terrain_grid);
+        _ = combat.tryStartCastAtGround(player, skill_index, ground_position, rng, vfx_manager, terrain_grid, null);
         return;
     }
 
@@ -941,7 +941,7 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityI
         }
     }
 
-    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng, vfx_manager, terrain_grid);
+    _ = combat.tryStartCast(player, skill_index, target, selected_target, rng, vfx_manager, terrain_grid, null);
 }
 
 // Update camera to follow player (called every frame for smooth interpolation)

@@ -6,11 +6,13 @@ const effects = @import("effects.zig");
 const entity_types = @import("entity.zig");
 const vfx = @import("vfx.zig");
 const palette = @import("color_palette.zig");
+const telemetry = @import("telemetry.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
 const Condition = skills.Condition;
 const EntityId = entity_types.EntityId;
+const MatchTelemetry = telemetry.MatchTelemetry;
 const print = std.debug.print;
 
 pub const CastResult = enum {
@@ -27,7 +29,7 @@ pub const CastResult = enum {
 
 /// Attempt to start casting a skill. Performs all pre-cast checks (energy, range, cooldown, etc.)
 /// Returns the result indicating success, failure reason, or that casting has started.
-pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_id: ?EntityId, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) CastResult {
+pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, target_id: ?EntityId, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid, telem: ?*MatchTelemetry) CastResult {
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
 
@@ -35,7 +37,12 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     if (caster.cast_state != .idle) return .already_casting;
 
     // Check cooldown
-    if (caster.skill_cooldowns[skill_index] > 0) return .on_cooldown;
+    if (caster.skill_cooldowns[skill_index] > 0) {
+        if (telem) |tel| {
+            tel.recordCooldownBlock(caster.id);
+        }
+        return .on_cooldown;
+    }
 
     // Get the skill
     const skill = caster.skill_bar[skill_index] orelse return .no_target;
@@ -45,6 +52,11 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
     if (@as(f32, @floatFromInt(caster.energy)) < adjusted_energy_cost) {
         print("{s} not enough energy ({d:.1}/{d:.1})\n", .{ caster.name, caster.energy, adjusted_energy_cost });
+        // Record failed skill attempt
+        if (telem) |tel| {
+            tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, false);
+            tel.recordNoEnergyBlock(caster.id);
+        }
         return .no_energy;
     }
 
@@ -52,6 +64,9 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     if (skill.target_type == .enemy or skill.target_type == .ally) {
         const tgt = target orelse {
             print("{s} has no target\n", .{caster.name});
+            if (telem) |tel| {
+                tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, false);
+            }
             return .no_target;
         };
 
@@ -66,6 +81,16 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
             if (target_id) |tid| {
                 caster.queueSkill(skill_index, tid);
             }
+            // Record out-of-range attempt
+            if (telem) |tel| {
+                tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, false);
+                tel.recordOutOfRangeBlock(caster.id);
+                if (caster.id < 256) { // Only record for valid entities
+                    if (tel.getEntityStats(caster.id)) |stats| {
+                        stats.out_of_range_attempts += 1;
+                    }
+                }
+            }
             return .out_of_range;
         }
     }
@@ -76,7 +101,7 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
 
     // If instant cast, execute immediately
     if (skill.activation_time_ms == 0) {
-        executeSkill(caster, skill, target, skill_index, rng, vfx_manager, terrain_grid);
+        executeSkill(caster, skill, target, skill_index, rng, vfx_manager, terrain_grid, telem);
         caster.cast_target_id = null; // Clear target
         return .success;
     }
@@ -86,7 +111,7 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
 
 /// Attempt to cast a ground-targeted skill at a specific position
 /// This is used for skills with target_type = .ground (walls, terrain effects, etc.)
-pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position: rl.Vector3, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) CastResult {
+pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position: rl.Vector3, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid, telem: ?*MatchTelemetry) CastResult {
     // Check if caster is alive
     if (!caster.isAlive()) return .caster_dead;
 
@@ -94,7 +119,12 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
     if (caster.cast_state != .idle) return .already_casting;
 
     // Check cooldown
-    if (caster.skill_cooldowns[skill_index] > 0) return .on_cooldown;
+    if (caster.skill_cooldowns[skill_index] > 0) {
+        if (telem) |tel| {
+            tel.recordCooldownBlock(caster.id);
+        }
+        return .on_cooldown;
+    }
 
     // Get the skill
     const skill = caster.skill_bar[skill_index] orelse return .no_target;
@@ -104,6 +134,10 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
     const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
     if (@as(f32, @floatFromInt(caster.energy)) < adjusted_energy_cost) {
         print("{s} not enough energy ({d:.1}/{d:.1})\n", .{ caster.name, caster.energy, adjusted_energy_cost });
+        if (telem) |tel| {
+            tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, false);
+            tel.recordNoEnergyBlock(caster.id);
+        }
         return .no_energy;
     }
 
@@ -114,6 +148,10 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
 
     if (distance > skill.cast_range) {
         print("{s} ground target out of range ({d:.1}/{d:.1})\n", .{ caster.name, distance, skill.cast_range });
+        if (telem) |tel| {
+            tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, false);
+            tel.recordOutOfRangeBlock(caster.id);
+        }
         return .out_of_range;
     }
 
@@ -125,7 +163,7 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
 
     // If instant cast, execute immediately
     if (skill.activation_time_ms == 0) {
-        executeSkillAtGround(caster, skill, ground_position, skill_index, rng, vfx_manager, terrain_grid);
+        executeSkillAtGround(caster, skill, ground_position, skill_index, rng, vfx_manager, terrain_grid, telem);
         return .success;
     }
 
@@ -134,14 +172,14 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
     // caster.cast_ground_position = ground_position;
 
     // For now, execute ground skills immediately (most wall skills are instant anyway)
-    executeSkillAtGround(caster, skill, ground_position, skill_index, rng, vfx_manager, terrain_grid);
+    executeSkillAtGround(caster, skill, ground_position, skill_index, rng, vfx_manager, terrain_grid, telem);
     caster.cast_state = .idle;
     return .success;
 }
 
 /// Execute a ground-targeted skill at a specific position
 /// This is a simplified version of executeSkill for ground-targeted abilities
-fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.Vector3, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) void {
+fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.Vector3, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid, telem: ?*MatchTelemetry) void {
     _ = rng;
     _ = vfx_manager;
 
@@ -150,6 +188,13 @@ fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.
     const cooldown_reduction = effects.calculateCooldownReductionPercent(&caster.active_effects, caster.active_effect_count);
     cooldown_time *= (1.0 - cooldown_reduction);
     caster.skill_cooldowns[skill_index] = cooldown_time;
+
+    // Record skill cast in telemetry
+    if (telem) |tel| {
+        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.active_effects, caster.active_effect_count);
+        const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
+        tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, true);
+    }
 
     print("{s} used {s} on ground at ({d:.1}, {d:.1})\n", .{
         caster.name,
@@ -242,12 +287,19 @@ fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.
 
 /// Execute a skill's effects (damage, healing, conditions, terrain). Called after cast completes.
 /// Applies all modifiers from caster and target conditions (buffs/debuffs).
-pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid) void {
+pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid, telem: ?*MatchTelemetry) void {
     // Set cooldown, applying cooldown reduction from effects
     var cooldown_time = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
     const cooldown_reduction = effects.calculateCooldownReductionPercent(&caster.active_effects, caster.active_effect_count);
     cooldown_time *= (1.0 - cooldown_reduction);
     caster.skill_cooldowns[skill_index] = cooldown_time;
+
+    // Record successful skill cast in telemetry (this is called after cast completes)
+    if (telem) |tel| {
+        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.active_effects, caster.active_effect_count);
+        const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
+        tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, true);
+    }
 
     // Get target if needed
     if (skill.target_type == .enemy or skill.target_type == .ally) {
@@ -362,6 +414,11 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             // Record damage source for damage monitor
             tgt.recordDamageSource(skill, caster.id);
 
+            // Record telemetry
+            if (telem) |tel| {
+                tel.recordDamage(caster.id, tgt.id, final_damage, tgt.getTotalPadding(), "physical");
+            }
+
             // Spawn damage number
             vfx_manager.spawnDamageNumber(final_damage, tgt.position, .damage);
 
@@ -394,7 +451,16 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
                 healing_amount *= 1.5;
             }
 
+            const prev_hp = tgt.warmth;
             tgt.warmth = @min(tgt.max_warmth, tgt.warmth + healing_amount);
+
+            // Check if we overhealed
+            const was_overhealing = (prev_hp + healing_amount) > tgt.max_warmth;
+
+            // Record telemetry
+            if (telem) |tel| {
+                tel.recordHealing(caster.id, tgt.id, healing_amount, was_overhealing);
+            }
 
             // Spawn heal effect and number
             vfx_manager.spawnHeal(tgt.position);
@@ -418,6 +484,12 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             }
 
             tgt.addChill(chill_effect, null); // TODO: add character IDs
+
+            // Record telemetry
+            if (telem) |tel| {
+                tel.recordCondition(caster.id, @tagName(chill_effect.chill));
+            }
+
             print("{s} applied {s} to {s} for {d}ms\n", .{
                 caster.name,
                 @tagName(chill_effect.chill),

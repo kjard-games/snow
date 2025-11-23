@@ -60,6 +60,7 @@ pub const BehaviorContext = struct {
     rng: *std.Random,
     vfx_manager: *@import("vfx.zig").VFXManager,
     terrain_grid: *const @import("terrain.zig").TerrainGrid,
+    match_telemetry: ?*@import("telemetry.zig").MatchTelemetry,
 
     // Cached context data (filled by root node)
     target: ?*Character = null,
@@ -276,7 +277,7 @@ pub const FormationRole = enum {
 
 pub const AIState = struct {
     next_skill_time: f32 = 0.0,
-    skill_cooldown: f32 = 1.5, // seconds between AI skill casts (faster = more dangerous)
+    skill_cooldown: f32 = 0.2, // seconds between AI skill casts (GW1-like: allow frequent decisions, individual skill cooldowns enforce recharge)
     role: AIRole = .damage_dealer,
     formation_role: FormationRole = .midline,
 };
@@ -317,8 +318,9 @@ pub const Conditions = struct {
     }
 
     // Check if skill is ready to cast
-    pub fn canCastSkill(ctx: *BehaviorContext) NodeStatus {
-        return if (ctx.ai_state.next_skill_time <= 0) .success else .failure;
+    pub fn canCastSkill(_: *BehaviorContext) NodeStatus {
+        // Individual skill cooldowns are checked in canUseSkill() - no need for global gate
+        return .success;
     }
 
     // Check if self is under threat (low health or being targeted)
@@ -364,6 +366,21 @@ pub const Conditions = struct {
         return .failure;
     }
 };
+
+/// Calculate the maximum cast range available to a character across all their skills
+fn getMaxSkillRange(ent: *Character) f32 {
+    var max_range: f32 = 100.0; // Fallback default
+
+    for (ent.skill_bar) |maybe_skill| {
+        if (maybe_skill) |skill| {
+            if (skill.cast_range > max_range) {
+                max_range = skill.cast_range;
+            }
+        }
+    }
+
+    return max_range;
+}
 
 // Helper functions for terrain skill placement
 fn findBestAllyClumpLocation(ctx: *BehaviorContext) ?rl.Vector3 {
@@ -504,10 +521,10 @@ pub const Actions = struct {
                 ctx.rng,
                 ctx.vfx_manager,
                 @constCast(ctx.terrain_grid),
+                ctx.match_telemetry,
             );
 
             if (result == .success or result == .casting_started) {
-                ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown;
                 return .success;
             }
         }
@@ -529,10 +546,10 @@ pub const Actions = struct {
                         ctx.rng,
                         ctx.vfx_manager,
                         @constCast(ctx.terrain_grid),
+                        ctx.match_telemetry,
                     );
 
                     if (result == .success or result == .casting_started) {
-                        ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown;
                         return .success;
                     }
                 }
@@ -590,10 +607,10 @@ pub const Actions = struct {
                             ctx.rng,
                             ctx.vfx_manager,
                             @constCast(ctx.terrain_grid),
+                            ctx.match_telemetry,
                         );
 
                         if (result == .success or result == .casting_started) {
-                            ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown * 2.0; // Longer CD for terrain
                             return .success;
                         }
                     }
@@ -637,10 +654,10 @@ pub const Actions = struct {
                         ctx.rng,
                         ctx.vfx_manager,
                         @constCast(ctx.terrain_grid),
+                        ctx.match_telemetry,
                     );
 
                     if (result == .success or result == .casting_started) {
-                        ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown;
                         return .success;
                     }
                 }
@@ -669,10 +686,10 @@ pub const Actions = struct {
                         ctx.rng,
                         ctx.vfx_manager,
                         @constCast(ctx.terrain_grid),
+                        ctx.match_telemetry,
                     );
 
                     if (result == .success or result == .casting_started) {
-                        ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown * 2.0; // Longer CD for walls
                         return .success;
                     }
                 }
@@ -716,10 +733,10 @@ pub const Actions = struct {
                         ctx.rng,
                         ctx.vfx_manager,
                         @constCast(ctx.terrain_grid),
+                        ctx.match_telemetry,
                     );
 
                     if (result == .success or result == .casting_started) {
-                        ctx.ai_state.next_skill_time = ctx.ai_state.skill_cooldown;
                         return .success;
                     }
                 }
@@ -1080,10 +1097,15 @@ fn calculateFormationMovementIntent(
             // - Press forward toward enemies (within melee range)
             // - Stay between enemy and ally backline
 
-            const optimal_range = ent.player_position.getRangeMin();
-            const comfort_zone = 20.0;
+            // Use actual skill range - must be IN RANGE to cast!
+            const max_skill_range = getMaxSkillRange(ent);
+            // Use max skill range, not min, so frontline can actually reach targets!
+            const optimal_range = max_skill_range;
+            const comfort_zone = 10.0;
+            // Less aggressive buffer - push closer to ensure in-range
+            const desired_range = optimal_range - 50.0;
 
-            if (distance_to_target > optimal_range + comfort_zone) {
+            if (distance_to_target > desired_range + comfort_zone) {
                 // Too far, close distance aggressively
                 move_world_x = dir_to_target_x;
                 move_world_z = dir_to_target_z;
@@ -1200,11 +1222,23 @@ fn calculateFormationMovementIntent(
         },
     }
 
+    // Convert world-space movement to local space (relative to facing direction)
+    // and face the target
+    const facing_angle = ent.facing_angle;
+    const cos_angle = @cos(facing_angle);
+    const sin_angle = @sin(facing_angle);
+
+    // Rotate world-space movement to local space (inverse of the world-space rotation)
+    // This converts world velocity to character-relative velocity
+    // Local: x = right, z = forward/backward (relative to facing)
+    const local_x = move_world_x * cos_angle + move_world_z * sin_angle;
+    const local_z = -move_world_x * sin_angle + move_world_z * cos_angle;
+
     return MovementIntent{
-        .local_x = move_world_x,
-        .local_z = move_world_z,
-        .facing_angle = 0.0,
-        .apply_penalties = false,
+        .local_x = local_x,
+        .local_z = local_z,
+        .facing_angle = facing_angle,
+        .apply_penalties = true, // Re-enable movement penalties for realistic movement
     };
 }
 
@@ -1243,6 +1277,7 @@ pub fn updateAI(
     rng: *std.Random,
     vfx_manager: *@import("vfx.zig").VFXManager,
     terrain_grid: *const @import("terrain.zig").TerrainGrid,
+    match_telemetry: ?*@import("telemetry.zig").MatchTelemetry,
 ) void {
     // Find the controlled player entity
     var player_ent: ?*Character = null;
@@ -1290,6 +1325,18 @@ pub fn updateAI(
                     target = player_ent;
                 }
             }
+        } else {
+            // AI-only mode: no player, so everyone targets nearest enemy
+            if (targeting.getNearestEnemy(ent.*, entities)) |enemy_id| {
+                // Find entity by ID
+                for (entities) |*e| {
+                    if (e.id == enemy_id) {
+                        target = e;
+                        target_id = enemy_id;
+                        break;
+                    }
+                }
+            }
         }
 
         // Create behavior context
@@ -1301,6 +1348,7 @@ pub fn updateAI(
             .rng = rng,
             .vfx_manager = vfx_manager,
             .terrain_grid = terrain_grid,
+            .match_telemetry = match_telemetry,
             .target = target,
             .target_id = target_id,
         };
@@ -1345,10 +1393,27 @@ pub fn updateAI(
         if (ent.cast_state == .idle) {
             // Calculate and apply formation-aware movement every tick
             const move_intent = calculateFormationMovementIntent(&ctx);
+
+            // Track position before movement
+            const pos_before = ent.position;
+
             movement.applyMovement(ent, move_intent, entities, null, null, delta_time, terrain_grid);
+
+            // Record movement in telemetry
+            if (ctx.match_telemetry) |telem| {
+                // Calculate distance moved (2D in xz plane)
+                const dx = ent.position.x - pos_before.x;
+                const dz = ent.position.z - pos_before.z;
+                const distance_moved = @sqrt(dx * dx + dz * dz);
+
+                if (distance_moved > 0.01) {
+                    const is_forward = move_intent.local_z < 0.0; // Forward in local space is negative Z
+                    telem.recordMovement(ent.id, distance_moved, is_forward);
+                    telem.recordMovementVector(ent.id, move_intent.local_x, move_intent.local_z);
+                }
+            }
         }
 
         // Update skill casting timer
-        ai_state.next_skill_time -= delta_time;
     }
 }
