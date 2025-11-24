@@ -13,6 +13,7 @@ uniform mat4 matNormal;
 
 // Output vertex attributes (to fragment shader)
 out vec3 fragPosition;
+out vec3 fragWorldPosition;  // World space position for layer detection
 out vec3 fragNormal;
 out vec4 fragColor;
 
@@ -23,6 +24,7 @@ void main()
     
     // Send world position and normal to fragment shader for lighting
     fragPosition = vec3(matModel * vec4(vertexPosition, 1.0));
+    fragWorldPosition = vertexPosition;  // Raw world position for height-based effects
     fragNormal = normalize(vec3(matNormal * vec4(vertexNormal, 0.0)));
     
     // Pass vertex color to fragment shader

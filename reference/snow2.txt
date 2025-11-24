@@ -1,0 +1,111 @@
+why does the snow in Red Dead Redemption
+2 look so good hi I'm Thomas and welcome
+back to stylized station
+if you've ever played Red Dead
+Redemption 2 you probably noticed that
+when you walk over snow it deforms as
+you walk through it and it's not just
+your character anything that interacts
+with the snow affects it and I was
+wondering how the does this work so
+I decided to do some research and learn
+how it works on a basic level and today
+I'm going to share that information with
+you so you can use it in your Game Dev
+projects you're welcome in the previous
+episode I explained what a displacement
+Shader does and how it uses height maps
+to move the vertices of a mesh up and
+down but we're not done I still haven't
+told you the most essential step a
+displacement Shader only toys with the
+vertices that already exist on the mesh
+meaning if we wanted to add more detail
+like a footprint for example we need to
+find a way to add more vertices but how
+the do we do that this is where
+displacement shaders partner in crime
+comes in tessellation tessellation is a
+technique that enhances the detail of a
+mesh by subdividing its polygons such as
+triangles into smaller ones but as
+regular viewers of stylized station know
+more triangles equals more work for the
+engine so what's the point of
+tessellating a mesh if it's just going
+to slow everything down you ask well the
+cool thing about this tessellation
+process is that it happens in real time
+on the GPU and therefore can be adjusted
+dynamically we can add more triangles
+when the camera is close and takes them
+away when the camera pulls back meaning
+we can now add enough detail to a mesh
+to add Minor Details like footprints in
+the snow without setting your graphics
+card on fire and burning your house down
+tessellation is a surprisingly deep and
+complex topic so if you want to learn
+more about it or if there's anything
+else you're interested in learning about
+leave a comment below but tessellation
+doesn't explain everything isn't a
+height map just a static image how does
+the height map know where the character
+is stepping to make these boot
+Footprints what magic technique is
+behind this well picture this every time
+a character steps onto the snow we want
+a footprint to appear dynamically on the
+Fly this is where render Target
+in handy think of render targets as
+off-screen canvases or buffers these are
+special areas where we can render or
+Draw elements before they appear on your
+screen they allow us to store manipulate
+and use that information later in the
+case of a snow deformation Shader we
+could use a render Target to hold a map
+of the snow's surface this map is a
+visual representation of the height of
+the snow each pixel's color represents a
+different height so when our character
+steps on the snow we're going to draw
+onto this map at the location of the
+footstep adjusting the colors and thus
+the heights instead of computing
+Collision for every vertex of a model
+like the character's legs which can be
+very taxing on processing power we can
+attach something called Collision shapes
+to their feet these shapes engage with
+the snow surface and on impact send
+information to our render Target this
+data is then employed in real time to
+adjust our height map by modifying the
+size and shape of these spheres and
+boxes we can simulate the impact of any
+object or any creature dynamically
+transforming the snow covered terrain
+wow so amazing now you remember our
+friend tessellation right as the height
+map gets updated by our render Target
+the tessellation on the snow surface
+dynamically increases only where the
+footprints are allowing us to add detail
+exactly where we need it and nowhere
+else I love technology but hold your
+horses there partner there's another
+thing in Red Dead Redemption 2 that's
+been tickling my brain you ever notice
+how the animations in the game are so
+mind-blowingly realistic well I'm about
+to blow your mind because the characters
+actually animated themselves sounds too
+good to be true doesn't it well it's not
+if you're dying to know how this works
+I've already made the video and it's
+available right now on patreon so I'll
+see you over there for the next episode
+of stylized station I love my job
+[Music]

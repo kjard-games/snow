@@ -53,6 +53,7 @@ var thickness_loc: i32 = 0;
 // Vertex color shader for terrain rendering
 var vertex_color_shader: ?rl.Shader = null;
 var terrain_material: ?rl.Material = null;
+var viewPos_loc: i32 = -1; // Shader uniform location for camera position
 
 /// Initialize the outline shader system for team-based silhouette rendering.
 /// Returns an error if shader resources fail to load.
@@ -81,6 +82,8 @@ pub fn initTerrainMaterial() !void {
     terrain_material = try rl.loadMaterialDefault();
     if (vertex_color_shader) |shader| {
         terrain_material.?.shader = shader;
+        // Get uniform location for camera position (used for view-dependent snow effects)
+        viewPos_loc = rl.getShaderLocation(shader, "viewPos");
     }
 }
 
@@ -361,6 +364,11 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
     // Walls are part of the mesh as height displacement (GoW approach)
     if (terrain_grid.terrain_mesh) |mesh| {
         if (terrain_material) |material| {
+            // Set camera position for view-dependent snow effects (SSS, sparkles, fresnel)
+            if (vertex_color_shader != null and viewPos_loc >= 0) {
+                const cam_pos = [3]f32{ camera.position.x, camera.position.y, camera.position.z };
+                rl.setShaderValue(vertex_color_shader.?, viewPos_loc, &cam_pos, rl.ShaderUniformDataType.vec3);
+            }
             rl.drawMesh(mesh, material, rl.Matrix.identity());
         }
     }

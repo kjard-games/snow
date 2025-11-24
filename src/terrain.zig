@@ -26,14 +26,14 @@ pub const TerrainType = enum {
 
     pub fn getColor(self: TerrainType) rl.Color {
         return switch (self) {
-            // EMPHASIZED layer differences - dramatic color shifts as snow is displaced
-            // GoW approach: clear visual feedback shows player impact on terrain
-            .cleared_ground => rl.Color{ .r = 75, .g = 60, .b = 50, .a = 255 }, // DARK brown ground (clear contrast)
-            .icy_ground => rl.Color{ .r = 220, .g = 230, .b = 240, .a = 255 }, // Light blue ice (compressed to glass)
-            .slushy => rl.Color{ .r = 180, .g = 185, .b = 180, .a = 255 }, // Medium gray slush (dirty/wet)
-            .packed_snow => rl.Color{ .r = 235, .g = 240, .b = 240, .a = 255 }, // Light gray-white (visibly compressed)
-            .thick_snow => rl.Color{ .r = 250, .g = 252, .b = 250, .a = 255 }, // Nearly white (slightly trampled)
-            .deep_powder => rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 }, // PURE WHITE (pristine untouched)
+            // GoW-style snow colors: mostly white with subtle tints
+            // The shader handles the visual distinction, vertex colors just provide base
+            .cleared_ground => rl.Color{ .r = 140, .g = 130, .b = 120, .a = 255 }, // Exposed ground (gray-brown)
+            .icy_ground => rl.Color{ .r = 200, .g = 220, .b = 245, .a = 255 }, // Ice (blue-white, shiny)
+            .slushy => rl.Color{ .r = 210, .g = 215, .b = 220, .a = 255 }, // Wet snow (gray-white)
+            .packed_snow => rl.Color{ .r = 235, .g = 238, .b = 242, .a = 255 }, // Compressed (off-white)
+            .thick_snow => rl.Color{ .r = 248, .g = 250, .b = 252, .a = 255 }, // Fresh snow (near white)
+            .deep_powder => rl.Color{ .r = 255, .g = 255, .b = 255, .a = 255 }, // Pristine (pure white)
         };
     }
 
@@ -358,27 +358,91 @@ pub const TerrainGrid = struct {
             }
         }
 
-        // Initialize terrain cells based on elevation
+        // Initialize terrain cells with VARIED snow types based on elevation and position
+        // Creates natural-looking zones: valleys tend to be icy/packed, ridges have powder
         for (0..height) |z| {
             for (0..width) |x| {
                 const index = z * width + x;
                 const elevation = heightmap[index];
 
-                // Start with pristine deep powder everywhere (GoW-style fresh snowfall)
-                // Players will pack it down as they move, revealing layers
-                // Boundary walls (high elevation) are impassable
+                // Normalized coordinates for zone calculation
+                const nx = @as(f32, @floatFromInt(x)) / @as(f32, @floatFromInt(width));
+                const nz = @as(f32, @floatFromInt(z)) / @as(f32, @floatFromInt(height));
+
+                // Boundary walls (high elevation) are impassable deep powder
                 if (elevation > 70.0) {
                     cells[index] = TerrainCell{
-                        .type = .deep_powder, // Impassable boundary walls
-                        .snow_depth = 3.0, // Extra deep
+                        .type = .deep_powder,
+                        .snow_depth = 3.0,
                     };
-                } else {
-                    // Playable area: all pristine deep powder
-                    cells[index] = TerrainCell{
-                        .type = .deep_powder, // Pure white pristine snow
-                        .snow_depth = 1.5, // Deep fresh snow
-                    };
+                    continue;
                 }
+
+                // === NATURAL SNOW ZONE GENERATION ===
+                // Use elevation + position-based noise to create organic zones
+
+                // Zone noise - creates irregular patches
+                const zone_noise1 = @sin(nx * 8.0 + nz * 6.0) * @cos(nx * 5.0 - nz * 7.0);
+                const zone_noise2 = @sin(nx * 12.0 - nz * 9.0 + 2.0) * 0.5;
+                const zone_noise = (zone_noise1 + zone_noise2) * 0.5; // Range: roughly -1 to 1
+
+                // Elevation factor: lower = more packed/icy, higher = more powder
+                // Normalize elevation to 0-1 range (playable area is roughly -30 to +30)
+                const elev_normalized = (elevation + 30.0) / 60.0;
+                const elev_clamped = @max(0.0, @min(1.0, elev_normalized));
+
+                // Combined zone value: elevation + noise creates natural variation
+                const zone_value = elev_clamped * 0.6 + (zone_noise * 0.5 + 0.5) * 0.4;
+
+                // Distance from center affects snow type (center more trafficked = more packed)
+                const center_x: f32 = 0.5;
+                const center_z: f32 = 0.5;
+                const dist_to_center = @sqrt((nx - center_x) * (nx - center_x) + (nz - center_z) * (nz - center_z));
+                const center_factor = @max(0.0, 1.0 - dist_to_center * 1.5); // 1 at center, 0 at edges
+
+                // Final snow type determination
+                // Lower zone_value = more packed, higher = more powder
+                // Center bias toward packed snow (simulated foot traffic)
+                const adjusted_zone = zone_value - center_factor * 0.3;
+
+                var terrain_type: TerrainType = undefined;
+                var snow_depth: f32 = undefined;
+
+                if (adjusted_zone < 0.15) {
+                    // Lowest areas: icy ground (frozen puddles, wind-scoured)
+                    terrain_type = .icy_ground;
+                    snow_depth = 0.3;
+                } else if (adjusted_zone < 0.25) {
+                    // Low areas: cleared or slushy
+                    if (zone_noise > 0.0) {
+                        terrain_type = .slushy;
+                        snow_depth = 0.5;
+                    } else {
+                        terrain_type = .cleared_ground;
+                        snow_depth = 0.1;
+                    }
+                } else if (adjusted_zone < 0.45) {
+                    // Mid-low: packed snow (well-traveled)
+                    terrain_type = .packed_snow;
+                    snow_depth = 0.8 + zone_noise * 0.2;
+                } else if (adjusted_zone < 0.65) {
+                    // Mid: thick snow
+                    terrain_type = .thick_snow;
+                    snow_depth = 1.0 + zone_noise * 0.3;
+                } else if (adjusted_zone < 0.85) {
+                    // High: deep powder transitioning
+                    terrain_type = .thick_snow;
+                    snow_depth = 1.3 + zone_noise * 0.2;
+                } else {
+                    // Highest/edges: pristine deep powder
+                    terrain_type = .deep_powder;
+                    snow_depth = 1.5 + (zone_value - 0.85) * 2.0;
+                }
+
+                cells[index] = TerrainCell{
+                    .type = terrain_type,
+                    .snow_depth = snow_depth,
+                };
             }
         }
 

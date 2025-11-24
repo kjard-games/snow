@@ -617,13 +617,14 @@ pub const GameState = struct {
         }
 
         // Initialize terrain grid
-        // Create a 40x40 grid with 50 unit cells, covering 2000x2000 world space (4x larger)
-        // Centered around the battlefield (offset by -1000, -1000)
+        // Create a high-resolution grid for detailed snow rendering
+        // 200x200 grid with 10 unit cells = 2000x2000 world coverage
+        // Higher resolution = more vertices = better tessellation-like detail
         var terrain_grid = TerrainGrid.init(
             allocator,
-            100, // width (increased for better detail)
-            100, // height (increased for better detail)
-            20.0, // grid_size (each cell is 20 units - matches character scale)
+            200, // width (doubled for finer detail)
+            200, // height (doubled for finer detail)
+            10.0, // grid_size (halved - each cell is 10 units for smoother terrain)
             -1000.0, // world_offset_x
             -1000.0, // world_offset_z
         ) catch |err| {
@@ -635,10 +636,11 @@ pub const GameState = struct {
         terrain_grid.generateTerrainMesh();
 
         print("=== TERRAIN SYSTEM INITIALIZED ===\n", .{});
-        print("Grid: 100x100 cells (20 units each)\n", .{});
+        print("Grid: 200x200 cells (10 units each)\n", .{});
         print("Coverage: 2000x2000 world units\n", .{});
+        print("Vertices: ~160K (high detail)\n", .{});
         print("Snow accumulation: Active\n", .{});
-        print("Memory: ~340 KB grid data\n", .{});
+        print("==================================\n\n", .{});
         print("==================================\n\n", .{});
 
         return GameState{

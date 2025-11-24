@@ -1,0 +1,86 @@
+Rendering Falling Rain and Snow
+Niniane Wang∗
+Microsoft Corporation (now at Google Inc.)
+Bretton Wade†
+Microsoft Corporation
+1 Modeling Precipitation
+Realistic-looking rain and snow greatly enhance scenes of outdoor
+reality, with applications including computer games and motion
+pictures. We present a novel technique for realistically and efficiently rendering precipitation in scenes with moving camera positions. We map textures onto a double cone, and translate and
+elongate them using hardware texture transforms.
+Most previous work modeled precipitation as a particle system
+[2], which produced realistic movement. We target real-time applications that require fast performance, which is often difficult with
+a particle system, especially for scenes of heavy precipitation. Inverse Fourier transforms [1] have been used to render falling snow
+over a static background image with real-time performance. Our
+technique addresses the additional challenge of rendering precipitation with a moving camera position. We also offer more finegrained control over motion factors and drop appearance.
+We model precipitation with four artist-generated textures,
+mapped onto a double cone centered about the camera, as shown
+in Fig. 1. We tile each texture to cover the cone, and we use a
+hardware vertex shader to blend all four together. We (1) tilt the
+cones to adjust for camera movement, (2) elongate the textures to
+simulate motion blur, and (3) scroll the textures to simulate gravity.
+We scale down each of the four successive textures and scroll
+it more slowly, creating drops that are smaller and move slower
+to simulate depth with parallax. We increase the transparency of
+points closer to the cone endpoints to avoid artifacts, and ensure the
+cone is tall enough so that the slope of its edges is not noticeable.
+Figure 1: Left: Double cone. Right: Rain texture.
+Fig. 2 shows a screenshot of falling snow. Animation sequences
+are included in the accompanying video.
+As the camera moves, we pivot the double cone so that precipitation appears to fall toward the camera. We do this by setting
+the cone’s world matrix to look along the precipitation travel vector
+Vecprecip, described in equation 1. Velcamera is the camera velocity,
+Cf
+is a damping constant to limit the tilting of the cone, Velgravity is
+the velocity of the precipitation due to gravity, and tdelta is the time
+elapsed since the last frame.
+Vecprecip =
+
+Cf ∗Velcamera +Velgravity
+∗tdelta (1)
+We elongate drops to simulate motion blur. We compute the
+elongation factor E, described in equation 2, based on Vecprecip,
+∗
+e-mail:niniane@ofb.net
+†
+e-mail:brettonw@microsoft.com
+Figure 2: A scene of snow in Seattle – a rare sight.
+Sf
+, a pre-computed scale factor to scale down successive textures
+so they appear further away, Cpixel, a conversion factor specifying
+the real-world space equivalent for each pixel in the texture, and
+Sstreak, a pre-computed scale factor that we use to give light rain
+longer streaks than heavy rain, for example.
+E =
+Sstreak
+Sf ∗
+
+Cpixel ∗ Sf ∗Vecprecip +Sstreak (2)
+We use translation to make the precipitation fall with gravity. We
+scroll the texture each frame by Dprecip, described in equation 3,
+Dprecip = Sstreak ∗tdelta/tconst (3)
+where tconst is a fixed frametime, e.g. 1
+30 seconds, to make the
+precipitation fall at a constant rate regardless of framerate. Dprecip
+and the elongation E are combined in the texture transform matrix.
+Dprecip is represented in pixel space and converted to real-world
+space by E, which also slows down scrolling in successive textures.
+Our system looks most realistic for rain and heavy snow. Light
+snow should jitter as it falls, which is better simulated by a particle
+system.
+We experience a visual artifact when the framerate stutters drastically, in that the scrolling of the precipitation texture also stutters.
+Our system allows fine-grained control over the outcome. We
+wrote a tool that allows tweaking of visual parameters, including
+Sf
+, Sstreak, and Cf
+. Adjusting these values and the textures yields
+more control than was typically afforded in previous approaches.
+Our technique has the same performance overhead for heavy precipitation as light precipitation, unlike a particle system. It ships
+with Microsoft Flight Simulator 2004: A Century of Flight, which
+maintains framerates of 15 to 60 fps across a range of consumer
+PCs. Our technique causes no noticeable degradation in framerate.
+References
+[1] M Langer and Q Zhang. Rendering falling snow using an inverse fourier transform. In ACM SIGGRAPH 2003 Technical Sketches Program, Computer Graphics
+Proceedings, Annual Conference Series. ACM, 2003.
+[2] W T Reeves. Particle systems – a technique for modeling a class of fuzzy objects.
+In Proc. of SIGGRAPH ’83, Detroit, Michigan. ACM, 1983.
