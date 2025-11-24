@@ -1857,4 +1857,237 @@ pub const GameState = struct {
         const player = self.getPlayerConst();
         ui.drawUI(player, &self.entities, self.selected_target, &self.input_state, self.camera);
     }
+
+    /// Initialize game state using factory pattern (builds all teams automatically)
+    pub fn initWithFactory(allocator: std.mem.Allocator) !GameState {
+        const factory_mod = @import("factory.zig");
+        const ArenaBuilder = factory_mod.ArenaBuilder;
+        const CharacterBuilder = factory_mod.CharacterBuilder;
+
+        var id_gen = EntityIdGenerator{};
+
+        // Initialize RNG
+        const timestamp = std.time.timestamp();
+        const seed: u64 = @bitCast(timestamp);
+        var prng = std.Random.DefaultPrng.init(seed);
+        var rng = prng.random();
+
+        // Build arena with teams using factory
+        var arena = ArenaBuilder.init(allocator, &rng, &id_gen);
+        defer arena.deinit();
+
+        // Blue team (allies)
+        {
+            const blue_team = try arena.addTeam();
+            _ = blue_team
+                .withTeam(.blue)
+                .withColor(.blue)
+                .withBasePosition(.{ .x = -100, .y = 0, .z = 300 })
+                .withSpacing(80.0);
+
+            // Add 4 characters to blue team
+            for (0..4) |_| {
+                var builder = CharacterBuilder.init(allocator, &rng, &id_gen);
+                _ = builder.withTeam(.blue).withColor(.blue);
+                try blue_team.addCharacter(&builder);
+            }
+        }
+
+        // Red team (enemies)
+        {
+            const red_team = try arena.addTeam();
+            _ = red_team
+                .withTeam(.red)
+                .withColor(.red)
+                .withBasePosition(.{ .x = 100, .y = 0, .z = -300 })
+                .withSpacing(80.0);
+
+            // Add 4 characters to red team
+            for (0..4) |_| {
+                var builder = CharacterBuilder.init(allocator, &rng, &id_gen);
+                _ = builder.withTeam(.red).withColor(.red);
+                try red_team.addCharacter(&builder);
+            }
+        }
+
+        // Collect all characters from arena
+        var all_chars: std.array_list.Aligned(Character, null) = .{};
+        defer all_chars.deinit(allocator);
+
+        for (0..arena.teamCount()) |team_idx| {
+            if (arena.getTeam(team_idx)) |team| {
+                for (team.characters.items) |char| {
+                    try all_chars.append(allocator, char);
+                }
+            }
+        }
+
+        // Convert to entities array
+        var entities: [MAX_ENTITIES]Character = undefined;
+        for (all_chars.items, 0..) |char, i| {
+            entities[i] = char;
+        }
+
+        // Fill remaining slots with dead dummy characters
+        for (all_chars.items.len..MAX_ENTITIES) |i| {
+            entities[i] = createDummyCharacterForSlot(&id_gen, i);
+        }
+
+        // Set energy pools and load skills for all entities
+        for (&entities) |*ent| {
+            ent.energy = ent.school.getMaxEnergy();
+            ent.max_energy = ent.school.getMaxEnergy();
+
+            // Load skills: Guarantee 1 wall skill in slot 0, then random fill
+            const position_skills = ent.player_position.getSkills();
+            const school_skills = ent.school.getSkills();
+
+            // FIRST: Find a wall-building skill in position skills
+            var found_wall = false;
+            for (position_skills) |skill| {
+                if (skill.creates_wall) {
+                    ent.skill_bar[0] = &skill;
+                    found_wall = true;
+                    break;
+                }
+            }
+
+            if (!found_wall) {
+                // Fallback: just use first position skill
+                if (position_skills.len > 0) {
+                    ent.skill_bar[0] = &position_skills[0];
+                }
+            }
+
+            // Fill slots 1-3 with position skills
+            var slot_idx: usize = 1;
+            var attempts: usize = 0;
+            while (slot_idx < 4 and attempts < position_skills.len * 3) : (attempts += 1) {
+                if (position_skills.len == 0) break;
+                if (ent.skill_bar[slot_idx] != null) {
+                    slot_idx += 1;
+                    continue;
+                }
+
+                const random_idx = rng.intRangeAtMost(usize, 0, position_skills.len - 1);
+                const skill = &position_skills[random_idx];
+
+                // Check not already loaded
+                var already_loaded = false;
+                for (0..slot_idx) |check_idx| {
+                    if (ent.skill_bar[check_idx] == skill) {
+                        already_loaded = true;
+                        break;
+                    }
+                }
+
+                if (!already_loaded) {
+                    ent.skill_bar[slot_idx] = skill;
+                    slot_idx += 1;
+                }
+            }
+
+            // Fill slots 4-7 with school skills
+            slot_idx = 4;
+            attempts = 0;
+            while (slot_idx < 8 and attempts < school_skills.len * 3) : (attempts += 1) {
+                if (school_skills.len == 0) break;
+                if (ent.skill_bar[slot_idx] != null) {
+                    slot_idx += 1;
+                    continue;
+                }
+
+                const random_idx = rng.intRangeAtMost(usize, 0, school_skills.len - 1);
+                const skill = &school_skills[random_idx];
+
+                var already_loaded = false;
+                for (0..slot_idx) |check_idx| {
+                    if (ent.skill_bar[check_idx] == skill) {
+                        already_loaded = true;
+                        break;
+                    }
+                }
+
+                if (!already_loaded) {
+                    ent.skill_bar[slot_idx] = skill;
+                    slot_idx += 1;
+                }
+            }
+        }
+
+        // Create terrain grid
+        const terrain_grid = try TerrainGrid.init(
+            allocator,
+            100,
+            100,
+            20.0,
+            -1000.0,
+            -1000.0,
+        );
+
+        // Player is always the first entity (index 0)
+        const player_id = entities[0].id;
+
+        return GameState{
+            .entities = entities,
+            .controlled_entity_id = player_id,
+            .selected_target = null,
+            .camera = .{
+                .position = .{ .x = 0, .y = 600, .z = 700 },
+                .target = .{ .x = 0, .y = 0, .z = 0 },
+                .up = .{ .x = 0, .y = 1, .z = 0 },
+                .fovy = 55.0,
+                .projection = .perspective,
+            },
+            .input_state = input.InputState{
+                .action_camera = false,
+            },
+            .ai_states = [_]ai.AIState{
+                .{ .role = .damage_dealer },
+                .{ .role = .damage_dealer },
+                .{ .role = .damage_dealer },
+                .{ .role = .support },
+                .{ .role = .damage_dealer },
+                .{ .role = .damage_dealer },
+                .{ .role = .damage_dealer },
+                .{ .role = .support },
+                .{ .role = .damage_dealer },
+                .{ .role = .damage_dealer },
+                .{ .role = .damage_dealer },
+                .{ .role = .support },
+            },
+            .rng = prng,
+            .combat_state = .active,
+            .entity_id_gen = id_gen,
+            .vfx_manager = vfx.VFXManager.init(),
+            .terrain_grid = terrain_grid,
+            .allocator = allocator,
+            .simulation_mode = false,
+        };
+    }
+
+    /// Helper: Create a dummy character for unused entity slots
+    fn createDummyCharacterForSlot(id_gen: *EntityIdGenerator, slot_idx: usize) Character {
+        _ = slot_idx; // Unused for now, but kept for future per-slot customization
+        return Character{
+            .id = id_gen.generate(),
+            .position = .{ .x = 0, .y = -1000, .z = 0 },
+            .previous_position = .{ .x = 0, .y = -1000, .z = 0 },
+            .radius = 1.0,
+            .color = .black,
+            .school_color = .black,
+            .position_color = .black,
+            .name = "Unused",
+            .warmth = 0,
+            .max_warmth = 1,
+            .team = .blue,
+            .school = school.School.montessori,
+            .player_position = position.Position.pitcher,
+            .energy = 0,
+            .max_energy = 1,
+            .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+            .gear = [_]?*const character.Gear{null} ** 6,
+            .selected_skill = 0,
+        };
+    }
 };

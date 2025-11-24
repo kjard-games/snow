@@ -46,7 +46,7 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    const state = try GameState.init(allocator);
+    const state = try GameState.initWithFactory(allocator);
     var mutable_state = state;
     defer mutable_state.deinit();
 
