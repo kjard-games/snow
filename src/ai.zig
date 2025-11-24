@@ -365,6 +365,94 @@ pub const Conditions = struct {
 
         return .failure;
     }
+
+    /// Execute a queued skill if we're now in range
+    pub fn executeQueuedSkill(ctx: *BehaviorContext) NodeStatus {
+        if (!ctx.self.hasQueuedSkill()) return .failure;
+
+        // Track that we're trying to execute queued skill
+        if (ctx.match_telemetry) |tel| {
+            tel.recordExecuteQueueCall(ctx.self.id);
+        }
+
+        const queued_skill_idx = ctx.self.queued_skill_index orelse return .failure;
+        const queued_target_id = ctx.self.queued_skill_target_id orelse return .failure;
+
+        // Get skill
+        const skill = ctx.self.skill_bar[queued_skill_idx] orelse {
+            ctx.self.clearSkillQueue();
+            return .failure;
+        };
+
+        // Find queued target
+        var queued_target: ?*Character = null;
+        for (ctx.all_entities) |*ent| {
+            if (ent.id == queued_target_id) {
+                queued_target = ent;
+                break;
+            }
+        }
+
+        if (queued_target == null) {
+            ctx.self.clearSkillQueue();
+            return .failure;
+        }
+
+        const target = queued_target.?;
+
+        // Check if target is still alive
+        if (!target.isAlive()) {
+            if (ctx.match_telemetry) |tel| {
+                tel.recordExecuteQueueTargetDead(ctx.self.id);
+            }
+            ctx.self.clearSkillQueue();
+            return .failure;
+        }
+
+        // Check if in range now
+        const distance = ctx.self.distanceTo(target.*);
+        if (distance <= skill.cast_range) {
+            // In range! Try to execute
+            const result = combat.tryStartCast(
+                ctx.self,
+                queued_skill_idx,
+                target,
+                queued_target_id,
+                ctx.rng,
+                ctx.vfx_manager,
+                @constCast(ctx.terrain_grid),
+                ctx.match_telemetry,
+            );
+
+            if (result == .success or result == .casting_started) {
+                if (ctx.match_telemetry) |tel| {
+                    tel.recordExecuteQueueSuccess(ctx.self.id);
+                }
+                ctx.self.clearSkillQueue();
+                return .success;
+            } else if (result == .out_of_range) {
+                // Still out of range? This shouldn't happen, but keep queue
+                if (ctx.match_telemetry) |tel| {
+                    tel.recordExecuteQueueOutOfRange(ctx.self.id);
+                }
+                return .failure;
+            } else {
+                // Other failure (energy, cooldown, etc) - keep queue to retry
+                if (ctx.match_telemetry) |tel| {
+                    tel.recordExecuteQueueNoEnergy(ctx.self.id);
+                }
+                return .failure;
+            }
+        }
+
+        // Still out of range - return failure but keep queue
+        // Movement is handled by calculateFormationMovementIntent
+        // Next frame will check again if we're in range
+        if (ctx.match_telemetry) |tel| {
+            tel.recordExecuteQueueOutOfRange(ctx.self.id);
+        }
+        return .failure;
+    }
 };
 
 /// Calculate the maximum cast range available to a character across all their skills
@@ -512,6 +600,9 @@ pub const Actions = struct {
             10.0,
         );
 
+        if (ctx.match_telemetry) |tel| {
+            tel.recordCastingAttempts(ctx.self.id);
+        }
         if (selectDamageSkillWithCover(ctx.self, target, ctx.rng, target_has_cover)) |skill_idx| {
             const result = combat.tryStartCast(
                 ctx.self,
@@ -526,6 +617,16 @@ pub const Actions = struct {
 
             if (result == .success or result == .casting_started) {
                 return .success;
+            }
+
+            // Track why cast failed (for debugging)
+            if (ctx.match_telemetry) |tel| {
+                switch (result) {
+                    .on_cooldown => tel.recordCooldownBlock(ctx.self.id),
+                    .no_energy => tel.recordNoEnergyBlock(ctx.self.id),
+                    .out_of_range => {}, // Already tracked in tryStartCast
+                    else => {},
+                }
             }
         }
         return .failure;
@@ -780,7 +881,6 @@ const DamageDealerTree = Selector(&[_]BehaviorNodeFn{
     }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
-        Conditions.targetInRange,
         Actions.castDamageSkill,
     }),
     Actions.moveToTarget,
@@ -810,7 +910,6 @@ const SupportTree = Selector(&[_]BehaviorNodeFn{
     }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
-        Conditions.targetInRange,
         Actions.castDamageSkill,
     }),
     Actions.moveToTarget,
@@ -835,7 +934,6 @@ const DisruptorTree = Selector(&[_]BehaviorNodeFn{
     }),
     Sequence(&[_]BehaviorNodeFn{
         Conditions.canCastSkill,
-        Conditions.targetInRange,
         Actions.castDamageSkill,
     }),
     Actions.moveToTarget,
@@ -1057,7 +1155,9 @@ fn calculateFormationMovementIntent(
     ctx: *const BehaviorContext,
 ) MovementIntent {
     const ent = ctx.self;
-    const target = ctx.target orelse {
+
+    // PRIORITY: If we have a queued skill, move toward THAT target, not the main target
+    var target = ctx.target orelse {
         return MovementIntent{
             .local_x = 0.0,
             .local_z = 0.0,
@@ -1065,6 +1165,19 @@ fn calculateFormationMovementIntent(
             .apply_penalties = false,
         };
     };
+
+    // If queued skill exists, find its target and use that instead
+    if (ent.hasQueuedSkill()) {
+        if (ent.queued_skill_target_id) |queued_target_id| {
+            // Find the queued target in all entities
+            for (ctx.all_entities) |*potential_target| {
+                if (potential_target.id == queued_target_id) {
+                    target = potential_target;
+                    break;
+                }
+            }
+        }
+    }
 
     const formation_role = FormationRole.fromPosition(ent.player_position);
     const distance_to_target = ent.distanceTo(target.*);
@@ -1293,7 +1406,10 @@ pub fn updateAI(
         if (!ent.isAlive()) continue;
 
         // Skip the player-controlled entity (no AI for player!)
-        if (ent.id == controlled_entity_id) continue;
+        if (ent.id == controlled_entity_id) {
+            // Debug: track skipped entities
+            continue;
+        }
 
         // Skip if no AI state for this entity
         if (i >= ai_states.len) continue;
@@ -1356,14 +1472,38 @@ pub fn updateAI(
         // Populate allies and enemies
         populateContext(&ctx);
 
-        // Execute behavior tree based on role
-        const tree_result = switch (ai_state.role) {
-            .damage_dealer => DamageDealerTree(&ctx),
-            .support => SupportTree(&ctx),
-            .disruptor => DisruptorTree(&ctx),
-        };
+        // Track target_id for debugging
+        if (target_id) |_| {
+            if (match_telemetry) |telem| {
+                telem.recordTargetIdSet(ent.id);
+            }
+        } else {
+            if (match_telemetry) |telem| {
+                telem.recordTargetIdNone(ent.id);
+            }
+        }
 
-        _ = tree_result; // Result handled by tree actions
+        // PRIORITY: Check for queued skill
+        if (ctx.self.hasQueuedSkill()) {
+            // We have a queued skill - try to execute it
+            const queued_result = Conditions.executeQueuedSkill(&ctx);
+            if (queued_result == .success) {
+                // Queued skill executed successfully
+                // Continue to movement/auto-attack logic below
+            }
+            // If queued skill failed (out of range), DON'T run normal tree
+            // Keep waiting for the unit to get in range
+            // This ensures queued skills are never replaced by new decisions
+        } else {
+            // No queued skill, use normal AI decision tree
+            const tree_result = switch (ai_state.role) {
+                .damage_dealer => DamageDealerTree(&ctx),
+                .support => SupportTree(&ctx),
+                .disruptor => DisruptorTree(&ctx),
+            };
+
+            _ = tree_result; // Result handled by tree actions
+        }
 
         // Auto-attack management: Enable auto-attack when idle and have a target
         if (target_id) |tid| {

@@ -18,6 +18,7 @@ const equipment = @import("equipment.zig");
 const gear_slot = @import("gear_slot.zig");
 const palette = @import("color_palette.zig");
 const telemetry = @import("telemetry.zig");
+const factory = @import("factory.zig");
 
 const print = std.debug.print;
 
@@ -29,11 +30,11 @@ const Skill = character.Skill;
 const AIState = ai.AIState;
 const EntityId = entity.EntityId;
 const EntityIdGenerator = entity.EntityIdGenerator;
-const TerrainGrid = terrain.TerrainGrid;
+pub const TerrainGrid = terrain.TerrainGrid;
 const MatchTelemetry = telemetry.MatchTelemetry;
 
 // Game configuration constants
-pub const MAX_ENTITIES: usize = 8; // 4v4 combat (4 allies + 4 enemies)
+pub const MAX_ENTITIES: usize = 12; // Support 3 teams x 4 characters (currently using 8 for 4v4, slots 8-11 reserved for 3rd team)
 
 // Tick-based game loop (Guild Wars / tab-targeting style)
 pub const TICK_RATE_HZ: u32 = 20; // 20 ticks per second
@@ -400,6 +401,83 @@ pub const GameState = struct {
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
+            // Placeholder slots for 3rd team (indices 8-11)
+            Character{
+                .id = 0,
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 8",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = 0,
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 9",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = 0,
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 10",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = 0,
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 11",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
         };
 
         // Store player's entity ID
@@ -586,6 +664,10 @@ pub const GameState = struct {
                 .{ .role = .damage_dealer }, // Enemy 2
                 .{ .role = .damage_dealer }, // Enemy 3
                 .{ .role = .support }, // Enemy Healer
+                .{}, // Reserved 1
+                .{}, // Reserved 2
+                .{}, // Reserved 3
+                .{}, // Reserved 4
             },
             .rng = prng,
             .combat_state = .active,
@@ -813,6 +895,83 @@ pub const GameState = struct {
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
                 .selected_skill = 0,
             },
+            // Placeholder slots for 3rd team (indices 8-11)
+            Character{
+                .id = 0,
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 8",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = 0,
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 9",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = 0,
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 10",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = 0,
+                .position = .{ .x = 0, .y = 0, .z = 0 },
+                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 11",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
         };
 
         // Store player's entity ID
@@ -972,6 +1131,10 @@ pub const GameState = struct {
                 .{ .role = .damage_dealer }, // Enemy 2
                 .{ .role = .damage_dealer }, // Enemy 3
                 .{ .role = .support }, // Enemy Healer
+                .{}, // Reserved 1
+                .{}, // Reserved 2
+                .{}, // Reserved 3
+                .{}, // Reserved 4
             },
             .rng = prng,
             .combat_state = .active,
@@ -1191,7 +1354,87 @@ pub const GameState = struct {
                 .max_warmth = 150,
                 .team = .red,
                 .school = pickRandomSchool(&random),
-                .player_position = .thermos,
+                .player_position = .thermos, // Always healer
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+
+            // ===== THIRD TEAM - Placeholder slots (for future 3-team matches) =====
+            // Index 8-11: Reserved for 3rd team (neutral/spectator/NPC team)
+            // These are initialized as dummy characters and can be populated via factory
+            Character{
+                .id = id_gen.generate(),
+                .position = .{ .x = -500, .y = 0, .z = 0 },
+                .previous_position = .{ .x = -500, .y = 0, .z = 0 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 1",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue, // Will be set by factory
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = id_gen.generate(),
+                .position = .{ .x = -500, .y = 0, .z = 50 },
+                .previous_position = .{ .x = -500, .y = 0, .z = 50 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 2",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = id_gen.generate(),
+                .position = .{ .x = -500, .y = 0, .z = 100 },
+                .previous_position = .{ .x = -500, .y = 0, .z = 100 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 3",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
+                .energy = 0,
+                .max_energy = 0,
+                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_skill = 0,
+            },
+            Character{
+                .id = id_gen.generate(),
+                .position = .{ .x = -500, .y = 0, .z = 150 },
+                .previous_position = .{ .x = -500, .y = 0, .z = 150 },
+                .radius = 10,
+                .color = .yellow,
+                .school_color = .yellow,
+                .position_color = .yellow,
+                .name = "Reserved 4",
+                .warmth = 0,
+                .max_warmth = 150,
+                .team = .blue,
+                .school = .private_school,
+                .player_position = .pitcher,
                 .energy = 0,
                 .max_energy = 0,
                 .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
@@ -1301,7 +1544,7 @@ pub const GameState = struct {
         // Initialize AI states with skill cooldown ready to cast immediately
         return GameState{
             .entities = entities,
-            .controlled_entity_id = dummy_entity_id, // Won't match any real entity, so all get AI control
+            .controlled_entity_id = dummy_entity_id,
             .selected_target = null,
             .camera = rl.Camera{
                 .position = .{ .x = 0, .y = 600, .z = 700 },
@@ -1322,6 +1565,10 @@ pub const GameState = struct {
                 .{ .role = .damage_dealer, .skill_cooldown = 0.0 }, // Enemy 2 - READY TO CAST
                 .{ .role = .damage_dealer, .skill_cooldown = 0.0 }, // Enemy 3 - READY TO CAST
                 .{ .role = .support, .skill_cooldown = 0.0 }, // Enemy Healer - READY TO CAST
+                .{}, // Reserved 1
+                .{}, // Reserved 2
+                .{}, // Reserved 3
+                .{}, // Reserved 4
             },
             .rng = prng,
             .combat_state = .active,
