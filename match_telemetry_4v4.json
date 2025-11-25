@@ -1,5 +1,5 @@
 {
-  "match_duration_ticks": 2787,
+  "match_duration_ticks": 5000,
   "winning_team": 255,
   "total_damage_dealt_ally": 0,
   "total_damage_dealt_enemy": 0,
@@ -14,8 +14,8 @@
     {
       "entity_id": 14,
       "name": "Character",
-      "school": "montessori",
-      "position": "sledder",
+      "school": "private_school",
+      "position": "fielder",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -55,8 +55,8 @@
     {
       "entity_id": 15,
       "name": "Character",
-      "school": "private_school",
-      "position": "sledder",
+      "school": "montessori",
+      "position": "pitcher",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -137,8 +137,8 @@
     {
       "entity_id": 17,
       "name": "Character",
-      "school": "homeschool",
-      "position": "shoveler",
+      "school": "montessori",
+      "position": "animator",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -178,8 +178,8 @@
     {
       "entity_id": 18,
       "name": "Character",
-      "school": "public_school",
-      "position": "animator",
+      "school": "homeschool",
+      "position": "pitcher",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -219,7 +219,7 @@
     {
       "entity_id": 19,
       "name": "Character",
-      "school": "public_school",
+      "school": "private_school",
       "position": "shoveler",
       "team": 1,
       "damage_dealt": 0,
@@ -260,8 +260,8 @@
     {
       "entity_id": 20,
       "name": "Character",
-      "school": "homeschool",
-      "position": "shoveler",
+      "school": "waldorf",
+      "position": "pitcher",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -301,7 +301,7 @@
     {
       "entity_id": 21,
       "name": "Character",
-      "school": "public_school",
+      "school": "homeschool",
       "position": "sledder",
       "team": 1,
       "damage_dealt": 0,

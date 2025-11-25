@@ -39,6 +39,7 @@ pub const SkillConstraint = union(enum) {
     destroys_wall, // Skill that destroys a wall
     any_from_school: School, // Any skill from a specific school
     any_from_position: Position, // Any skill from a specific position
+    any_ap, // Any AP skill from the AP pool
     in_slot: u8, // Must be in specific skill bar slot (0-7)
 };
 
@@ -152,6 +153,10 @@ pub const CharacterBuilder = struct {
 
     pub fn withWallSkillInSlot(self: *CharacterBuilder, slot: u8) *CharacterBuilder {
         return self.withSkillInSlot(slot, .creates_wall);
+    }
+
+    pub fn withAPSkillInSlot(self: *CharacterBuilder, slot: u8) *CharacterBuilder {
+        return self.withSkillInSlot(slot, .any_ap);
     }
 
     /// Build and return the character
@@ -281,10 +286,10 @@ pub const CharacterBuilder = struct {
             }
         }
 
-        // Fill slots 4-7 with school skills
+        // Fill slots 4-6 with school skills (reserve slot 7 for AP)
         attempts = 0;
         slot_idx = 4;
-        while (slot_idx < 8 and attempts < school_skills.len * 3) : (attempts += 1) {
+        while (slot_idx < 7 and attempts < school_skills.len * 3) : (attempts += 1) {
             if (school_skills.len == 0) break;
             if (char.skill_bar[slot_idx] != null) {
                 slot_idx += 1;
@@ -307,6 +312,11 @@ pub const CharacterBuilder = struct {
                 char.skill_bar[slot_idx] = skill;
                 slot_idx += 1;
             }
+        }
+
+        // Slot 7: Assign a random AP skill if not already set
+        if (char.skill_bar[7] == null) {
+            char.skill_bar[7] = skills.getRandomAPSkill(self.rng);
         }
     }
 
@@ -333,6 +343,7 @@ pub const CharacterBuilder = struct {
                 &position_skills[self.rng.intRangeAtMost(usize, 0, position_skills.len - 1)]
             else
                 null,
+            .any_ap => skills.getRandomAPSkill(self.rng),
             .in_slot => null, // Handled separately
         };
     }

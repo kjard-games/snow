@@ -780,6 +780,109 @@ pub const Character = struct {
 
     // === DAMAGE MONITOR SYSTEM (Guild Wars style) ===
 
+    // === AP SKILL VALIDATION (Elite/Advanced Placement skills) ===
+
+    /// Count how many AP skills are currently equipped
+    pub fn countApSkills(self: Character) u8 {
+        var count: u8 = 0;
+        for (self.skill_bar) |maybe_skill| {
+            if (maybe_skill) |skill| {
+                if (skill.is_ap) {
+                    count += 1;
+                }
+            }
+        }
+        return count;
+    }
+
+    /// Check if character has an AP skill equipped
+    pub fn hasApSkill(self: Character) bool {
+        return self.countApSkills() > 0;
+    }
+
+    /// Get the index of the equipped AP skill (if any)
+    pub fn getApSkillIndex(self: Character) ?u8 {
+        for (self.skill_bar, 0..) |maybe_skill, i| {
+            if (maybe_skill) |skill| {
+                if (skill.is_ap) {
+                    return @intCast(i);
+                }
+            }
+        }
+        return null;
+    }
+
+    /// Check if a skill can be equipped at the given slot
+    /// Returns false if:
+    /// - The skill is AP and an AP skill is already equipped elsewhere
+    /// - The slot index is out of bounds
+    pub fn canEquipSkill(self: Character, skill: *const Skill, slot_index: u8) bool {
+        if (slot_index >= MAX_SKILLS) return false;
+
+        // If the skill is AP, check if we already have an AP skill
+        if (skill.is_ap) {
+            // Check all slots except the target slot
+            for (self.skill_bar, 0..) |maybe_existing, i| {
+                if (i == slot_index) continue; // Skip the slot we're equipping to
+                if (maybe_existing) |existing| {
+                    if (existing.is_ap) {
+                        return false; // Already have an AP skill elsewhere
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// Equip a skill to a slot, enforcing the one-AP rule
+    /// Returns true if successful, false if the skill can't be equipped
+    pub fn equipSkill(self: *Character, skill: *const Skill, slot_index: u8) bool {
+        if (!self.canEquipSkill(skill, slot_index)) {
+            return false;
+        }
+
+        self.skill_bar[slot_index] = skill;
+        return true;
+    }
+
+    /// Unequip a skill from a slot
+    pub fn unequipSkill(self: *Character, slot_index: u8) void {
+        if (slot_index < MAX_SKILLS) {
+            self.skill_bar[slot_index] = null;
+        }
+    }
+
+    /// Swap an AP skill with a new AP skill (convenience for UI)
+    /// Removes the existing AP skill and equips the new one
+    /// Returns the slot index of the old AP skill (where new one was equipped)
+    pub fn swapApSkill(self: *Character, new_ap_skill: *const Skill) ?u8 {
+        if (!new_ap_skill.is_ap) return null; // Only works with AP skills
+
+        // Find and remove existing AP skill
+        const existing_slot = self.getApSkillIndex();
+        if (existing_slot) |slot| {
+            self.skill_bar[slot] = new_ap_skill;
+            return slot;
+        }
+
+        // No existing AP skill - find first empty slot
+        for (self.skill_bar, 0..) |maybe_skill, i| {
+            if (maybe_skill == null) {
+                self.skill_bar[i] = new_ap_skill;
+                return @intCast(i);
+            }
+        }
+
+        return null; // No slots available
+    }
+
+    /// Validate the entire skill bar (useful for loading saved builds)
+    /// Returns true if the build is valid (at most one AP skill)
+    pub fn validateSkillBar(self: Character) bool {
+        return self.countApSkills() <= 1;
+    }
+
     /// Record damage from a skill source (for damage monitor UI)
     pub fn recordDamageSource(self: *Character, skill: *const Skill, source_id: EntityId) void {
         if (self.damage_monitor_frozen) return; // Don't update if frozen (dead)

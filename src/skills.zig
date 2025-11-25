@@ -264,6 +264,16 @@ pub const Skill = struct {
     bonus_damage_if_self_below_50_warmth: f32 = 0.0,
     bonus_damage_if_foe_above_50_warmth: f32 = 0.0,
     bonus_damage_if_foe_below_50_warmth: f32 = 0.0,
+
+    // ========================================================================
+    // ADVANCED PLACEMENT (AP) SKILLS
+    // ========================================================================
+    // AP skills are powerful build-defining abilities. Like GW1 elites:
+    // - Only ONE AP skill can be equipped per character
+    // - AP skills have stronger effects but often longer cooldowns
+    // - Builds are often named after their AP skill ("Avalanche Pitcher")
+    // - Visually distinguished with a gold star / honor roll treatment
+    is_ap: bool = false,
 };
 
 // Example snowball-themed skills
@@ -1116,3 +1126,359 @@ pub const DEFAULT_SKILLS = [_]*const Skill{
     &WARM_UP,
     &GOGGLES_ON,
 };
+
+// ============================================================================
+// ADVANCED PLACEMENT (AP) SKILLS - Build-Warping Elites
+// ============================================================================
+// AP skills FUNDAMENTALLY CHANGE how you play - they're not just "big damage".
+// Like GW1's best elites:
+// - Greater Conflagration: Changes all attacks in an area to fire damage
+// - Illusionary Weaponry: Attacks can't miss/be blocked but deal fixed damage
+// - Spiteful Spirit: Enemies damage themselves when they attack
+//
+// Good AP skills create:
+// - New win conditions ("I win if X happens")
+// - Synergy requirements ("I need allies who do Y")
+// - Playstyle inversions ("I want enemies to attack me")
+// - Positional gameplay ("The location of this effect matters")
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// SLUSH ZONE (Ward-style AP) - Like Greater Conflagration
+// ----------------------------------------------------------------------------
+// Creates an area where ALL damage becomes Soggy (DoT). Changes team composition.
+// You want allies with fast, weak attacks to apply maximum Soggy stacks.
+
+/// [AP] SLUSH ZONE - All damage in area converts to Soggy stacks
+/// Ward-style: creates persistent ground effect that changes combat rules
+pub const SLUSH_ZONE = Skill{
+    .name = "Slush Zone",
+    .description = "[AP] Create a Slush Zone at target location for 20 seconds. ALL damage dealt within the zone (ally or enemy) is converted to Soggy stacks instead. 10 damage = 1 Soggy stack (5s DoT).",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 15,
+    .activation_time_ms = 2000,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 45000,
+    .damage = 0.0, // No direct damage - converts damage to DoT
+    .target_type = .ground,
+    .aoe_type = .area,
+    .aoe_radius = 200.0,
+    .duration_ms = 20000,
+    .terrain_effect = TerrainEffect.slush(.circle),
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// PHANTOM THROW (Illusionary Weaponry-style AP)
+// ----------------------------------------------------------------------------
+// Your throws become phantoms - they ALWAYS hit, ignore blocks, but deal
+// fixed damage regardless of buffs/conditions. Changes what you care about.
+
+/// [AP] PHANTOM THROW - Attacks always hit but deal fixed damage
+/// Stance: While active, throws can't miss or be blocked, but always deal exactly 12 damage
+pub const PHANTOM_THROW = Skill{
+    .name = "Phantom Throw",
+    .description = "[AP] Stance. (30 seconds.) Your throws become phantoms. They cannot miss, cannot be blocked, and ignore armor. However, they ALWAYS deal exactly 12 damage regardless of any modifiers.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 10,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 30000,
+    .damage = 12.0, // Fixed damage - this IS the damage, always
+    .target_type = .self,
+    .duration_ms = 30000,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// PRICKLY PRESENCE (Spiteful Spirit-style AP)
+// ----------------------------------------------------------------------------
+// Target damages THEMSELVES when they use skills. Complete playstyle inversion:
+// you WANT the enemy to attack. Pairs with skills that force enemy actions.
+
+const prickly_presence_effect_array = [_]effects.Effect{effects.THORNS_EFFECT};
+
+/// [AP] PRICKLY PRESENCE - Target damages self when using skills
+/// Hex: Target takes 15 damage each time they use a skill
+pub const PRICKLY_PRESENCE = Skill{
+    .name = "Prickly Presence",
+    .description = "[AP] Hex target foe for 15 seconds. Each time target uses a skill, they take 15 damage. If they stop using skills, they take 5 damage per second instead.",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 15,
+    .activation_time_ms = 1500,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 25000,
+    .damage = 15.0, // Damage per skill used
+    .cast_range = 200.0,
+    .duration_ms = 15000,
+    .effects = &prickly_presence_effect_array,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// MIRROR MATCH (Copying/Stealing AP)
+// ----------------------------------------------------------------------------
+// Steal the TARGET'S equipped AP skill and use it against them.
+// Creates mind games - do they equip a strong AP knowing you might steal it?
+
+/// [AP] MIRROR MATCH - Steal and use target's AP skill
+/// If target has an AP skill, you immediately use it on them
+pub const MIRROR_MATCH = Skill{
+    .name = "Mirror Match",
+    .description = "[AP] Copy target foe's AP skill and immediately use it against them. If they have no AP skill, instead deal 25 damage and steal 5 energy.",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 10,
+    .activation_time_ms = 1000, // Faster than most APs
+    .aftercast_ms = 750,
+    .recharge_time_ms = 30000,
+    .damage = 25.0, // Fallback damage if no AP to steal
+    .cast_range = 180.0,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// BUDDY SYSTEM (Team Synergy AP)
+// ----------------------------------------------------------------------------
+// Link yourself to an ally. You share damage taken (split 50/50) but ALSO
+// share all Cozy effects. Creates positioning gameplay and target priority.
+
+/// [AP] BUDDY SYSTEM - Link with ally to share damage and buffs
+/// While linked: damage to either is split 50/50, Cozy effects apply to both
+pub const BUDDY_SYSTEM = Skill{
+    .name = "Buddy System",
+    .description = "[AP] Link with target ally for 30 seconds. While linked: all damage to either of you is split 50/50 between both. All Cozy effects on either apply to both. Link breaks if you move more than 300 units apart.",
+    .skill_type = .gesture,
+    .mechanic = .ready,
+    .energy_cost = 10,
+    .activation_time_ms = 500,
+    .aftercast_ms = 500,
+    .recharge_time_ms = 40000,
+    .target_type = .ally,
+    .cast_range = 150.0,
+    .duration_ms = 30000,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// SNOW FORT (Terrain Control AP)
+// ----------------------------------------------------------------------------
+// Build a wall that BLOCKS ALL PROJECTILES (ally and enemy). Creates zones
+// of safety but also zones where YOU can't attack. Positional chess.
+
+/// [AP] SNOW FORT - Create projectile-blocking wall
+/// Wall blocks ALL projectiles passing through (both teams). Lasts 20 seconds.
+pub const SNOW_FORT = Skill{
+    .name = "Snow Fort",
+    .description = "[AP] Build a snow fort wall in front of you. For 20 seconds, ALL projectiles (ally AND enemy) that hit the wall are destroyed. Wall has 100 health and can be destroyed by melee attacks.",
+    .skill_type = .gesture,
+    .mechanic = .concentrate,
+    .energy_cost = 15,
+    .activation_time_ms = 2000, // Takes time to build
+    .aftercast_ms = 500,
+    .recharge_time_ms = 35000,
+    .target_type = .ground,
+    .creates_wall = true,
+    .wall_length = 200.0,
+    .wall_height = 80.0,
+    .wall_thickness = 30.0,
+    .wall_distance_from_caster = 60.0,
+    .duration_ms = 20000,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// COLD SHOULDER (Condition Transfer AP)
+// ----------------------------------------------------------------------------
+// ALL Chills on nearby ALLIES are transferred to target foe.
+// Creates team play: allies intentionally get Chills knowing you'll dump them.
+
+/// [AP] COLD SHOULDER - Transfer all ally Chills to target
+/// Remove all Chills from allies in earshot and apply them to target foe
+pub const COLD_SHOULDER = Skill{
+    .name = "Cold Shoulder",
+    .description = "[AP] Remove ALL Chill conditions from allies within earshot and apply them to target foe. Each transferred Chill deals 5 additional damage. Chills stack duration.",
+    .skill_type = .call,
+    .mechanic = .shout,
+    .energy_cost = 15,
+    .activation_time_ms = 0, // Instant shout
+    .aftercast_ms = 750,
+    .recharge_time_ms = 25000,
+    .damage = 5.0, // Per chill transferred
+    .target_type = .enemy,
+    .aoe_radius = 250.0, // Earshot for ally check
+    .cast_range = 200.0,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// KING OF THE HILL (Positional Dominance AP)
+// ----------------------------------------------------------------------------
+// While standing still, gain massive bonuses. Moving resets everything.
+// Complete playstyle change: you become an immobile turret.
+
+/// [AP] KING OF THE HILL - Massive bonuses while stationary
+/// The longer you stand still, the stronger you get. Moving resets.
+pub const KING_OF_THE_HILL = Skill{
+    .name = "King of the Hill",
+    .description = "[AP] Stance. (60 seconds.) While you don't move: +5% damage per second (max +50%), +5% damage reduction per second (max +50%), +2 energy regen. ANY movement resets all bonuses to 0%.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 10,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 60000, // Long cooldown - it's a commitment
+    .target_type = .self,
+    .duration_ms = 60000,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// FROSTBITE CHAIN (Spreading Condition AP)
+// ----------------------------------------------------------------------------
+// Target's Chills SPREAD to nearby foes when they expire.
+// Changes how you apply conditions - hit one target, infect the group.
+
+/// [AP] FROSTBITE CHAIN - Conditions spread on expiry
+/// For 20 seconds, when any Chill expires on target, it spreads to 2 nearby foes
+pub const FROSTBITE_CHAIN = Skill{
+    .name = "Frostbite Chain",
+    .description = "[AP] Hex target for 20 seconds. Whenever a Chill condition expires or is removed from target, it spreads to up to 2 nearby foes at full duration. Can chain indefinitely.",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 15,
+    .activation_time_ms = 1500,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 30000,
+    .cast_range = 200.0,
+    .duration_ms = 20000,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// HOT POTATO (Aggro Manipulation AP)
+// ----------------------------------------------------------------------------
+// Create a "hot potato" that bounces between foes. Whoever holds it when it
+// explodes takes massive damage. Creates chaos and enemy decision-making.
+
+/// [AP] HOT POTATO - Bouncing bomb between enemies
+/// Mark target. After 3s, mark jumps to nearest enemy. After 5 jumps, explodes for 60 damage.
+pub const HOT_POTATO = Skill{
+    .name = "Hot Potato",
+    .description = "[AP] Mark target foe with Hot Potato. Every 3 seconds, it jumps to the nearest enemy within 200 units. After 5 jumps (15 seconds), it EXPLODES dealing 60 damage to the holder and 30 to adjacent foes. If no valid target, explodes early.",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 15,
+    .activation_time_ms = 1000,
+    .aftercast_ms = 500,
+    .recharge_time_ms = 35000,
+    .damage = 60.0, // Explosion damage
+    .cast_range = 200.0,
+    .aoe_type = .adjacent,
+    .aoe_radius = 100.0, // Explosion radius
+    .duration_ms = 15000, // 5 jumps × 3 seconds
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// LAST STAND (Risk/Reward AP)
+// ----------------------------------------------------------------------------
+// Become incredibly powerful but unable to be healed. At 1 HP you become
+// invulnerable for 3 seconds then die. High risk, high reward.
+
+/// [AP] LAST STAND - Power at the cost of healing
+/// Massive damage boost but cannot receive healing. At 1 HP, 3s invuln then death.
+pub const LAST_STAND = Skill{
+    .name = "Last Stand",
+    .description = "[AP] Stance. (Until cancelled or death.) Deal +50% damage, attack +30% faster. You CANNOT be healed by any source. When you would die, instead become invulnerable for 3 seconds, then die regardless of warmth.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 90000, // Very long CD - you probably died
+    .target_type = .self,
+    .duration_ms = 0, // Permanent until cancelled/death
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// SNOW GLOBE (Complete Zone Control AP)
+// ----------------------------------------------------------------------------
+// Create a dome that traps everyone inside. No one enters or leaves for the
+// duration. Forces a fight to the death in a confined space.
+
+/// [AP] SNOW GLOBE - Trap everyone in a dome
+/// Create impassable dome. No one inside can leave, no one outside can enter.
+pub const SNOW_GLOBE = Skill{
+    .name = "Snow Globe",
+    .description = "[AP] Create an impassable Snow Globe centered on you for 10 seconds. All characters inside when cast are TRAPPED - they cannot leave. Characters outside cannot enter. Projectiles cannot pass through.",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 20,
+    .activation_time_ms = 1500,
+    .aftercast_ms = 500,
+    .recharge_time_ms = 60000,
+    .target_type = .self,
+    .aoe_type = .area,
+    .aoe_radius = 150.0,
+    .duration_ms = 10000,
+    .is_ap = true,
+};
+
+// ----------------------------------------------------------------------------
+// REVERSE POLARITY (Healing Inversion AP)
+// ----------------------------------------------------------------------------
+// All healing on target becomes damage. All damage becomes healing.
+// Completely inverts combat for one target - healers become killers.
+
+/// [AP] REVERSE POLARITY - Swap healing and damage on target
+/// Target receives damage from healing and healing from damage for 10 seconds
+pub const REVERSE_POLARITY = Skill{
+    .name = "Reverse Polarity",
+    .description = "[AP] Hex target for 10 seconds. Healing received becomes damage. Damage received becomes healing. (Healing/damage is capped at 50 per instance to prevent one-shots.)",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 15,
+    .activation_time_ms = 2000, // Slow cast - can be interrupted
+    .aftercast_ms = 750,
+    .recharge_time_ms = 45000,
+    .cast_range = 200.0,
+    .duration_ms = 10000,
+    .is_ap = true,
+};
+
+// ============================================================================
+// AP SKILL POOL - All Advanced Placement skills for factory/random selection
+// ============================================================================
+
+/// All AP skills in the game - used by factory for random AP skill assignment
+pub const AP_SKILLS = [_]*const Skill{
+    &SLUSH_ZONE,
+    &PHANTOM_THROW,
+    &PRICKLY_PRESENCE,
+    &MIRROR_MATCH,
+    &BUDDY_SYSTEM,
+    &SNOW_FORT,
+    &COLD_SHOULDER,
+    &KING_OF_THE_HILL,
+    &FROSTBITE_CHAIN,
+    &HOT_POTATO,
+    &LAST_STAND,
+    &SNOW_GLOBE,
+    &REVERSE_POLARITY,
+};
+
+/// Get a random AP skill from the pool
+pub fn getRandomAPSkill(rng: *std.Random) *const Skill {
+    const idx = rng.intRangeAtMost(usize, 0, AP_SKILLS.len - 1);
+    return AP_SKILLS[idx];
+}
+
+/// Get the full AP skill pool (for iteration/UI)
+pub fn getAPSkillPool() []const *const Skill {
+    return &AP_SKILLS;
+}

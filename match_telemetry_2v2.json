@@ -14,8 +14,8 @@
     {
       "entity_id": 1,
       "name": "Character",
-      "school": "homeschool",
-      "position": "sledder",
+      "school": "private_school",
+      "position": "animator",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -55,7 +55,7 @@
     {
       "entity_id": 2,
       "name": "Character",
-      "school": "public_school",
+      "school": "waldorf",
       "position": "fielder",
       "team": 0,
       "damage_dealt": 0,
@@ -96,8 +96,8 @@
     {
       "entity_id": 3,
       "name": "Character",
-      "school": "homeschool",
-      "position": "shoveler",
+      "school": "public_school",
+      "position": "animator",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -137,8 +137,8 @@
     {
       "entity_id": 4,
       "name": "Character",
-      "school": "private_school",
-      "position": "shoveler",
+      "school": "public_school",
+      "position": "sledder",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
