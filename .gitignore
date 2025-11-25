@@ -1,6 +1,7 @@
 # Zig build artifacts
 zig-out/
 .zig-cache/
+zig-cache/
 zig-build/
 
 # OS generated files
@@ -19,11 +20,25 @@ Thumbs.db
 *.swo
 *~
 
-# Executable
+# Executables (built artifacts)
 snow
 snow.exe
 snow.exe.debug
+test_simulation
+test-simulation
+factory_example
+sim-3team-arena
+test-simulation-factory
+balance-test
+batch-test
 
 # Temporary files
 *.tmp
 *.temp
+
+# Tracy profiler
+*.tracy
+
+# Debug files
+*.dSYM/
+*.pdb
