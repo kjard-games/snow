@@ -99,14 +99,14 @@ pub fn deinitOutlineShader() void {
         rl.unloadShader(shader);
         outline_shader = null;
     }
-    if (vertex_color_shader) |shader| {
-        rl.unloadShader(shader);
-        vertex_color_shader = null;
-    }
+    // Note: vertex_color_shader is NOT manually unloaded here because
+    // unloadMaterial will handle freeing the shader attached to the material.
+    // Manually unloading it would cause a double-free.
     if (terrain_material) |mat| {
         rl.unloadMaterial(mat);
         terrain_material = null;
     }
+    vertex_color_shader = null;
 }
 
 // Helper to convert float coordinates to integer screen positions
