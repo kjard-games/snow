@@ -136,4 +136,11 @@ pub fn build(b: *std.Build) void {
 
     const batch_test_step = b.step("batch-test", "Run batch simulations and collect aggregate statistics");
     batch_test_step.dependOn(&batch_test_cmd.step);
+
+    // Unified test step that runs all test suites
+    const test_all_step = b.step("test", "Run all test suites (simulation, factory, balance, batch)");
+    test_all_step.dependOn(&test_cmd.step);
+    test_all_step.dependOn(&test_factory_cmd.step);
+    test_all_step.dependOn(&balance_test_cmd.step);
+    test_all_step.dependOn(&batch_test_cmd.step);
 }

@@ -81,6 +81,10 @@ pub fn initOutlineShader(screen_width: i32, screen_height: i32) !void {
 /// Initialize terrain material with vertex color shader
 pub fn initTerrainMaterial() !void {
     vertex_color_shader = try rl.loadShader("shaders/vertex_color.vs", "shaders/vertex_color.fs");
+    errdefer {
+        if (vertex_color_shader) |shader| rl.unloadShader(shader);
+        vertex_color_shader = null;
+    }
     terrain_material = try rl.loadMaterialDefault();
     if (vertex_color_shader) |shader| {
         terrain_material.?.shader = shader;
@@ -89,8 +93,9 @@ pub fn initTerrainMaterial() !void {
     }
 }
 
-/// Clean up outline shader resources. Safe to call multiple times.
-pub fn deinitOutlineShader() void {
+/// Clean up all render resources (shaders, textures, materials).
+/// Safe to call multiple times.
+pub fn deinitRenderResources() void {
     if (outline_render_texture) |tex| {
         rl.unloadRenderTexture(tex);
         outline_render_texture = null;
@@ -107,6 +112,26 @@ pub fn deinitOutlineShader() void {
         terrain_material = null;
     }
     vertex_color_shader = null;
+}
+
+/// Handle window resize by recreating render textures and updating shader uniforms.
+/// Call this when window size changes to ensure correct outline rendering.
+pub fn handleWindowResize(new_width: i32, new_height: i32) void {
+    // Recreate outline render texture at new size
+    if (outline_render_texture) |tex| {
+        rl.unloadRenderTexture(tex);
+    }
+    outline_render_texture = rl.loadRenderTexture(new_width, new_height) catch {
+        std.debug.print("Failed to recreate outline render texture on resize\n", .{});
+        outline_render_texture = null;
+        return;
+    };
+
+    // Update resolution uniform in outline shader
+    if (outline_shader) |shader| {
+        const res = [2]f32{ @floatFromInt(new_width), @floatFromInt(new_height) };
+        rl.setShaderValue(shader, resolution_loc, &res, rl.ShaderUniformDataType.vec2);
+    }
 }
 
 // Helper to convert float coordinates to integer screen positions

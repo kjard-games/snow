@@ -17,7 +17,7 @@ pub fn main() !void {
         std.log.err("Failed to initialize outline shader: {}", .{err});
         return err;
     };
-    defer render.deinitOutlineShader();
+    defer render.deinitRenderResources();
 
     // Initialize terrain material with vertex color shader
     render.initTerrainMaterial() catch |err| {
@@ -50,10 +50,23 @@ pub fn main() !void {
     var mutable_state = state;
     defer mutable_state.deinit();
 
+    // Track previous window size for resize detection
+    var prev_width: i32 = screenWidth;
+    var prev_height: i32 = screenHeight;
+
     while (!rl.windowShouldClose()) {
         // Toggle fullscreen with F11
         if (rl.isKeyPressed(rl.KeyboardKey.f11)) {
             rl.toggleFullscreen();
+        }
+
+        // Handle window resize
+        const current_width = rl.getScreenWidth();
+        const current_height = rl.getScreenHeight();
+        if (current_width != prev_width or current_height != prev_height) {
+            render.handleWindowResize(current_width, current_height);
+            prev_width = current_width;
+            prev_height = current_height;
         }
 
         mutable_state.update();

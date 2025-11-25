@@ -157,8 +157,13 @@ pub const SimulationFactory = struct {
         // Initialize telemetry
         var telem = try MatchTelemetry.init(self.allocator);
 
-        // Initialize game state with built characters
-        const gs = try initGameStateFromCharacters(self.allocator, all_chars.items);
+        // Initialize game state with built characters using the builder
+        var gs_builder = game_state.GameStateBuilder.init(self.allocator);
+        const gs = try gs_builder
+            .withRendering(false)
+            .withPlayerControl(false)
+            .withCharacters(all_chars.items)
+            .build();
         var mutable_gs = gs;
 
         // Link telemetry to game state
@@ -274,95 +279,3 @@ pub const SimulationRunner = struct {
         }
     }
 };
-
-/// Helper: Initialize GameState from character array
-fn initGameStateFromCharacters(allocator: std.mem.Allocator, characters: []character.Character) !GameState {
-    const id_gen = entity.EntityIdGenerator{};
-    const ts = std.time.timestamp();
-    const seed: u64 = @bitCast(ts);
-    const prng = std.Random.DefaultPrng.init(seed);
-
-    var entities: [12]character.Character = undefined;
-
-    // Copy actual characters into first slots
-    for (characters, 0..) |char, i| {
-        entities[i] = char;
-    }
-
-    // Fill remaining slots with dummy dead characters (so iteration is safe)
-    for (characters.len..12) |i| {
-        var temp_id_gen = id_gen;
-        entities[i] = createDummyCharacter(&temp_id_gen);
-    }
-
-    // Create headless terrain grid
-    const terrain_grid = try game_state.TerrainGrid.initHeadless(
-        allocator,
-        100,
-        100,
-        20.0,
-        -1000.0,
-        -1000.0,
-    );
-
-    return game_state.GameState{
-        .entities = entities,
-        .controlled_entity_id = 999,
-        .selected_target = null,
-        .camera = .{
-            .position = .{ .x = 0, .y = 600, .z = 700 },
-            .target = .{ .x = 0, .y = 0, .z = 0 },
-            .up = .{ .x = 0, .y = 1, .z = 0 },
-            .fovy = 55.0,
-            .projection = .perspective,
-        },
-        .input_state = @import("input.zig").InputState{
-            .action_camera = false,
-        },
-        .ai_states = [_]@import("ai.zig").AIState{
-            .{ .role = .damage_dealer },
-            .{ .role = .damage_dealer },
-            .{ .role = .damage_dealer },
-            .{ .role = .support },
-            .{ .role = .damage_dealer },
-            .{ .role = .damage_dealer },
-            .{ .role = .damage_dealer },
-            .{ .role = .support },
-            .{ .role = .damage_dealer },
-            .{ .role = .damage_dealer },
-            .{ .role = .damage_dealer },
-            .{ .role = .support },
-        },
-        .rng = prng,
-        .combat_state = .active,
-        .entity_id_gen = id_gen,
-        .vfx_manager = @import("vfx.zig").VFXManager.init(),
-        .terrain_grid = terrain_grid,
-        .allocator = allocator,
-        .simulation_mode = true,
-    };
-}
-
-/// Helper: Create a dummy dead character for unused entity slots
-fn createDummyCharacter(id_gen: *entity.EntityIdGenerator) character.Character {
-    return character.Character{
-        .id = id_gen.generate(),
-        .position = .{ .x = 0, .y = -1000, .z = 0 },
-        .previous_position = .{ .x = 0, .y = -1000, .z = 0 },
-        .radius = 1.0,
-        .color = .black,
-        .school_color = .black,
-        .position_color = .black,
-        .name = "Dummy",
-        .warmth = 0,
-        .max_warmth = 1,
-        .team = .blue,
-        .school = character.School.montessori,
-        .player_position = character.Position.pitcher,
-        .energy = 0,
-        .max_energy = 1,
-        .skill_bar = [_]?*const character.Skill{null} ** character.MAX_SKILLS,
-        .gear = [_]?*const character.Gear{null} ** 6,
-        .selected_skill = 0,
-    };
-}

@@ -224,7 +224,11 @@ pub const TerrainGrid = struct {
     // Mesh-based rendering (GoW-style approach)
     terrain_mesh: ?rl.Mesh = null, // Single mesh for entire terrain base
     mesh_dirty: bool = true, // Track if mesh needs rebuilding
+    mesh_rebuild_cooldown: f32 = 0.0, // Cooldown timer to prevent rebuilding every tick
     headless_mode: bool = false, // Skip GPU mesh generation in headless mode
+
+    // Performance: Minimum time between mesh rebuilds (prevents hangs from frequent terrain changes)
+    const MESH_REBUILD_INTERVAL: f32 = 0.5; // Rebuild at most twice per second
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -803,10 +807,17 @@ pub const TerrainGrid = struct {
             self.markMeshDirty();
         }
 
-        // Rebuild mesh if dirty (during update phase, not render phase)
+        // Update mesh rebuild cooldown
+        if (self.mesh_rebuild_cooldown > 0.0) {
+            self.mesh_rebuild_cooldown -= dt;
+        }
+
+        // Rebuild mesh if dirty AND cooldown has elapsed
+        // This prevents regenerating every tick when entities are constantly walking
         // Skip in headless mode to avoid GPU calls
-        if (self.mesh_dirty and !self.headless_mode) {
+        if (self.mesh_dirty and !self.headless_mode and self.mesh_rebuild_cooldown <= 0.0) {
             self.generateTerrainMesh();
+            self.mesh_rebuild_cooldown = MESH_REBUILD_INTERVAL;
         }
     }
 

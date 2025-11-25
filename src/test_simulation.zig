@@ -20,7 +20,8 @@ pub fn main() !void {
     defer telem.deinit();
 
     // Initialize game state in pure AI vs AI mode (4v4, no player)
-    var state = try GameState.initHeadlessAIOnly(allocator);
+    // Using the new builder-based API for headless simulations
+    var state = try GameState.initHeadlessSimulation(allocator);
     defer state.deinit();
 
     // Link telemetry to game state

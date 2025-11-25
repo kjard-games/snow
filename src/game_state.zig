@@ -22,6 +22,463 @@ const factory = @import("factory.zig");
 
 const print = std.debug.print;
 
+// ============================================
+// GAME STATE BUILDER
+// ============================================
+
+/// Configuration for building a GameState instance.
+/// Use GameStateBuilder for a fluent API to construct this.
+pub const GameStateConfig = struct {
+    /// Enable rendering (false for headless simulations)
+    rendering: bool = true,
+    /// Enable player control (false for AI-only simulations)
+    player_controlled: bool = true,
+    /// Enable telemetry recording
+    telemetry: bool = false,
+    /// RNG seed (null = use current timestamp)
+    seed: ?u64 = null,
+    /// Pre-built characters (null = generate random teams)
+    characters: ?[]const Character = null,
+    /// Number of characters per team (used when generating random teams)
+    characters_per_team: usize = 4,
+    /// Terrain grid dimensions
+    terrain_width: usize = 100,
+    terrain_height: usize = 100,
+    terrain_cell_size: f32 = 20.0,
+};
+
+/// Builder for constructing GameState instances with various configurations.
+/// Consolidates init(), initHeadless(), initHeadlessAIOnly(), and initWithFactory().
+pub const GameStateBuilder = struct {
+    allocator: std.mem.Allocator,
+    config: GameStateConfig,
+
+    pub fn init(allocator: std.mem.Allocator) GameStateBuilder {
+        return .{
+            .allocator = allocator,
+            .config = .{},
+        };
+    }
+
+    /// Enable/disable rendering (disabling creates a headless simulation)
+    pub fn withRendering(self: *GameStateBuilder, enabled: bool) *GameStateBuilder {
+        self.config.rendering = enabled;
+        return self;
+    }
+
+    /// Enable/disable player control (disabling creates AI-only simulation)
+    pub fn withPlayerControl(self: *GameStateBuilder, enabled: bool) *GameStateBuilder {
+        self.config.player_controlled = enabled;
+        return self;
+    }
+
+    /// Enable/disable telemetry recording
+    pub fn withTelemetry(self: *GameStateBuilder, enabled: bool) *GameStateBuilder {
+        self.config.telemetry = enabled;
+        return self;
+    }
+
+    /// Set RNG seed (for reproducible simulations)
+    pub fn withSeed(self: *GameStateBuilder, seed: u64) *GameStateBuilder {
+        self.config.seed = seed;
+        return self;
+    }
+
+    /// Provide pre-built characters (skips random team generation)
+    pub fn withCharacters(self: *GameStateBuilder, characters: []const Character) *GameStateBuilder {
+        self.config.characters = characters;
+        return self;
+    }
+
+    /// Set number of characters per team (when generating random teams)
+    pub fn withCharactersPerTeam(self: *GameStateBuilder, count: usize) *GameStateBuilder {
+        self.config.characters_per_team = count;
+        return self;
+    }
+
+    /// Set terrain grid dimensions
+    pub fn withTerrainSize(self: *GameStateBuilder, width: usize, height: usize, cell_size: f32) *GameStateBuilder {
+        self.config.terrain_width = width;
+        self.config.terrain_height = height;
+        self.config.terrain_cell_size = cell_size;
+        return self;
+    }
+
+    /// Build the GameState with the configured options
+    pub fn build(self: *GameStateBuilder) !GameState {
+        // Initialize RNG
+        const seed = self.config.seed orelse blk: {
+            const timestamp = std.time.timestamp();
+            break :blk @as(u64, @bitCast(timestamp));
+        };
+        var prng = std.Random.DefaultPrng.init(seed);
+        var rng = prng.random();
+
+        var id_gen = EntityIdGenerator{};
+
+        // Build or use provided characters
+        var entities: [MAX_ENTITIES]Character = undefined;
+        var active_entity_count: usize = 0;
+
+        if (self.config.characters) |chars| {
+            // Use provided characters
+            for (chars, 0..) |char, i| {
+                if (i >= MAX_ENTITIES) break;
+                entities[i] = char;
+                active_entity_count += 1;
+            }
+        } else {
+            // Generate random teams
+            active_entity_count = try self.generateRandomTeams(&entities, &rng, &id_gen);
+        }
+
+        // Fill remaining slots with dummy characters
+        for (active_entity_count..MAX_ENTITIES) |i| {
+            entities[i] = createDummyCharacter(&id_gen);
+        }
+
+        // Determine controlled entity
+        const controlled_id: EntityId = if (self.config.player_controlled)
+            entities[0].id // Player controls first entity
+        else
+            999; // Invalid ID = no player control
+
+        // Initialize terrain
+        const terrain_grid = if (self.config.rendering)
+            try TerrainGrid.init(
+                self.allocator,
+                self.config.terrain_width,
+                self.config.terrain_height,
+                self.config.terrain_cell_size,
+                -@as(f32, @floatFromInt(self.config.terrain_width)) * self.config.terrain_cell_size / 2.0,
+                -@as(f32, @floatFromInt(self.config.terrain_height)) * self.config.terrain_cell_size / 2.0,
+            )
+        else
+            try TerrainGrid.initHeadless(
+                self.allocator,
+                self.config.terrain_width,
+                self.config.terrain_height,
+                self.config.terrain_cell_size,
+                -@as(f32, @floatFromInt(self.config.terrain_width)) * self.config.terrain_cell_size / 2.0,
+                -@as(f32, @floatFromInt(self.config.terrain_height)) * self.config.terrain_cell_size / 2.0,
+            );
+
+        // Generate terrain mesh only if rendering
+        if (self.config.rendering) {
+            var mutable_grid = terrain_grid;
+            mutable_grid.generateTerrainMesh();
+        }
+
+        // Handle cursor state for rendering mode
+        if (self.config.rendering and self.config.player_controlled) {
+            // Check for gamepad and set cursor state
+            if (rl.isGamepadAvailable(0)) {
+                rl.disableCursor();
+            } else {
+                rl.enableCursor();
+            }
+        }
+
+        // Build AI states - healers get support role, others get damage_dealer
+        var ai_states: [MAX_ENTITIES]AIState = undefined;
+        for (entities, 0..) |ent, i| {
+            ai_states[i] = .{
+                .role = if (ent.player_position == .thermos) .support else .damage_dealer,
+                .skill_cooldown = 0.0,
+            };
+        }
+
+        return GameState{
+            .entities = entities,
+            .controlled_entity_id = controlled_id,
+            .selected_target = null,
+            .camera = rl.Camera{
+                .position = .{ .x = 0, .y = 600, .z = 700 },
+                .target = .{ .x = 0, .y = 0, .z = 0 },
+                .up = .{ .x = 0, .y = 1, .z = 0 },
+                .fovy = 55.0,
+                .projection = .perspective,
+            },
+            .input_state = input.InputState{
+                .action_camera = self.config.rendering and rl.isGamepadAvailable(0),
+            },
+            .ai_states = ai_states,
+            .rng = prng,
+            .combat_state = .active,
+            .entity_id_gen = id_gen,
+            .vfx_manager = vfx.VFXManager.init(),
+            .terrain_grid = terrain_grid,
+            .allocator = self.allocator,
+            .simulation_mode = !self.config.rendering,
+        };
+    }
+
+    /// Generate random 4v4 teams (blue vs red)
+    fn generateRandomTeams(self: *GameStateBuilder, entities: *[MAX_ENTITIES]Character, rng: *std.Random, id_gen: *EntityIdGenerator) !usize {
+        const chars_per_team = self.config.characters_per_team;
+        var entity_idx: usize = 0;
+
+        // Ally team positions
+        const ally_positions = [_]rl.Vector3{
+            .{ .x = -80, .y = 0, .z = 400 },
+            .{ .x = 80, .y = 0, .z = 400 },
+            .{ .x = -120, .y = 0, .z = 500 },
+            .{ .x = 0, .y = 0, .z = 550 },
+        };
+
+        // Enemy team positions
+        const enemy_positions = [_]rl.Vector3{
+            .{ .x = -80, .y = 0, .z = -400 },
+            .{ .x = 80, .y = 0, .z = -400 },
+            .{ .x = -120, .y = 0, .z = -500 },
+            .{ .x = 0, .y = 0, .z = -550 },
+        };
+
+        // Generate ally team (blue)
+        for (0..chars_per_team) |i| {
+            if (entity_idx >= MAX_ENTITIES) break;
+            const pos_idx = @min(i, ally_positions.len - 1);
+            const is_healer = i == chars_per_team - 1; // Last character is healer
+
+            entities[entity_idx] = createRandomCharacter(
+                id_gen,
+                rng,
+                .blue,
+                ally_positions[pos_idx],
+                if (i == 0) "Player" else if (is_healer) "Ally Healer" else "Ally",
+                is_healer,
+            );
+            entity_idx += 1;
+        }
+
+        // Generate enemy team (red)
+        for (0..chars_per_team) |i| {
+            if (entity_idx >= MAX_ENTITIES) break;
+            const pos_idx = @min(i, enemy_positions.len - 1);
+            const is_healer = i == chars_per_team - 1;
+
+            entities[entity_idx] = createRandomCharacter(
+                id_gen,
+                rng,
+                .red,
+                enemy_positions[pos_idx],
+                if (is_healer) "Enemy Healer" else "Enemy",
+                is_healer,
+            );
+            entity_idx += 1;
+        }
+
+        return entity_idx;
+    }
+};
+
+/// Create a random character with the given team and position
+fn createRandomCharacter(
+    id_gen: *EntityIdGenerator,
+    rng: *std.Random,
+    team: entity.Team,
+    pos: rl.Vector3,
+    name: [:0]const u8,
+    force_healer: bool,
+) Character {
+    const all_schools = [_]School{ .private_school, .public_school, .montessori, .homeschool, .waldorf };
+    const non_healer_positions = [_]Position{ .pitcher, .fielder, .sledder, .shoveler, .animator };
+
+    const selected_school = all_schools[rng.intRangeAtMost(usize, 0, all_schools.len - 1)];
+    const selected_position: Position = if (force_healer)
+        .thermos
+    else
+        non_healer_positions[rng.intRangeAtMost(usize, 0, non_healer_positions.len - 1)];
+
+    var char = Character{
+        .id = id_gen.generate(),
+        .position = pos,
+        .previous_position = pos,
+        .radius = 10,
+        .color = if (team == .blue) .blue else .red,
+        .school_color = palette.getSchoolColor(selected_school),
+        .position_color = palette.getPositionColor(selected_position),
+        .name = name,
+        .warmth = 150,
+        .max_warmth = 150,
+        .team = team,
+        .school = selected_school,
+        .player_position = selected_position,
+        .energy = selected_school.getMaxEnergy(),
+        .max_energy = selected_school.getMaxEnergy(),
+        .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+        .selected_skill = 0,
+    };
+
+    // Set character color based on school + position
+    char.color = palette.getCharacterColor(selected_school, selected_position);
+
+    // Load skills
+    loadRandomSkills(&char, rng);
+
+    // Assign random equipment
+    assignRandomEquipment(&char, rng);
+
+    return char;
+}
+
+/// Load random skills into a character's skill bar
+fn loadRandomSkills(char: *Character, rng: *std.Random) void {
+    const position_skills = char.player_position.getSkills();
+    const school_skills = char.school.getSkills();
+
+    // Find and load a wall skill into slot 0 (if available)
+    var wall_skill_loaded = false;
+    for (position_skills) |*skill| {
+        if (skill.creates_wall) {
+            char.skill_bar[0] = skill;
+            wall_skill_loaded = true;
+            break;
+        }
+    }
+
+    // Fallback: use first position skill if no wall skill
+    if (!wall_skill_loaded and position_skills.len > 0) {
+        char.skill_bar[0] = &position_skills[0];
+    }
+
+    // Fill slots 1-3 with random position skills
+    var slot_idx: usize = 1;
+    var attempts: usize = 0;
+    while (slot_idx < 4 and attempts < position_skills.len * 3) : (attempts += 1) {
+        if (position_skills.len == 0) break;
+
+        const random_idx = rng.intRangeAtMost(usize, 0, position_skills.len - 1);
+        const skill = &position_skills[random_idx];
+
+        // Check not already loaded
+        var already_loaded = false;
+        for (0..slot_idx) |check_idx| {
+            if (char.skill_bar[check_idx] == skill) {
+                already_loaded = true;
+                break;
+            }
+        }
+
+        if (!already_loaded) {
+            char.skill_bar[slot_idx] = skill;
+            slot_idx += 1;
+        }
+    }
+
+    // Fill slots 4-7 with random school skills
+    slot_idx = 4;
+    attempts = 0;
+    while (slot_idx < 8 and attempts < school_skills.len * 3) : (attempts += 1) {
+        if (school_skills.len == 0) break;
+
+        const random_idx = rng.intRangeAtMost(usize, 0, school_skills.len - 1);
+        const skill = &school_skills[random_idx];
+
+        // Check not already loaded
+        var already_loaded = false;
+        for (4..slot_idx) |check_idx| {
+            if (char.skill_bar[check_idx] == skill) {
+                already_loaded = true;
+                break;
+            }
+        }
+
+        if (!already_loaded) {
+            char.skill_bar[slot_idx] = skill;
+            slot_idx += 1;
+        }
+    }
+}
+
+/// Assign random equipment to a character
+fn assignRandomEquipment(char: *Character, rng: *std.Random) void {
+    const melee_weapons = [_]*const equipment.Equipment{ &equipment.BigShovel, &equipment.IceScraper };
+    const throwing_tools = [_]*const equipment.Equipment{ &equipment.LacrosseStick, &equipment.JaiAlaiScoop, &equipment.Slingshot };
+    const shields = [_]*const equipment.Equipment{ &equipment.SaucerSled, &equipment.GarbageCanLid };
+    const utility_items = [_]*const equipment.Equipment{ &equipment.Thermos, &equipment.Toboggan };
+    const worn_items = [_]*const equipment.Equipment{ &equipment.Mittens, &equipment.Blanket };
+
+    const roll = rng.intRangeAtMost(u8, 0, 100);
+
+    if (roll < 30) {
+        const melee = melee_weapons[rng.intRangeAtMost(usize, 0, melee_weapons.len - 1)];
+        char.main_hand = melee;
+        if (melee.hand_requirement == .one_hand and rng.boolean()) {
+            char.off_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
+        }
+    } else if (roll < 60) {
+        const thrower = throwing_tools[rng.intRangeAtMost(usize, 0, throwing_tools.len - 1)];
+        char.main_hand = thrower;
+        if (thrower.hand_requirement == .one_hand and rng.boolean()) {
+            if (rng.boolean()) {
+                char.off_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
+            } else {
+                char.off_hand = &equipment.Thermos;
+            }
+        }
+    } else if (roll < 80) {
+        if (rng.boolean()) {
+            char.main_hand = utility_items[rng.intRangeAtMost(usize, 0, utility_items.len - 1)];
+        } else {
+            char.main_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
+            if (rng.boolean()) {
+                char.off_hand = &equipment.JaiAlaiScoop;
+            }
+        }
+    }
+
+    if (rng.boolean()) {
+        char.worn = worn_items[rng.intRangeAtMost(usize, 0, worn_items.len - 1)];
+    }
+
+    // Assign gear (armor padding)
+    assignRandomGear(char, rng);
+}
+
+/// Assign random gear to a character's 6 gear slots
+fn assignRandomGear(char: *Character, rng: *std.Random) void {
+    const head_pieces = [_]*const gear_slot.Gear{ &gear_slot.WoolCap, &gear_slot.SkiBeanie, &gear_slot.WinterParkaHood };
+    const neck_pieces = [_]*const gear_slot.Gear{ &gear_slot.LightScarf, &gear_slot.PuffyScarf, &gear_slot.WoolNeckGuard };
+    const torso_pieces = [_]*const gear_slot.Gear{ &gear_slot.Hoodie, &gear_slot.SkiJacket, &gear_slot.HeavyParka };
+    const hands_pieces = [_]*const gear_slot.Gear{ &gear_slot.Mittens, &gear_slot.InsulatedGloves, &gear_slot.ThermalGauntlets };
+    const legs_pieces = [_]*const gear_slot.Gear{ &gear_slot.Joggers, &gear_slot.SnowPants, &gear_slot.ThermalLeggings };
+    const feet_pieces = [_]*const gear_slot.Gear{ &gear_slot.Sneakers, &gear_slot.InsulatedBoots, &gear_slot.IceClimbingBoots };
+
+    char.gear[0] = head_pieces[rng.intRangeAtMost(usize, 0, head_pieces.len - 1)];
+    char.gear[1] = neck_pieces[rng.intRangeAtMost(usize, 0, neck_pieces.len - 1)];
+    char.gear[2] = torso_pieces[rng.intRangeAtMost(usize, 0, torso_pieces.len - 1)];
+    char.gear[3] = hands_pieces[rng.intRangeAtMost(usize, 0, hands_pieces.len - 1)];
+    char.gear[4] = legs_pieces[rng.intRangeAtMost(usize, 0, legs_pieces.len - 1)];
+    char.gear[5] = feet_pieces[rng.intRangeAtMost(usize, 0, feet_pieces.len - 1)];
+
+    char.recalculatePadding();
+}
+
+/// Create a dummy dead character for unused entity slots
+fn createDummyCharacter(id_gen: *EntityIdGenerator) Character {
+    return Character{
+        .id = id_gen.generate(),
+        .position = .{ .x = 0, .y = -1000, .z = 0 },
+        .previous_position = .{ .x = 0, .y = -1000, .z = 0 },
+        .radius = 1.0,
+        .color = .black,
+        .school_color = .black,
+        .position_color = .black,
+        .name = "Unused",
+        .warmth = 0,
+        .max_warmth = 1,
+        .team = .blue,
+        .school = school.School.montessori,
+        .player_position = position.Position.pitcher,
+        .energy = 0,
+        .max_energy = 1,
+        .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+        .gear = [_]?*const character.Gear{null} ** 6,
+        .selected_skill = 0,
+    };
+}
+
 // Type aliases
 const Character = character.Character;
 const School = school.School;
@@ -79,1512 +536,53 @@ pub const GameState = struct {
     // Simulation mode: when true, skip raylib input polling (for headless battle simulation)
     simulation_mode: bool = false,
 
-    // Helper function to assign equipment loadouts to characters
-    /// Assign random gear to a character (6 gear slots: toque, scarf, jacket, gloves, pants, boots)
-    /// Creates 3 gear archetypes: Light (DPS/Speed), Medium (Balanced), Heavy (Tank)
-    fn assignGear(char: *Character, rng: *std.Random) void {
-        // Define gear pools for each slot
-        const head_pieces = [_]*const gear_slot.Gear{
-            &gear_slot.WoolCap,
-            &gear_slot.SkiBeanie,
-            &gear_slot.WinterParkaHood,
-        };
-        const neck_pieces = [_]*const gear_slot.Gear{
-            &gear_slot.LightScarf,
-            &gear_slot.PuffyScarf,
-            &gear_slot.WoolNeckGuard,
-        };
-        const torso_pieces = [_]*const gear_slot.Gear{
-            &gear_slot.Hoodie,
-            &gear_slot.SkiJacket,
-            &gear_slot.HeavyParka,
-        };
-        const hands_pieces = [_]*const gear_slot.Gear{
-            &gear_slot.Mittens,
-            &gear_slot.InsulatedGloves,
-            &gear_slot.ThermalGauntlets,
-        };
-        const legs_pieces = [_]*const gear_slot.Gear{
-            &gear_slot.Joggers,
-            &gear_slot.SnowPants,
-            &gear_slot.ThermalLeggings,
-        };
-        const feet_pieces = [_]*const gear_slot.Gear{
-            &gear_slot.Sneakers,
-            &gear_slot.InsulatedBoots,
-            &gear_slot.IceClimbingBoots,
-        };
+    // ============================================
+    // INITIALIZATION METHODS
+    // ============================================
+    // Use GameStateBuilder or the convenience methods below:
+    // - initWithFactory() - for interactive play with rendering
+    // - initHeadlessSimulation() - for AI-only simulations
+    // - initWithCharacters() - for simulations with custom characters
 
-        // Randomly select one piece from each slot pool
-        char.gear[0] = head_pieces[rng.intRangeAtMost(usize, 0, head_pieces.len - 1)];
-        char.gear[1] = neck_pieces[rng.intRangeAtMost(usize, 0, neck_pieces.len - 1)];
-        char.gear[2] = torso_pieces[rng.intRangeAtMost(usize, 0, torso_pieces.len - 1)];
-        char.gear[3] = hands_pieces[rng.intRangeAtMost(usize, 0, hands_pieces.len - 1)];
-        char.gear[4] = legs_pieces[rng.intRangeAtMost(usize, 0, legs_pieces.len - 1)];
-        char.gear[5] = feet_pieces[rng.intRangeAtMost(usize, 0, feet_pieces.len - 1)];
-
-        char.recalculatePadding();
+    /// Initialize game state using the builder pattern.
+    /// This is the recommended way to create a GameState for interactive play.
+    pub fn initWithFactory(allocator: std.mem.Allocator) !GameState {
+        var builder = GameStateBuilder.init(allocator);
+        return builder
+            .withRendering(true)
+            .withPlayerControl(true)
+            .build();
     }
 
-    fn assignEquipment(char: *Character, rng: *std.Random) void {
-        // Define equipment pools
-        const melee_weapons = [_]*const equipment.Equipment{ &equipment.BigShovel, &equipment.IceScraper };
-        const throwing_tools = [_]*const equipment.Equipment{ &equipment.LacrosseStick, &equipment.JaiAlaiScoop, &equipment.Slingshot };
-        const shields = [_]*const equipment.Equipment{ &equipment.SaucerSled, &equipment.GarbageCanLid };
-        const utility_items = [_]*const equipment.Equipment{ &equipment.Thermos, &equipment.Toboggan };
-        const worn_items = [_]*const equipment.Equipment{ &equipment.Mittens, &equipment.Blanket };
-
-        // Roll for loadout type (simplified: just pick random main hand + maybe off hand + maybe worn)
-        const roll = rng.intRangeAtMost(u8, 0, 100);
-
-        if (roll < 30) {
-            // 30% - Melee weapon (two-handed or one-handed + shield)
-            const melee = melee_weapons[rng.intRangeAtMost(usize, 0, melee_weapons.len - 1)];
-            char.main_hand = melee;
-
-            if (melee.hand_requirement == .one_hand and rng.boolean()) {
-                // One-handed melee + shield
-                char.off_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
-            }
-        } else if (roll < 60) {
-            // 30% - Throwing tool
-            const thrower = throwing_tools[rng.intRangeAtMost(usize, 0, throwing_tools.len - 1)];
-            char.main_hand = thrower;
-
-            // One-handed throwing tool might have shield or utility
-            if (thrower.hand_requirement == .one_hand and rng.boolean()) {
-                if (rng.boolean()) {
-                    char.off_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
-                } else {
-                    char.off_hand = &equipment.Thermos; // Off-hand utility
-                }
-            }
-        } else if (roll < 80) {
-            // 20% - Utility/defensive focus
-            if (rng.boolean()) {
-                char.main_hand = utility_items[rng.intRangeAtMost(usize, 0, utility_items.len - 1)];
-            } else {
-                // Shield + something
-                char.main_hand = shields[rng.intRangeAtMost(usize, 0, shields.len - 1)];
-                if (rng.boolean()) {
-                    char.off_hand = &equipment.JaiAlaiScoop; // Shield + one-handed thrower
-                }
-            }
-        } else {
-            // 20% - Bare hands (just throw snowballs)
-            char.main_hand = null;
-        }
-
-        // 50% chance to have worn equipment (doesn't conflict with hands)
-        if (rng.boolean()) {
-            char.worn = worn_items[rng.intRangeAtMost(usize, 0, worn_items.len - 1)];
-        }
-
-        // Assign gear (armor padding) separately
-        assignGear(char, rng);
+    /// Initialize headless simulation (AI-only, no rendering)
+    /// Use this for balance testing and automated simulations.
+    pub fn initHeadlessSimulation(allocator: std.mem.Allocator) !GameState {
+        var builder = GameStateBuilder.init(allocator);
+        return builder
+            .withRendering(false)
+            .withPlayerControl(false)
+            .build();
     }
 
-    /// Initialize a new game state with a 4v4 team setup.
-    /// Randomly generates character builds and equipment loadouts.
-    pub fn init(allocator: std.mem.Allocator) !GameState {
-        var id_gen = EntityIdGenerator{};
-
-        // Initialize RNG with current time as seed (needed for random team generation)
-        const timestamp = std.time.timestamp();
-        const seed: u64 = @bitCast(timestamp);
-        var prng = std.Random.DefaultPrng.init(seed);
-        var random = prng.random();
-
-        // Helper to pick random school
-        const all_schools = [_]School{ .private_school, .public_school, .montessori, .homeschool, .waldorf };
-        const pickRandomSchool = struct {
-            fn pick(rng: *std.Random) School {
-                const idx = rng.intRangeAtMost(usize, 0, all_schools.len - 1);
-                return all_schools[idx];
-            }
-        }.pick;
-
-        // Helper to pick random non-healer position
-        const non_healer_positions = [_]Position{ .pitcher, .fielder, .sledder, .shoveler, .animator };
-        const pickRandomPosition = struct {
-            fn pick(rng: *std.Random) Position {
-                const idx = rng.intRangeAtMost(usize, 0, non_healer_positions.len - 1);
-                return non_healer_positions[idx];
-            }
-        }.pick;
-
-        // === 4v4 Team Setup ===
-        // Ally team (blue): [Player, Ally1, Ally2, Healer]
-        // Enemy team (red): [Enemy1, Enemy2, Enemy3, Healer]
-
-        // Ally team positions (front line, spread out) - 4x further apart
-        const ally_positions = [_]rl.Vector3{
-            .{ .x = -80, .y = 0, .z = 400 }, // Player (left-front)
-            .{ .x = 80, .y = 0, .z = 400 }, // Ally1 (right-front)
-            .{ .x = -120, .y = 0, .z = 500 }, // Ally2 (left-back)
-            .{ .x = 0, .y = 0, .z = 550 }, // Healer (center-back)
-        };
-
-        // Enemy team positions (opposite side) - 4x further apart
-        const enemy_positions = [_]rl.Vector3{
-            .{ .x = -80, .y = 0, .z = -400 }, // Enemy1
-            .{ .x = 80, .y = 0, .z = -400 }, // Enemy2
-            .{ .x = -120, .y = 0, .z = -500 }, // Enemy3
-            .{ .x = 0, .y = 0, .z = -550 }, // Enemy Healer
-        };
-
-        // Generate random builds for player + 2 allies + 3 enemies (6 random, 2 healer)
-        const player_school = pickRandomSchool(&random);
-        const player_position = pickRandomPosition(&random);
-
-        var entities = [_]Character{
-            // ===== ALLY TEAM (Blue) =====
-            // Index 0: Player (random school/position)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[0],
-                .previous_position = ally_positions[0],
-                .radius = 12,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Player",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = player_school,
-                .player_position = player_position,
-                .energy = player_school.getMaxEnergy(),
-                .max_energy = player_school.getMaxEnergy(),
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 1: Ally 1 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[1],
-                .previous_position = ally_positions[1],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally 1",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0, // Set after school
-                .max_energy = 0, // Set after school
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 2: Ally 2 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[2],
-                .previous_position = ally_positions[2],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally 2",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 3: Ally Healer (always Thermos)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[3],
-                .previous_position = ally_positions[3],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally Healer",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = .thermos, // Always healer
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-
-            // ===== ENEMY TEAM (Red) =====
-            // Index 4: Enemy 1 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[0],
-                .previous_position = enemy_positions[0],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 1",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 6: Enemy 2 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[1],
-                .previous_position = enemy_positions[1],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 2",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 6: Enemy 3 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[2],
-                .previous_position = enemy_positions[2],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 3",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 7: Enemy Healer (always Thermos)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[3],
-                .previous_position = enemy_positions[3],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy Healer",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = .thermos, // Always healer
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Placeholder slots for 3rd team (indices 8-11)
-            Character{
-                .id = 0,
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 8",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = 0,
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 9",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = 0,
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 10",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = 0,
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 11",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-        };
-
-        // Store player's entity ID
-        const player_entity_id = entities[0].id;
-
-        // Set energy pools based on school and load skills for all entities
-        for (&entities, 0..) |*ent, i| {
-            // Set energy based on school
-            ent.energy = ent.school.getMaxEnergy();
-            ent.max_energy = ent.school.getMaxEnergy();
-
-            // Load skills: Guarantee 1 wall skill in slot 0 (from position), then random fill
-            const position_skills = ent.player_position.getSkills();
-            const school_skills = ent.school.getSkills();
-
-            // FIRST: Find a wall-building skill in position skills
-            var wall_skill_idx: ?usize = null;
-            for (position_skills, 0..) |skill, skill_idx| {
-                if (skill.creates_wall) {
-                    // Found a wall-building skill - randomly decide if we use it
-                    if (random.boolean() or wall_skill_idx == null) {
-                        wall_skill_idx = skill_idx;
-                    }
-                }
-            }
-
-            // Guarantee at least 1 wall skill in slot 0 (from position)
-            var wall_skill_loaded = false;
-            if (wall_skill_idx) |idx| {
-                ent.skill_bar[0] = &position_skills[idx];
-                wall_skill_loaded = true;
-            }
-
-            // Slots 1-3: Randomly pick 3 more position skills (can include more walls by chance)
-            var selected_count: usize = if (wall_skill_loaded) 1 else 0; // Start at 1 if we loaded wall
-            var attempts: usize = 0;
-            const max_attempts = position_skills.len * 3;
-
-            while (selected_count < 4 and attempts < max_attempts) : (attempts += 1) {
-                if (position_skills.len == 0) break;
-
-                const random_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
-
-                // Check if already loaded in slots 0-3
-                var already_loaded = false;
-                for (0..selected_count) |check_idx| {
-                    if (ent.skill_bar[check_idx] == &position_skills[random_idx]) {
-                        already_loaded = true;
-                        break;
-                    }
-                }
-
-                if (!already_loaded) {
-                    ent.skill_bar[selected_count] = &position_skills[random_idx];
-                    selected_count += 1;
-                }
-            }
-
-            // Fallback: if no wall skill found in position, fill slot 0 with random position skill
-            // (Pitcher and Sledder don't have wall builders, only wall breakers)
-            if (!wall_skill_loaded and position_skills.len > 0) {
-                const fallback_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
-                ent.skill_bar[0] = &position_skills[fallback_idx];
-            }
-
-            // Slots 5-8: Randomly pick 4 school skills
-            selected_count = 0;
-            attempts = 0;
-
-            while (selected_count < 4 and attempts < max_attempts) : (attempts += 1) {
-                if (school_skills.len == 0) break;
-
-                const random_idx = random.intRangeAtMost(usize, 0, school_skills.len - 1);
-
-                // Check if already loaded in slots 4-7
-                var already_loaded = false;
-                for (0..selected_count) |check_idx| {
-                    if (ent.skill_bar[4 + check_idx] == &school_skills[random_idx]) {
-                        already_loaded = true;
-                        break;
-                    }
-                }
-
-                if (!already_loaded) {
-                    ent.skill_bar[4 + selected_count] = &school_skills[random_idx];
-                    selected_count += 1;
-                }
-            }
-
-            // Count how many skills were loaded
-            var skill_count: usize = 0;
-            for (ent.skill_bar) |maybe_skill| {
-                if (maybe_skill != null) skill_count += 1;
-            }
-
-            // Assign random equipment loadouts based on character type
-            assignEquipment(ent, &random);
-
-            // Set character colors for halftone rendering
-            ent.school_color = palette.getSchoolColor(ent.school);
-            ent.position_color = palette.getPositionColor(ent.player_position);
-            ent.color = palette.getCharacterColor(ent.school, ent.player_position);
-
-            print("#{d} {s}: {s}/{s} ({d} skills) [Padding: {d:.1}]\n", .{
-                i,
-                ent.name,
-                @tagName(ent.school),
-                @tagName(ent.player_position),
-                skill_count,
-                ent.getTotalPadding(),
-            });
-        }
-
-        print("\n=== 4v4 MATCH START ===\n", .{});
-        print("ALLY TEAM (Blue): Player, Ally 1, Ally 2, Ally Healer\n", .{});
-        print("ENEMY TEAM (Red): Enemy 1, Enemy 2, Enemy 3, Enemy Healer\n", .{});
-        print("======================\n\n", .{});
-
-        // Check if gamepad is available and default to Action Camera if so
-        // Skip raylib calls if we might be in headless mode (check later)
-        var has_gamepad = false;
-        var use_action_camera = false;
-
-        // Try to detect gamepad, but guard against headless context
-        if (rl.isGamepadAvailable(0)) {
-            has_gamepad = true;
-            use_action_camera = true;
-        }
-
-        // Set cursor state based on Action Camera (only if not headless)
-        if (use_action_camera) {
-            rl.disableCursor();
-            print("Gamepad detected - Action Camera enabled by default\n", .{});
-        } else {
-            rl.enableCursor();
-            print("Keyboard/Mouse mode - Action Camera disabled by default\n", .{});
-        }
-
-        // Initialize terrain grid
-        // Create a high-resolution grid for detailed snow rendering
-        // 200x200 grid with 10 unit cells = 2000x2000 world coverage
-        // Higher resolution = more vertices = better tessellation-like detail
-        var terrain_grid = TerrainGrid.init(
-            allocator,
-            200, // width (doubled for finer detail)
-            200, // height (doubled for finer detail)
-            10.0, // grid_size (halved - each cell is 10 units for smoother terrain)
-            -1000.0, // world_offset_x
-            -1000.0, // world_offset_z
-        ) catch |err| {
-            print("Failed to initialize terrain grid: {}\n", .{err});
-            @panic("Terrain initialization failed");
-        };
-
-        // Generate initial terrain mesh
-        terrain_grid.generateTerrainMesh();
-
-        print("=== TERRAIN SYSTEM INITIALIZED ===\n", .{});
-        print("Grid: 200x200 cells (10 units each)\n", .{});
-        print("Coverage: 2000x2000 world units\n", .{});
-        print("Vertices: ~160K (high detail)\n", .{});
-        print("Snow accumulation: Active\n", .{});
-        print("==================================\n\n", .{});
-        print("==================================\n\n", .{});
-
-        return GameState{
-            .entities = entities,
-            .controlled_entity_id = player_entity_id,
-            .selected_target = null,
-            .camera = rl.Camera{
-                .position = .{ .x = 0, .y = 600, .z = 700 },
-                .target = .{ .x = 0, .y = 0, .z = 0 },
-                .up = .{ .x = 0, .y = 1, .z = 0 },
-                .fovy = 55.0,
-                .projection = .perspective,
-            },
-            .input_state = input.InputState{
-                .action_camera = use_action_camera,
-            },
-            .ai_states = [_]AIState{
-                .{}, // Player (no AI)
-                .{ .role = .damage_dealer }, // Ally 1
-                .{ .role = .damage_dealer }, // Ally 2
-                .{ .role = .support }, // Ally Healer
-                .{ .role = .damage_dealer }, // Enemy 1
-                .{ .role = .damage_dealer }, // Enemy 2
-                .{ .role = .damage_dealer }, // Enemy 3
-                .{ .role = .support }, // Enemy Healer
-                .{}, // Reserved 1
-                .{}, // Reserved 2
-                .{}, // Reserved 3
-                .{}, // Reserved 4
-            },
-            .rng = prng,
-            .combat_state = .active,
-            .entity_id_gen = id_gen,
-            .vfx_manager = vfx.VFXManager.init(),
-            .terrain_grid = terrain_grid,
-            .allocator = allocator,
-        };
+    /// Initialize headless simulation with pre-built characters.
+    /// Use this when you want full control over team composition.
+    pub fn initWithCharacters(allocator: std.mem.Allocator, characters: []const Character) !GameState {
+        var builder = GameStateBuilder.init(allocator);
+        return builder
+            .withRendering(false)
+            .withPlayerControl(false)
+            .withCharacters(characters)
+            .build();
     }
 
-    /// Initialize game state in headless mode (no raylib window, input, or cursor management)
-    /// Use this for battle simulations that don't need a display
-    pub fn initHeadless(allocator: std.mem.Allocator) !GameState {
-        var id_gen = EntityIdGenerator{};
-
-        // Initialize RNG with current time as seed (needed for random team generation)
-        const timestamp = std.time.timestamp();
-        const seed: u64 = @bitCast(timestamp);
-        var prng = std.Random.DefaultPrng.init(seed);
-        var random = prng.random();
-
-        // Helper to pick random school
-        const all_schools = [_]School{ .private_school, .public_school, .montessori, .homeschool, .waldorf };
-        const pickRandomSchool = struct {
-            fn pick(rng: *std.Random) School {
-                const idx = rng.intRangeAtMost(usize, 0, all_schools.len - 1);
-                return all_schools[idx];
-            }
-        }.pick;
-
-        // Helper to pick random non-healer position
-        const non_healer_positions = [_]Position{ .pitcher, .fielder, .sledder, .shoveler, .animator };
-        const pickRandomPosition = struct {
-            fn pick(rng: *std.Random) Position {
-                const idx = rng.intRangeAtMost(usize, 0, non_healer_positions.len - 1);
-                return non_healer_positions[idx];
-            }
-        }.pick;
-
-        // === 4v4 Team Setup ===
-        // Ally team (blue): [Player, Ally1, Ally2, Healer]
-        // Enemy team (red): [Enemy1, Enemy2, Enemy3, Healer]
-
-        // Ally team positions (front line, spread out) - 4x further apart
-        const ally_positions = [_]rl.Vector3{
-            .{ .x = -80, .y = 0, .z = 400 }, // Player (left-front)
-            .{ .x = 80, .y = 0, .z = 400 }, // Ally1 (right-front)
-            .{ .x = -120, .y = 0, .z = 500 }, // Ally2 (left-back)
-            .{ .x = 0, .y = 0, .z = 550 }, // Healer (center-back)
-        };
-
-        // Enemy team positions (opposite side) - 4x further apart
-        const enemy_positions = [_]rl.Vector3{
-            .{ .x = -80, .y = 0, .z = -400 }, // Enemy1
-            .{ .x = 80, .y = 0, .z = -400 }, // Enemy2
-            .{ .x = -120, .y = 0, .z = -500 }, // Enemy3
-            .{ .x = 0, .y = 0, .z = -550 }, // Enemy Healer
-        };
-
-        // Generate random builds for player + 2 allies + 3 enemies (6 random, 2 healer)
-        const player_school = pickRandomSchool(&random);
-        const player_position = pickRandomPosition(&random);
-
-        var entities = [_]Character{
-            // ===== ALLY TEAM (Blue) =====
-            // Index 0: Player (random school/position)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[0],
-                .previous_position = ally_positions[0],
-                .radius = 12,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Player",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = player_school,
-                .player_position = player_position,
-                .energy = player_school.getMaxEnergy(),
-                .max_energy = player_school.getMaxEnergy(),
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 1: Ally 1 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[1],
-                .previous_position = ally_positions[1],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally 1",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0, // Set after school
-                .max_energy = 0, // Set after school
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 2: Ally 2 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[2],
-                .previous_position = ally_positions[2],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally 2",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 3: Ally Healer (always Thermos)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[3],
-                .previous_position = ally_positions[3],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally Healer",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = .thermos, // Always healer
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-
-            // ===== ENEMY TEAM (Red) =====
-            // Index 4: Enemy 1 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[0],
-                .previous_position = enemy_positions[0],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 1",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 6: Enemy 2 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[1],
-                .previous_position = enemy_positions[1],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 2",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 6: Enemy 3 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[2],
-                .previous_position = enemy_positions[2],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 3",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 7: Enemy Healer (always Thermos)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[3],
-                .previous_position = enemy_positions[3],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy Healer",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = .thermos, // Always healer
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Placeholder slots for 3rd team (indices 8-11)
-            Character{
-                .id = 0,
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 8",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = 0,
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 9",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = 0,
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 10",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = 0,
-                .position = .{ .x = 0, .y = 0, .z = 0 },
-                .previous_position = .{ .x = 0, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 11",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-        };
-
-        // Store player's entity ID
-        const player_entity_id = entities[0].id;
-
-        // Set energy pools based on school and load skills for all entities
-        for (&entities, 0..) |*ent, i| {
-            // Set energy based on school
-            ent.energy = ent.school.getMaxEnergy();
-            ent.max_energy = ent.school.getMaxEnergy();
-
-            // Load skills: Guarantee 1 wall skill in slot 0 (from position), then random fill
-            const position_skills = ent.player_position.getSkills();
-            const school_skills = ent.school.getSkills();
-
-            // FIRST: Find a wall-building skill in position skills
-            var wall_skill_idx: ?usize = null;
-            for (position_skills, 0..) |skill, skill_idx| {
-                if (skill.creates_wall) {
-                    // Found a wall-building skill - randomly decide if we use it
-                    if (random.boolean() or wall_skill_idx == null) {
-                        wall_skill_idx = skill_idx;
-                    }
-                }
-            }
-
-            // Guarantee at least 1 wall skill in slot 0 (from position)
-            var wall_skill_loaded = false;
-            if (wall_skill_idx) |idx| {
-                ent.skill_bar[0] = &position_skills[idx];
-                wall_skill_loaded = true;
-            }
-
-            // Slots 1-3: Randomly pick 3 more position skills (can include more walls by chance)
-            var selected_count: usize = if (wall_skill_loaded) 1 else 0; // Start at 1 if we loaded wall
-            var attempts: usize = 0;
-            const max_attempts = position_skills.len * 3;
-
-            while (selected_count < 4 and attempts < max_attempts) : (attempts += 1) {
-                if (position_skills.len == 0) break;
-
-                const random_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
-
-                // Check if already loaded in slots 0-3
-                var already_loaded = false;
-                for (0..selected_count) |check_idx| {
-                    if (ent.skill_bar[check_idx] == &position_skills[random_idx]) {
-                        already_loaded = true;
-                        break;
-                    }
-                }
-
-                if (!already_loaded) {
-                    ent.skill_bar[selected_count] = &position_skills[random_idx];
-                    selected_count += 1;
-                }
-            }
-
-            // Fallback: if no wall skill found in position, fill slot 0 with random position skill
-            // (Pitcher and Sledder don't have wall builders, only wall breakers)
-            if (!wall_skill_loaded and position_skills.len > 0) {
-                const fallback_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
-                ent.skill_bar[0] = &position_skills[fallback_idx];
-            }
-
-            // Slots 5-8: Randomly pick 4 school skills
-            selected_count = 0;
-            attempts = 0;
-
-            while (selected_count < 4 and attempts < max_attempts) : (attempts += 1) {
-                if (school_skills.len == 0) break;
-
-                const random_idx = random.intRangeAtMost(usize, 0, school_skills.len - 1);
-
-                // Check if already loaded in slots 4-7
-                var already_loaded = false;
-                for (0..selected_count) |check_idx| {
-                    if (ent.skill_bar[4 + check_idx] == &school_skills[random_idx]) {
-                        already_loaded = true;
-                        break;
-                    }
-                }
-
-                if (!already_loaded) {
-                    ent.skill_bar[4 + selected_count] = &school_skills[random_idx];
-                    selected_count += 1;
-                }
-            }
-
-            // Count how many skills were loaded
-            var skill_count: usize = 0;
-            for (ent.skill_bar) |maybe_skill| {
-                if (maybe_skill != null) skill_count += 1;
-            }
-
-            // Assign random equipment loadouts based on character type
-            assignEquipment(ent, &random);
-
-            // Set character colors for halftone rendering
-            ent.school_color = palette.getSchoolColor(ent.school);
-            ent.position_color = palette.getPositionColor(ent.player_position);
-            ent.color = palette.getCharacterColor(ent.school, ent.player_position);
-
-            print("#{d} {s}: {s}/{s} ({d} skills) [Padding: {d:.1}]\n", .{
-                i,
-                ent.name,
-                @tagName(ent.school),
-                @tagName(ent.player_position),
-                skill_count,
-                ent.getTotalPadding(),
-            });
-        }
-
-        print("\n=== 4v4 MATCH START (HEADLESS) ===\n", .{});
-        print("ALLY TEAM (Blue): Player, Ally 1, Ally 2, Ally Healer\n", .{});
-        print("ENEMY TEAM (Red): Enemy 1, Enemy 2, Enemy 3, Enemy Healer\n", .{});
-        print("====================================\n\n", .{});
-
-        // Initialize terrain grid
-        // Create a 40x40 grid with 50 unit cells, covering 2000x2000 world space (4x larger)
-        // Centered around the battlefield (offset by -1000, -1000)
-        const terrain_grid = TerrainGrid.initHeadless(
-            allocator,
-            100, // width (increased for better detail)
-            100, // height (increased for better detail)
-            20.0, // grid_size (each cell is 20 units - matches character scale)
-            -1000.0, // world_offset_x
-            -1000.0, // world_offset_z
-        ) catch |err| {
-            print("Failed to initialize terrain grid: {}\n", .{err});
-            @panic("Terrain initialization failed");
-        };
-
-        // Skip mesh generation in headless mode (requires graphics context)
-        // Terrain system still works for movement calculations
-
-        return GameState{
-            .entities = entities,
-            .controlled_entity_id = player_entity_id,
-            .selected_target = null,
-            .camera = rl.Camera{
-                .position = .{ .x = 0, .y = 600, .z = 700 },
-                .target = .{ .x = 0, .y = 0, .z = 0 },
-                .up = .{ .x = 0, .y = 1, .z = 0 },
-                .fovy = 55.0,
-                .projection = .perspective,
-            },
-            .input_state = input.InputState{
-                .action_camera = false,
-            },
-            .ai_states = [_]AIState{
-                .{}, // Player (no AI)
-                .{ .role = .damage_dealer }, // Ally 1
-                .{ .role = .damage_dealer }, // Ally 2
-                .{ .role = .support }, // Ally Healer
-                .{ .role = .damage_dealer }, // Enemy 1
-                .{ .role = .damage_dealer }, // Enemy 2
-                .{ .role = .damage_dealer }, // Enemy 3
-                .{ .role = .support }, // Enemy Healer
-                .{}, // Reserved 1
-                .{}, // Reserved 2
-                .{}, // Reserved 3
-                .{}, // Reserved 4
-            },
-            .rng = prng,
-            .combat_state = .active,
-            .entity_id_gen = id_gen,
-            .vfx_manager = vfx.VFXManager.init(),
-            .terrain_grid = terrain_grid,
-            .allocator = allocator,
-            .simulation_mode = true,
-        };
-    }
-
-    /// Initialize a pure AI vs AI match (4v4, no player)
-    /// Used for balance testing simulations where all entities are AI-controlled
-    pub fn initHeadlessAIOnly(allocator: std.mem.Allocator) !GameState {
-        var id_gen = EntityIdGenerator{};
-
-        // Initialize RNG with current time as seed (needed for random team generation)
-        const timestamp = std.time.timestamp();
-        const seed: u64 = @bitCast(timestamp);
-        var prng = std.Random.DefaultPrng.init(seed);
-        var random = prng.random();
-
-        // Helper to pick random school
-        const all_schools = [_]School{ .private_school, .public_school, .montessori, .homeschool, .waldorf };
-        const pickRandomSchool = struct {
-            fn pick(rng: *std.Random) School {
-                const idx = rng.intRangeAtMost(usize, 0, all_schools.len - 1);
-                return all_schools[idx];
-            }
-        }.pick;
-
-        // Helper to pick random non-healer position
-        const non_healer_positions = [_]Position{ .pitcher, .fielder, .sledder, .shoveler, .animator };
-        const pickRandomPosition = struct {
-            fn pick(rng: *std.Random) Position {
-                const idx = rng.intRangeAtMost(usize, 0, non_healer_positions.len - 1);
-                return non_healer_positions[idx];
-            }
-        }.pick;
-
-        // === 4v4 AI vs AI Team Setup ===
-        // Ally team (blue): [AI1, AI2, AI3, Healer]
-        // Enemy team (red): [AI1, AI2, AI3, Healer]
-        // No player entity - all are AI controlled
-
-        // Ally team positions (center of arena, away from terrain walls)
-        const ally_positions = [_]rl.Vector3{
-            .{ .x = -80, .y = 0, .z = 400 }, // Ally1
-            .{ .x = 80, .y = 0, .z = 400 }, // Ally2
-            .{ .x = -120, .y = 0, .z = 350 }, // Ally3
-            .{ .x = 0, .y = 0, .z = 450 }, // Healer
-        };
-
-        // Enemy team positions (opposite side, center of arena)
-        const enemy_positions = [_]rl.Vector3{
-            .{ .x = -80, .y = 0, .z = -400 }, // Enemy1
-            .{ .x = 80, .y = 0, .z = -400 }, // Enemy2
-            .{ .x = -120, .y = 0, .z = -350 }, // Enemy3
-            .{ .x = 0, .y = 0, .z = -450 }, // Enemy Healer
-        };
-
-        var entities = [_]Character{
-            // ===== ALLY TEAM (Blue) - All AI =====
-            // Index 0: Ally 1 (random school/position)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[0],
-                .previous_position = ally_positions[0],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally 1",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 1: Ally 2 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[1],
-                .previous_position = ally_positions[1],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally 2",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 2: Ally 3 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[2],
-                .previous_position = ally_positions[2],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally 3",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 3: Ally Healer (always Thermos)
-            Character{
-                .id = id_gen.generate(),
-                .position = ally_positions[3],
-                .previous_position = ally_positions[3],
-                .radius = 10,
-                .color = .blue,
-                .school_color = .blue,
-                .position_color = .blue,
-                .name = "Ally Healer",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = pickRandomSchool(&random),
-                .player_position = .thermos,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-
-            // ===== ENEMY TEAM (Red) - All AI =====
-            // Index 4: Enemy 1 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[0],
-                .previous_position = enemy_positions[0],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 1",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 5: Enemy 2 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[1],
-                .previous_position = enemy_positions[1],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 2",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 6: Enemy 3 (random)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[2],
-                .previous_position = enemy_positions[2],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy 3",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = pickRandomPosition(&random),
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            // Index 7: Enemy Healer (always Thermos)
-            Character{
-                .id = id_gen.generate(),
-                .position = enemy_positions[3],
-                .previous_position = enemy_positions[3],
-                .radius = 10,
-                .color = .red,
-                .school_color = .red,
-                .position_color = .red,
-                .name = "Enemy Healer",
-                .warmth = 150,
-                .max_warmth = 150,
-                .team = .red,
-                .school = pickRandomSchool(&random),
-                .player_position = .thermos, // Always healer
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-
-            // ===== THIRD TEAM - Placeholder slots (for future 3-team matches) =====
-            // Index 8-11: Reserved for 3rd team (neutral/spectator/NPC team)
-            // These are initialized as dummy characters and can be populated via factory
-            Character{
-                .id = id_gen.generate(),
-                .position = .{ .x = -500, .y = 0, .z = 0 },
-                .previous_position = .{ .x = -500, .y = 0, .z = 0 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 1",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue, // Will be set by factory
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = id_gen.generate(),
-                .position = .{ .x = -500, .y = 0, .z = 50 },
-                .previous_position = .{ .x = -500, .y = 0, .z = 50 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 2",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = id_gen.generate(),
-                .position = .{ .x = -500, .y = 0, .z = 100 },
-                .previous_position = .{ .x = -500, .y = 0, .z = 100 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 3",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-            Character{
-                .id = id_gen.generate(),
-                .position = .{ .x = -500, .y = 0, .z = 150 },
-                .previous_position = .{ .x = -500, .y = 0, .z = 150 },
-                .radius = 10,
-                .color = .yellow,
-                .school_color = .yellow,
-                .position_color = .yellow,
-                .name = "Reserved 4",
-                .warmth = 0,
-                .max_warmth = 150,
-                .team = .blue,
-                .school = .private_school,
-                .player_position = .pitcher,
-                .energy = 0,
-                .max_energy = 0,
-                .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                .selected_skill = 0,
-            },
-        };
-
-        // Set energy to school max for all entities
-        for (0..entities.len) |i| {
-            entities[i].energy = entities[i].school.getMaxEnergy();
-            entities[i].max_energy = entities[i].school.getMaxEnergy();
-        }
-
-        // Load skills for all entities (position + school skills)
-        for (0..entities.len) |i| {
-            var ent = &entities[i];
-            const position_skills = ent.player_position.getSkills();
-            const school_skills = ent.school.getSkills();
-
-            // FIRST: Find a wall-building skill in position skills
-            var wall_skill_idx: ?usize = null;
-            for (position_skills, 0..) |skill, skill_idx| {
-                if (skill.creates_wall) {
-                    if (random.boolean() or wall_skill_idx == null) {
-                        wall_skill_idx = skill_idx;
-                    }
-                }
-            }
-
-            // Guarantee at least 1 wall skill in slot 0 (from position)
-            var wall_skill_loaded = false;
-            if (wall_skill_idx) |idx| {
-                ent.skill_bar[0] = &position_skills[idx];
-                wall_skill_loaded = true;
-            }
-
-            // Slots 1-3: Randomly pick 3 more position skills
-            var selected_count: usize = if (wall_skill_loaded) 1 else 0;
-            var attempts: usize = 0;
-            const max_attempts = position_skills.len * 3;
-
-            while (selected_count < 4 and attempts < max_attempts) : (attempts += 1) {
-                if (position_skills.len == 0) break;
-
-                const random_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
-
-                var already_loaded = false;
-                for (0..selected_count) |check_idx| {
-                    if (ent.skill_bar[check_idx] == &position_skills[random_idx]) {
-                        already_loaded = true;
-                        break;
-                    }
-                }
-
-                if (!already_loaded) {
-                    ent.skill_bar[selected_count] = &position_skills[random_idx];
-                    selected_count += 1;
-                }
-            }
-
-            // Fallback: if no wall skill found in position, fill slot 0 with random position skill
-            if (!wall_skill_loaded and position_skills.len > 0) {
-                const fallback_idx = random.intRangeAtMost(usize, 0, position_skills.len - 1);
-                ent.skill_bar[0] = &position_skills[fallback_idx];
-            }
-
-            // Slots 4-7: Randomly pick 4 school skills
-            selected_count = 0;
-            attempts = 0;
-            const max_school_attempts = school_skills.len * 3;
-
-            while (selected_count < 4 and attempts < max_school_attempts) : (attempts += 1) {
-                if (school_skills.len == 0) break;
-
-                const random_idx = random.intRangeAtMost(usize, 0, school_skills.len - 1);
-
-                var already_loaded = false;
-                for (0..selected_count) |check_idx| {
-                    if (ent.skill_bar[4 + check_idx] == &school_skills[random_idx]) {
-                        already_loaded = true;
-                        break;
-                    }
-                }
-
-                if (!already_loaded) {
-                    ent.skill_bar[4 + selected_count] = &school_skills[random_idx];
-                    selected_count += 1;
-                }
-            }
-        }
-
-        // Create terrain grid (headless mode - no mesh generation)
-        const terrain_grid = try terrain.TerrainGrid.initHeadless(
-            allocator,
-            100, // width
-            100, // height
-            20.0, // grid_size
-            -1000.0, // world_offset_x
-            -1000.0, // world_offset_z
-        );
-
-        // Create dummy AIState for all 8 entities
-        // Create a dummy entity ID that won't match any real entity (for AI-only mode)
-        // This ensures all entities get AI control
-        const dummy_entity_id: EntityId = 999; // Invalid ID that won't match any entity
-
-        // Initialize AI states with skill cooldown ready to cast immediately
-        return GameState{
-            .entities = entities,
-            .controlled_entity_id = dummy_entity_id,
-            .selected_target = null,
-            .camera = rl.Camera{
-                .position = .{ .x = 0, .y = 600, .z = 700 },
-                .target = .{ .x = 0, .y = 0, .z = 0 },
-                .up = .{ .x = 0, .y = 1, .z = 0 },
-                .fovy = 55.0,
-                .projection = .perspective,
-            },
-            .input_state = input.InputState{
-                .action_camera = false,
-            },
-            .ai_states = [_]AIState{
-                .{ .role = .damage_dealer, .skill_cooldown = 0.0 }, // Ally 1 - READY TO CAST
-                .{ .role = .damage_dealer, .skill_cooldown = 0.0 }, // Ally 2 - READY TO CAST
-                .{ .role = .damage_dealer, .skill_cooldown = 0.0 }, // Ally 3 - READY TO CAST
-                .{ .role = .support, .skill_cooldown = 0.0 }, // Ally Healer - READY TO CAST
-                .{ .role = .damage_dealer, .skill_cooldown = 0.0 }, // Enemy 1 - READY TO CAST
-                .{ .role = .damage_dealer, .skill_cooldown = 0.0 }, // Enemy 2 - READY TO CAST
-                .{ .role = .damage_dealer, .skill_cooldown = 0.0 }, // Enemy 3 - READY TO CAST
-                .{ .role = .support, .skill_cooldown = 0.0 }, // Enemy Healer - READY TO CAST
-                .{}, // Reserved 1
-                .{}, // Reserved 2
-                .{}, // Reserved 3
-                .{}, // Reserved 4
-            },
-            .rng = prng,
-            .combat_state = .active,
-            .entity_id_gen = id_gen,
-            .vfx_manager = vfx.VFXManager.init(),
-            .terrain_grid = terrain_grid,
-            .allocator = allocator,
-            .simulation_mode = true,
-        };
-    }
     /// Clean up allocated resources. Must be called before GameState goes out of scope.
     pub fn deinit(self: *GameState) void {
         self.terrain_grid.deinit();
     }
+
+    // ============================================
+    // ENTITY ACCESS HELPERS
+    // ============================================
 
     // Entity lookup helpers for tab-targeting
     pub fn getEntityById(self: *GameState, id: EntityId) ?*Character {
@@ -1615,7 +613,10 @@ pub const GameState = struct {
     /// Main update loop. Accumulates frame time and processes fixed-timestep ticks at 20Hz.
     /// Input is polled every frame (60fps) but game logic runs at 20fps for determinism.
     pub fn update(self: *GameState) void {
-        const frame_time = rl.getFrameTime();
+        // Clamp frame time to prevent spiral of death (e.g., after breakpoint or long pause)
+        // Max 250ms ensures we don't process too many ticks at once
+        const raw_frame_time = rl.getFrameTime();
+        const frame_time = @min(raw_frame_time, 0.25);
 
         // Poll input EVERY FRAME (60fps) to buffer all inputs
         // This prevents missing rapid inputs like Tab presses between ticks
@@ -1858,238 +859,5 @@ pub const GameState = struct {
     pub fn drawUI(self: *GameState) void {
         const player = self.getPlayerConst();
         ui.drawUI(player, &self.entities, self.selected_target, &self.input_state, self.camera);
-    }
-
-    /// Initialize game state using factory pattern (builds all teams automatically)
-    pub fn initWithFactory(allocator: std.mem.Allocator) !GameState {
-        const factory_mod = @import("factory.zig");
-        const ArenaBuilder = factory_mod.ArenaBuilder;
-        const CharacterBuilder = factory_mod.CharacterBuilder;
-
-        var id_gen = EntityIdGenerator{};
-
-        // Initialize RNG
-        const timestamp = std.time.timestamp();
-        const seed: u64 = @bitCast(timestamp);
-        var prng = std.Random.DefaultPrng.init(seed);
-        var rng = prng.random();
-
-        // Build arena with teams using factory
-        var arena = ArenaBuilder.init(allocator, &rng, &id_gen);
-        defer arena.deinit();
-
-        // Blue team (allies)
-        {
-            const blue_team = try arena.addTeam();
-            _ = blue_team
-                .withTeam(.blue)
-                .withColor(.blue)
-                .withBasePosition(.{ .x = -100, .y = 0, .z = 300 })
-                .withSpacing(80.0);
-
-            // Add 4 characters to blue team
-            for (0..4) |_| {
-                var builder = CharacterBuilder.init(allocator, &rng, &id_gen);
-                _ = builder.withTeam(.blue).withColor(.blue);
-                try blue_team.addCharacter(&builder);
-            }
-        }
-
-        // Red team (enemies)
-        {
-            const red_team = try arena.addTeam();
-            _ = red_team
-                .withTeam(.red)
-                .withColor(.red)
-                .withBasePosition(.{ .x = 100, .y = 0, .z = -300 })
-                .withSpacing(80.0);
-
-            // Add 4 characters to red team
-            for (0..4) |_| {
-                var builder = CharacterBuilder.init(allocator, &rng, &id_gen);
-                _ = builder.withTeam(.red).withColor(.red);
-                try red_team.addCharacter(&builder);
-            }
-        }
-
-        // Collect all characters from arena
-        var all_chars: std.array_list.Aligned(Character, null) = .{};
-        defer all_chars.deinit(allocator);
-
-        for (0..arena.teamCount()) |team_idx| {
-            if (arena.getTeam(team_idx)) |team| {
-                for (team.characters.items) |char| {
-                    try all_chars.append(allocator, char);
-                }
-            }
-        }
-
-        // Convert to entities array
-        var entities: [MAX_ENTITIES]Character = undefined;
-        for (all_chars.items, 0..) |char, i| {
-            entities[i] = char;
-        }
-
-        // Fill remaining slots with dead dummy characters
-        for (all_chars.items.len..MAX_ENTITIES) |i| {
-            entities[i] = createDummyCharacterForSlot(&id_gen, i);
-        }
-
-        // Set energy pools and load skills for all entities
-        for (&entities) |*ent| {
-            ent.energy = ent.school.getMaxEnergy();
-            ent.max_energy = ent.school.getMaxEnergy();
-
-            // Load skills: Guarantee 1 wall skill in slot 0, then random fill
-            const position_skills = ent.player_position.getSkills();
-            const school_skills = ent.school.getSkills();
-
-            // FIRST: Find a wall-building skill in position skills
-            var found_wall = false;
-            for (position_skills) |skill| {
-                if (skill.creates_wall) {
-                    ent.skill_bar[0] = &skill;
-                    found_wall = true;
-                    break;
-                }
-            }
-
-            if (!found_wall) {
-                // Fallback: just use first position skill
-                if (position_skills.len > 0) {
-                    ent.skill_bar[0] = &position_skills[0];
-                }
-            }
-
-            // Fill slots 1-3 with position skills
-            var slot_idx: usize = 1;
-            var attempts: usize = 0;
-            while (slot_idx < 4 and attempts < position_skills.len * 3) : (attempts += 1) {
-                if (position_skills.len == 0) break;
-                if (ent.skill_bar[slot_idx] != null) {
-                    slot_idx += 1;
-                    continue;
-                }
-
-                const random_idx = rng.intRangeAtMost(usize, 0, position_skills.len - 1);
-                const skill = &position_skills[random_idx];
-
-                // Check not already loaded
-                var already_loaded = false;
-                for (0..slot_idx) |check_idx| {
-                    if (ent.skill_bar[check_idx] == skill) {
-                        already_loaded = true;
-                        break;
-                    }
-                }
-
-                if (!already_loaded) {
-                    ent.skill_bar[slot_idx] = skill;
-                    slot_idx += 1;
-                }
-            }
-
-            // Fill slots 4-7 with school skills
-            slot_idx = 4;
-            attempts = 0;
-            while (slot_idx < 8 and attempts < school_skills.len * 3) : (attempts += 1) {
-                if (school_skills.len == 0) break;
-                if (ent.skill_bar[slot_idx] != null) {
-                    slot_idx += 1;
-                    continue;
-                }
-
-                const random_idx = rng.intRangeAtMost(usize, 0, school_skills.len - 1);
-                const skill = &school_skills[random_idx];
-
-                var already_loaded = false;
-                for (0..slot_idx) |check_idx| {
-                    if (ent.skill_bar[check_idx] == skill) {
-                        already_loaded = true;
-                        break;
-                    }
-                }
-
-                if (!already_loaded) {
-                    ent.skill_bar[slot_idx] = skill;
-                    slot_idx += 1;
-                }
-            }
-        }
-
-        // Create terrain grid
-        const terrain_grid = try TerrainGrid.init(
-            allocator,
-            100,
-            100,
-            20.0,
-            -1000.0,
-            -1000.0,
-        );
-
-        // Player is always the first entity (index 0)
-        const player_id = entities[0].id;
-
-        return GameState{
-            .entities = entities,
-            .controlled_entity_id = player_id,
-            .selected_target = null,
-            .camera = .{
-                .position = .{ .x = 0, .y = 600, .z = 700 },
-                .target = .{ .x = 0, .y = 0, .z = 0 },
-                .up = .{ .x = 0, .y = 1, .z = 0 },
-                .fovy = 55.0,
-                .projection = .perspective,
-            },
-            .input_state = input.InputState{
-                .action_camera = false,
-            },
-            .ai_states = [_]ai.AIState{
-                .{ .role = .damage_dealer },
-                .{ .role = .damage_dealer },
-                .{ .role = .damage_dealer },
-                .{ .role = .support },
-                .{ .role = .damage_dealer },
-                .{ .role = .damage_dealer },
-                .{ .role = .damage_dealer },
-                .{ .role = .support },
-                .{ .role = .damage_dealer },
-                .{ .role = .damage_dealer },
-                .{ .role = .damage_dealer },
-                .{ .role = .support },
-            },
-            .rng = prng,
-            .combat_state = .active,
-            .entity_id_gen = id_gen,
-            .vfx_manager = vfx.VFXManager.init(),
-            .terrain_grid = terrain_grid,
-            .allocator = allocator,
-            .simulation_mode = false,
-        };
-    }
-
-    /// Helper: Create a dummy character for unused entity slots
-    fn createDummyCharacterForSlot(id_gen: *EntityIdGenerator, slot_idx: usize) Character {
-        _ = slot_idx; // Unused for now, but kept for future per-slot customization
-        return Character{
-            .id = id_gen.generate(),
-            .position = .{ .x = 0, .y = -1000, .z = 0 },
-            .previous_position = .{ .x = 0, .y = -1000, .z = 0 },
-            .radius = 1.0,
-            .color = .black,
-            .school_color = .black,
-            .position_color = .black,
-            .name = "Unused",
-            .warmth = 0,
-            .max_warmth = 1,
-            .team = .blue,
-            .school = school.School.montessori,
-            .player_position = position.Position.pitcher,
-            .energy = 0,
-            .max_energy = 1,
-            .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-            .gear = [_]?*const character.Gear{null} ** 6,
-            .selected_skill = 0,
-        };
     }
 };
