@@ -268,15 +268,15 @@ const pitcher_skills = [_]Skill{
         .mechanic = .ready,
         .energy_cost = 8,
         .target_type = .ground,
-        .cast_range = 80.0,
+        .cast_range = 150.0, // Increased for ground targeting
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 25000,
         .creates_wall = true,
-        .wall_length = 40.0, // Smaller, personal mound
+        .wall_length = 80.0, // Increased from 40 - more useful mound
         .wall_height = 20.0,
         .wall_thickness = 30.0, // Wider base
-        .wall_distance_from_caster = 20.0, // Very close
+        .wall_distance_from_caster = 20.0, // Legacy field (unused with ground targeting)
         .terrain_effect = skills.TerrainEffect.packedSnow(.circle),
         .aoe_radius = 40.0,
         // TODO: Grant damage buff when standing on elevated terrain
@@ -456,20 +456,20 @@ const fielder_skills = [_]Skill{
     // 11. WALL: Quick Barrier - fast defensive wall
     .{
         .name = "Quick Barrier",
-        .description = "Stance. Build a small wall perpendicular to your facing.",
+        .description = "Stance. Build a small wall at target location.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 5,
         .target_type = .ground,
-        .cast_range = 100.0,
+        .cast_range = 200.0, // Increased for ground targeting
         .activation_time_ms = 0,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         .creates_wall = true,
-        .wall_length = 50.0,
+        .wall_length = 100.0, // Increased from 50 for better coverage
         .wall_height = 25.0,
         .wall_thickness = 15.0,
-        .wall_distance_from_caster = 35.0,
+        .wall_distance_from_caster = 35.0, // Legacy field (unused with ground targeting)
     },
 };
 
@@ -670,21 +670,21 @@ const sledder_skills = [_]Skill{
     // 12. WALL: Speed Ramp - angled wall for mobility
     .{
         .name = "Speed Ramp",
-        .description = "Stance. Build an angled ramp. You gain +25% movement speed for 8 seconds.",
+        .description = "Stance. Build an angled ramp at target location. You gain +25% movement speed for 8 seconds.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 7,
         .target_type = .ground,
-        .cast_range = 100.0,
+        .cast_range = 200.0, // Increased for ground targeting
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
         .duration_ms = 8000,
         .creates_wall = true,
-        .wall_length = 55.0,
+        .wall_length = 110.0, // Increased from 55 for better ramp
         .wall_height = 18.0, // Lower than normal walls
         .wall_thickness = 25.0,
-        .wall_distance_from_caster = 30.0,
+        .wall_distance_from_caster = 30.0, // Legacy field (unused with ground targeting)
         .cozies = &sledder_sure_footed, // Speed boost
         // TODO: Make wall "ramp-shaped" instead of vertical
     },
@@ -746,20 +746,20 @@ const shoveler_skills = [_]Skill{
     // 3. Build snow wall
     .{
         .name = "Snow Wall",
-        .description = "Stance. Build a snow wall perpendicular to your facing. Walls block direct projectiles.",
+        .description = "Stance. Build a snow wall at target location. Walls block direct projectiles.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 7,
         .target_type = .ground,
-        .cast_range = 100.0,
+        .cast_range = 200.0, // Increased for ground targeting
         .activation_time_ms = 0,
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
         .creates_wall = true,
-        .wall_length = 60.0,
+        .wall_length = 120.0, // Increased from 60 for better coverage
         .wall_height = 30.0,
         .wall_thickness = 20.0,
-        .wall_distance_from_caster = 40.0,
+        .wall_distance_from_caster = 40.0, // Legacy field (unused with ground targeting)
     },
 
     // 4. Counter attack - damage when attacked
@@ -810,20 +810,20 @@ const shoveler_skills = [_]Skill{
     // 7. Build ice wall
     .{
         .name = "Ice Wall",
-        .description = "Trick. Build a tall ice wall. Walls block direct projectiles and slow climbers.",
+        .description = "Trick. Build a tall ice wall at target location. Walls block direct projectiles and slow climbers.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 10,
-        .cast_range = 200.0,
+        .cast_range = 300.0, // Increased for ground targeting - long range wall placement
         .target_type = .ground,
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 20000,
         .creates_wall = true,
-        .wall_length = 80.0,
+        .wall_length = 150.0, // Increased from 80 - massive ice wall
         .wall_height = 40.0,
         .wall_thickness = 25.0,
-        .wall_distance_from_caster = 50.0,
+        .wall_distance_from_caster = 50.0, // Legacy field (unused with ground targeting)
         .terrain_effect = skills.TerrainEffect.ice(.circle), // Also creates icy ground
         .aoe_radius = 30.0,
     },
@@ -1031,20 +1031,20 @@ const animator_skills = [_]Skill{
     // 11. WALL: Snowman Wall - animated defensive barrier
     .{
         .name = "Snowman Wall",
-        .description = "Trick. Build a wall of snowmen perpendicular to your facing. They provide cover.",
+        .description = "Trick. Build a wall of snowmen at target location. They provide cover.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 10,
         .target_type = .ground,
-        .cast_range = 180.0,
+        .cast_range = 250.0, // Increased for ground targeting
         .activation_time_ms = 2000,
         .aftercast_ms = 750,
         .recharge_time_ms = 25000,
         .creates_wall = true,
-        .wall_length = 70.0,
+        .wall_length = 140.0, // Increased from 70 - snowmen spread out
         .wall_height = 35.0,
         .wall_thickness = 25.0,
-        .wall_distance_from_caster = 45.0,
+        .wall_distance_from_caster = 45.0, // Legacy field (unused with ground targeting)
     },
 };
 
@@ -1235,19 +1235,19 @@ const thermos_skills = [_]Skill{
     // 11. WALL: Shelter - protective wall for allies
     .{
         .name = "Shelter",
-        .description = "Gesture. Build a warm wall perpendicular to your facing. Protects allies from projectiles.",
+        .description = "Gesture. Build a warm wall at target location. Protects allies from projectiles.",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 8,
         .target_type = .ground,
-        .cast_range = 180.0,
+        .cast_range = 250.0, // Increased for ground targeting
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 18000,
         .creates_wall = true,
-        .wall_length = 70.0,
+        .wall_length = 130.0, // Increased from 70 for better shelter coverage
         .wall_height = 30.0,
         .wall_thickness = 20.0,
-        .wall_distance_from_caster = 50.0,
+        .wall_distance_from_caster = 50.0, // Legacy field (unused with ground targeting)
     },
 };

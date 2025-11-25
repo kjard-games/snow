@@ -5,11 +5,13 @@ const targeting = @import("targeting.zig");
 const combat = @import("combat.zig");
 const movement = @import("movement.zig");
 const entity_types = @import("entity.zig");
+const ground_targeting = @import("ground_targeting.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
 const MovementIntent = movement.MovementIntent;
 const EntityId = entity_types.EntityId;
+const GroundTargetingState = ground_targeting.GroundTargetingState;
 const print = std.debug.print;
 
 // Camera constants
@@ -59,6 +61,13 @@ pub const InputState = struct {
     // Skill tooltip state (updated every frame)
     hovered_skill_index: ?u8 = null, // Mouse hover detection
     inspected_skill_index: ?u8 = null, // Controller inspection (Q/E to cycle)
+
+    // Ground targeting state (for AoE/wall skills)
+    ground_targeting: GroundTargetingState = .{},
+
+    // Ground targeting buffered inputs
+    buffered_ground_target_confirm: bool = false,
+    buffered_ground_target_cancel: bool = false,
 };
 
 // Input Command - Represents player input for ONE tick
@@ -378,6 +387,73 @@ pub fn pollInput(
     // Clamp pitch
     input_state.camera_pitch = @max(MIN_CAMERA_PITCH, @min(MAX_CAMERA_PITCH, input_state.camera_pitch));
 
+    // === GROUND TARGETING UPDATE (every frame for smooth preview) ===
+    if (input_state.ground_targeting.active) {
+        // Get player position (entities[0] is player)
+        const player_pos = if (entities.len > 0) entities[0].position else rl.Vector3{ .x = 0, .y = 0, .z = 0 };
+
+        if (input_state.action_camera or rl.isGamepadAvailable(0)) {
+            // Gamepad/Action Camera mode: Use right stick to aim
+            if (rl.isGamepadAvailable(0)) {
+                const right_x = rl.getGamepadAxisMovement(0, .right_x);
+                const right_y = rl.getGamepadAxisMovement(0, .right_y);
+                input_state.ground_targeting.adjustAim(right_x, right_y, input_state.camera_angle, player_pos);
+            } else {
+                // Action camera without gamepad: use mouse delta to adjust aim
+                const mouse_delta = rl.getMouseDelta();
+                const aim_adjust_x = mouse_delta.x * 0.005; // Sensitivity
+                const aim_adjust_y = mouse_delta.y * 0.02;
+                input_state.ground_targeting.adjustAim(aim_adjust_x, aim_adjust_y, input_state.camera_angle, player_pos);
+            }
+        } else {
+            // Mouse mode: Update target position from mouse cursor
+            input_state.ground_targeting.updateTargetFromMouse(player_pos, camera.*);
+        }
+
+        // === GROUND TARGETING CONFIRM/CANCEL (every frame) ===
+        var confirm_ground_target = false;
+        var cancel_ground_target = false;
+
+        // Mouse: Left click confirms, Right click cancels
+        if (!input_state.action_camera) {
+            if (rl.isMouseButtonPressed(.left)) {
+                confirm_ground_target = true;
+            }
+            if (rl.isMouseButtonPressed(.right)) {
+                cancel_ground_target = true;
+            }
+        }
+
+        // Keyboard: ESC cancels, Enter confirms
+        if (rl.isKeyPressed(.escape)) {
+            cancel_ground_target = true;
+        }
+        if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.kp_enter)) {
+            confirm_ground_target = true;
+        }
+
+        // Gamepad: A (right_face_down) confirms, B (right_face_right) cancels
+        if (rl.isGamepadAvailable(0)) {
+            if (rl.isGamepadButtonPressed(0, .right_face_down)) {
+                confirm_ground_target = true;
+            }
+            if (rl.isGamepadButtonPressed(0, .right_face_right)) {
+                cancel_ground_target = true;
+            }
+        }
+
+        // Buffer the confirm/cancel (will be processed in handleInput at tick rate)
+        if (confirm_ground_target) {
+            input_state.buffered_ground_target_confirm = true;
+        }
+        if (cancel_ground_target) {
+            input_state.buffered_ground_target_cancel = true;
+        }
+
+        // Skip normal click-to-target/click-to-move when ground targeting is active
+        return;
+    }
+
     // === CLICK-TO-TARGET & CLICK-TO-MOVE (buffered) ===
     if (rl.isMouseButtonPressed(.left)) {
         const mouse_pos = rl.getMousePosition();
@@ -625,6 +701,39 @@ pub fn handleInput(
         player.cancelCasting();
     }
 
+    // === GROUND TARGETING CONFIRM/CANCEL (from buffered inputs) ===
+    if (input_state.ground_targeting.active) {
+        if (input_state.buffered_ground_target_cancel) {
+            print("Ground targeting cancelled\n", .{});
+            input_state.ground_targeting.cancel();
+            input_state.buffered_ground_target_cancel = false;
+        } else if (input_state.buffered_ground_target_confirm) {
+            // Cast the skill at the target position
+            const skill_idx = input_state.ground_targeting.skill_index;
+            const target_pos = input_state.ground_targeting.target_position;
+
+            if (input_state.ground_targeting.is_valid) {
+                const skill = input_state.ground_targeting.skill orelse {
+                    input_state.ground_targeting.cancel();
+                    input_state.buffered_ground_target_confirm = false;
+                    return MovementIntent{
+                        .local_x = 0,
+                        .local_z = 0,
+                        .facing_angle = input_state.camera_angle,
+                        .apply_penalties = true,
+                    };
+                };
+                print("Casting {s} at ground position ({d:.0}, {d:.0})\n", .{ skill.name, target_pos.x, target_pos.z });
+                _ = combat.tryStartCastAtGround(player, skill_idx, target_pos, rng, vfx_manager, terrain_grid, null);
+            } else {
+                print("Target out of range!\n", .{});
+            }
+
+            input_state.ground_targeting.cancel();
+            input_state.buffered_ground_target_confirm = false;
+        }
+    }
+
     // === SKILL USAGE (from buffered inputs) ===
     for (input_state.buffered_skills, 0..) |pressed, i| {
         if (pressed) {
@@ -840,6 +949,8 @@ pub fn handleInput(
 }
 
 fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityId, skill_index: u8, rng: *std.Random, vfx_manager: *@import("vfx.zig").VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid, input_state: *InputState, camera: *const rl.Camera) void {
+    _ = camera;
+
     if (skill_index >= player.skill_bar.len) return;
 
     const skill = player.skill_bar[skill_index] orelse {
@@ -847,80 +958,18 @@ fn useSkill(player: *Character, entities: []Character, selected_target: ?EntityI
         return;
     };
 
-    // QUICK-CAST for ground-targeted skills
+    // Ground-targeted skills: Enter ground targeting mode
     if (skill.target_type == .ground) {
-        var ground_position: rl.Vector3 = undefined;
-
-        // Determine quick-cast position based on input method
-        if (input_state.action_camera or rl.isGamepadAvailable(0)) {
-            // Controller/Action Camera: Cast at fixed distance in front of player
-            const cast_distance = @min(skill.cast_range * 0.6, 80.0); // 60% of max range or 80 units
-            const forward_x = @sin(input_state.camera_angle);
-            const forward_z = @cos(input_state.camera_angle);
-
-            ground_position = .{
-                .x = player.position.x + forward_x * cast_distance,
-                .y = 0,
-                .z = player.position.z + forward_z * cast_distance,
-            };
-
-            print("Quick-cast {s} at {d:.0} units ahead\n", .{ skill.name, cast_distance });
-        } else {
-            // Mouse/Keyboard: Cast at mouse cursor position (raycast to ground)
-            const mouse_pos = rl.getMousePosition();
-            const ray = rl.getScreenToWorldRay(mouse_pos, camera.*);
-
-            if (ray.direction.y != 0.0) {
-                const t = -ray.position.y / ray.direction.y;
-                if (t > 0.0) {
-                    ground_position = .{
-                        .x = ray.position.x + ray.direction.x * t,
-                        .y = 0.0,
-                        .z = ray.position.z + ray.direction.z * t,
-                    };
-
-                    // Clamp to max range
-                    const dx = ground_position.x - player.position.x;
-                    const dz = ground_position.z - player.position.z;
-                    const distance = @sqrt(dx * dx + dz * dz);
-
-                    if (distance > skill.cast_range) {
-                        // Clamp to max range
-                        const scale = skill.cast_range / distance;
-                        ground_position.x = player.position.x + dx * scale;
-                        ground_position.z = player.position.z + dz * scale;
-                        print("Quick-cast {s} at mouse cursor (clamped to {d:.0} range)\n", .{ skill.name, skill.cast_range });
-                    } else {
-                        print("Quick-cast {s} at mouse cursor ({d:.0} units away)\n", .{ skill.name, distance });
-                    }
-                } else {
-                    // Raycast failed, fall back to in-front position
-                    const cast_distance = @min(skill.cast_range * 0.6, 80.0);
-                    const forward_x = @sin(input_state.camera_angle);
-                    const forward_z = @cos(input_state.camera_angle);
-                    ground_position = .{
-                        .x = player.position.x + forward_x * cast_distance,
-                        .y = 0,
-                        .z = player.position.z + forward_z * cast_distance,
-                    };
-                    print("Quick-cast {s} (raycast failed, using fallback position)\n", .{skill.name});
-                }
-            } else {
-                // Raycast failed, fall back to in-front position
-                const cast_distance = @min(skill.cast_range * 0.6, 80.0);
-                const forward_x = @sin(input_state.camera_angle);
-                const forward_z = @cos(input_state.camera_angle);
-                ground_position = .{
-                    .x = player.position.x + forward_x * cast_distance,
-                    .y = 0,
-                    .z = player.position.z + forward_z * cast_distance,
-                };
-                print("Quick-cast {s} (raycast failed, using fallback position)\n", .{skill.name});
-            }
+        // If already ground targeting this skill, toggle off (cancel)
+        if (input_state.ground_targeting.active and input_state.ground_targeting.skill_index == skill_index) {
+            input_state.ground_targeting.cancel();
+            print("Ground targeting cancelled for {s}\n", .{skill.name});
+            return;
         }
 
-        // Cast immediately at the determined position
-        _ = combat.tryStartCastAtGround(player, skill_index, ground_position, rng, vfx_manager, terrain_grid, null);
+        // Enter ground targeting mode
+        input_state.ground_targeting.start(skill_index, skill, player.position, input_state.camera_angle);
+        print("Ground targeting: {s} (press A/LMB to confirm, B/RMB to cancel)\n", .{skill.name});
         return;
     }
 

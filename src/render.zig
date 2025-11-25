@@ -5,10 +5,12 @@ const entity_types = @import("entity.zig");
 const vfx = @import("vfx.zig");
 const palette = @import("color_palette.zig");
 const terrain = @import("terrain.zig");
+const ground_targeting = @import("ground_targeting.zig");
 
 const Character = character.Character;
 const EntityId = entity_types.EntityId;
 const TerrainGrid = terrain.TerrainGrid;
+const GroundTargetingState = ground_targeting.GroundTargetingState;
 
 // Rendering constants - organized by category for clarity
 const skybox = struct {
@@ -351,7 +353,7 @@ fn drawCharacterBody(render_pos: rl.Vector3, radius: f32, school_color: rl.Color
 
 /// Main 3D rendering function. Draws the game world with interpolated positions for smooth visuals.
 /// Uses interpolation_alpha (0.0-1.0) to smoothly render between fixed-timestep game logic updates.
-pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager, terrain_grid: *const @import("terrain.zig").TerrainGrid) void {
+pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager, terrain_grid: *const @import("terrain.zig").TerrainGrid, ground_target_state: *const GroundTargetingState) void {
     rl.clearBackground(rl.Color{ .r = 180, .g = 200, .b = 220, .a = 255 }); // Soft winter sky color
 
     // === 3D RENDERING ===
@@ -448,6 +450,9 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
 
     // Draw visual effects (projectiles, impacts, heal effects)
     vfx_manager.draw3D();
+
+    // Draw ground targeting preview (if active)
+    ground_targeting.drawPreview3D(ground_target_state, player, terrain_grid);
 
     rl.endMode3D();
 
@@ -622,4 +627,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
 
     // Draw visual effects 2D overlay (damage numbers)
     vfx_manager.draw2D(camera);
+
+    // Draw ground targeting 2D overlay (skill name, hints)
+    ground_targeting.drawPreview2D(ground_target_state, camera);
 }

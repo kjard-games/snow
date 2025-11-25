@@ -244,25 +244,27 @@ fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.
         }
     }
 
-    // Build walls (perpendicular to caster facing)
+    // Build walls at ground target position (perpendicular to caster->target direction)
     if (skill.creates_wall) {
         // Calculate facing angle from caster to ground position
         const dx = ground_pos.x - caster.position.x;
         const dz = ground_pos.z - caster.position.z;
         const facing_angle = std.math.atan2(dz, dx);
 
+        // Build wall centered at ground_pos, perpendicular to the caster->target direction
+        // wall_distance_from_caster is ignored since we're placing directly at ground_pos
         terrain_grid.buildWallPerpendicular(
-            caster.position.x,
-            caster.position.z,
+            ground_pos.x,
+            ground_pos.z,
             facing_angle,
-            skill.wall_distance_from_caster,
+            0.0, // No offset - wall is centered at ground_pos
             skill.wall_length,
             skill.wall_height,
             skill.wall_thickness,
             caster.team,
         );
 
-        print("  -> Built {d:.0}x{d:.0} wall\n", .{ skill.wall_length, skill.wall_height });
+        print("  -> Built {d:.0}x{d:.0} wall at ({d:.1}, {d:.1})\n", .{ skill.wall_length, skill.wall_height, ground_pos.x, ground_pos.z });
     }
 
     // Damage walls in area
@@ -620,25 +622,26 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
             }
         }
 
-        // Build walls (perpendicular to caster facing)
+        // Build walls at ground target position (perpendicular to caster->target direction)
         if (skill.creates_wall) {
             // Calculate facing angle from caster to ground position
             const dx = ground_pos.x - caster.position.x;
             const dz = ground_pos.z - caster.position.z;
             const facing_angle = std.math.atan2(dz, dx);
 
+            // Build wall centered at ground_pos, perpendicular to the caster->target direction
             terrain_grid.buildWallPerpendicular(
-                caster.position.x,
-                caster.position.z,
+                ground_pos.x,
+                ground_pos.z,
                 facing_angle,
-                skill.wall_distance_from_caster,
+                0.0, // No offset - wall is centered at ground_pos
                 skill.wall_length,
                 skill.wall_height,
                 skill.wall_thickness,
                 caster.team,
             );
 
-            print("  -> Built {d:.0}x{d:.0} wall\n", .{ skill.wall_length, skill.wall_height });
+            print("  -> Built {d:.0}x{d:.0} wall at ({d:.1}, {d:.1})\n", .{ skill.wall_length, skill.wall_height, ground_pos.x, ground_pos.z });
         }
 
         // Damage walls in area

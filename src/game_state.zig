@@ -1851,7 +1851,7 @@ pub const GameState = struct {
         const player_render_pos = player.getInterpolatedPosition(alpha);
         input.updateCamera(&self.camera, player_render_pos, self.input_state);
 
-        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid);
+        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid, &self.input_state.ground_targeting);
     }
 
     /// Render UI elements (skill bars, target info, etc.) on top of the 3D scene.

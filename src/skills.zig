@@ -236,7 +236,8 @@ pub const Skill = struct {
     wall_length: f32 = 0.0, // Length of wall segment
     wall_height: f32 = 0.0, // Height of wall
     wall_thickness: f32 = 20.0, // Thickness of wall (default 20 units)
-    wall_distance_from_caster: f32 = 40.0, // How far in front to place wall
+    wall_distance_from_caster: f32 = 40.0, // How far in front to place wall (legacy, prefer ground targeting)
+    wall_arc_factor: f32 = 0.1, // Arc curvature toward caster (0.1 = 10% of length curves back)
 
     // Wall destruction
     destroys_walls: bool = false,
