@@ -605,6 +605,506 @@ pub const QUICKSTEP = Skill{
     .effects = &quickened_effect_array,
 };
 
+// ============================================================================
+// NEW SKILLS - Demonstrating the full composable effect system
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// CONDITIONAL DAMAGE SKILLS
+// ----------------------------------------------------------------------------
+
+const chase_effect_array = [_]effects.Effect{effects.CHASE_DOWN_EFFECT};
+
+pub const PURSUIT_THROW = Skill{
+    .name = "Pursuit Throw",
+    .description = "Throw. Deals 15 damage. +12 bonus damage to moving targets.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 6,
+    .activation_time_ms = 500,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 6000,
+    .damage = 15.0,
+    .cast_range = 200.0,
+    .effects = &chase_effect_array,
+};
+
+const exploit_chill_array = [_]effects.Effect{effects.EXPLOIT_WEAKNESS_EFFECT};
+
+pub const PILE_ON_THROW = Skill{
+    .name = "Pile On",
+    .description = "Throw. Deals 12 damage. +15 bonus damage if target has any Chill.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 5,
+    .activation_time_ms = 500,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 5000,
+    .damage = 12.0,
+    .cast_range = 180.0,
+    .effects = &exploit_chill_array,
+};
+
+const finishing_effect_array = [_]effects.Effect{effects.FINISHING_BLOW_EFFECT};
+
+pub const FINISHER = Skill{
+    .name = "Finisher",
+    .description = "Throw. Deals 20 damage. Deals DOUBLE damage to targets below 25% warmth.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 8,
+    .activation_time_ms = 1000,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 15000,
+    .damage = 20.0,
+    .cast_range = 220.0,
+    .effects = &finishing_effect_array,
+};
+
+// ----------------------------------------------------------------------------
+// DERVISH-STYLE FLASH ENCHANTMENTS
+// ----------------------------------------------------------------------------
+
+const cozy_layers_array = [_]effects.Effect{effects.COZY_LAYERS_EFFECT};
+
+pub const COZY_LAYERS = Skill{
+    .name = "Cozy Layers",
+    .description = "Stance. (15 seconds.) Take 25% less damage but move 25% slower. If removed early, adjacent foes are Slowed.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 8,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 20000,
+    .target_type = .self,
+    .duration_ms = 15000,
+    .effects = &cozy_layers_array,
+};
+
+// ----------------------------------------------------------------------------
+// REACTIVE SKILLS
+// ----------------------------------------------------------------------------
+
+const thorns_effect_array = [_]effects.Effect{effects.THORNS_EFFECT};
+
+pub const PRICKLY_SCARF = Skill{
+    .name = "Prickly Scarf",
+    .description = "Stance. (12 seconds.) When hit, deal 10 damage back to attacker.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 6,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 18000,
+    .target_type = .self,
+    .duration_ms = 12000,
+    .effects = &thorns_effect_array,
+};
+
+const counter_stance_array = [_]effects.Effect{effects.COUNTER_STANCE_EFFECT};
+
+pub const COUNTER_STANCE = Skill{
+    .name = "Counter Stance",
+    .description = "Stance. (10 seconds.) After blocking, attack 50% faster for 3 seconds.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 15000,
+    .target_type = .self,
+    .duration_ms = 10000,
+    .effects = &counter_stance_array,
+};
+
+// ----------------------------------------------------------------------------
+// PARTY SUPPORT SKILLS
+// ----------------------------------------------------------------------------
+
+const rally_effect_array = [_]effects.Effect{effects.RALLY_CRY_EFFECT};
+
+pub const TEAM_SPIRIT = Skill{
+    .name = "Team Spirit",
+    .description = "Call. (10 seconds.) Allies in earshot receive 25% more healing.",
+    .skill_type = .call,
+    .mechanic = .shout,
+    .energy_cost = 10,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 25000,
+    .target_type = .ally,
+    .aoe_type = .area,
+    .aoe_radius = 250.0,
+    .duration_ms = 10000,
+    .effects = &rally_effect_array,
+};
+
+const intimidate_effect_array = [_]effects.Effect{effects.INTIMIDATING_PRESENCE_EFFECT};
+
+pub const INTIMIDATING_SHOUT = Skill{
+    .name = "Intimidating Shout",
+    .description = "Call. (12 seconds.) Nearby foes deal 15% less damage.",
+    .skill_type = .call,
+    .mechanic = .shout,
+    .energy_cost = 8,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 20000,
+    .target_type = .enemy,
+    .aoe_type = .area,
+    .aoe_radius = 200.0,
+    .duration_ms = 12000,
+    .effects = &intimidate_effect_array,
+};
+
+// ----------------------------------------------------------------------------
+// SCHOOL-SPECIFIC CONDITIONAL SKILLS
+// ----------------------------------------------------------------------------
+
+const desperate_effect_array = [_]effects.Effect{effects.DESPERATE_MEASURES_EFFECT};
+
+pub const CREDIT_CRUNCH = Skill{
+    .name = "Credit Crunch",
+    .description = "Throw. (Private School) Deals 18 damage. Deals 50% MORE damage while in debt!",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 6,
+    .activation_time_ms = 750,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 8000,
+    .damage = 18.0,
+    .cast_range = 200.0,
+    .effects = &desperate_effect_array,
+};
+
+const grit_surge_array = [_]effects.Effect{effects.GRIT_SURGE_EFFECT};
+
+pub const ADRENALINE_RUSH = Skill{
+    .name = "Adrenaline Rush",
+    .description = "Stance. (Public School) (8 seconds.) At 5 Grit: +30% damage and +20% attack speed.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 15000,
+    .target_type = .self,
+    .duration_ms = 8000,
+    .effects = &grit_surge_array,
+};
+
+const rhythm_effect_array = [_]effects.Effect{effects.PERFECT_RHYTHM_EFFECT};
+
+pub const FLOW_STATE = Skill{
+    .name = "Flow State",
+    .description = "Stance. (Waldorf) (10 seconds.) At 5 Rhythm: skills cost half and recharge 50% faster.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 8,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 25000,
+    .target_type = .self,
+    .duration_ms = 10000,
+    .effects = &rhythm_effect_array,
+};
+
+const isolation_effect_array = [_]effects.Effect{effects.ISOLATION_POWER_EFFECT};
+
+pub const LONER = Skill{
+    .name = "Loner",
+    .description = "Stance. (Homeschool) While isolated (no allies nearby): +40% damage, +20% armor.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 30000,
+    .target_type = .self,
+    .duration_ms = 20000,
+    .effects = &isolation_effect_array,
+};
+
+const variety_effect_array = [_]effects.Effect{effects.VARIETY_BONUS_EFFECT};
+
+pub const ADAPT = Skill{
+    .name = "Adapt",
+    .description = "Gesture. (Montessori) After using a different skill type: +8 damage and +25% energy regen for 5s.",
+    .skill_type = .gesture,
+    .mechanic = .ready,
+    .energy_cost = 0,
+    .activation_time_ms = 0,
+    .aftercast_ms = 500,
+    .recharge_time_ms = 12000,
+    .target_type = .self,
+    .effects = &variety_effect_array,
+};
+
+// ----------------------------------------------------------------------------
+// TERRAIN-CONDITIONAL SKILLS
+// ----------------------------------------------------------------------------
+
+const ice_mastery_array = [_]effects.Effect{effects.ICE_MASTERY_EFFECT};
+
+pub const ICE_SKATER = Skill{
+    .name = "Ice Skater",
+    .description = "Stance. While on ice: move 25% faster and gain 15% evasion.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 20000,
+    .target_type = .self,
+    .duration_ms = 15000,
+    .effects = &ice_mastery_array,
+};
+
+const deep_snow_array = [_]effects.Effect{effects.DEEP_SNOW_ADVANTAGE_EFFECT};
+
+pub const SNOWDRIFT_STRIKE = Skill{
+    .name = "Snowdrift Strike",
+    .description = "Throw. Deals 14 damage. +15 damage and +20% accuracy vs targets in deep snow.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 7,
+    .activation_time_ms = 750,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 8000,
+    .damage = 14.0,
+    .cast_range = 200.0,
+    .effects = &deep_snow_array,
+};
+
+// ----------------------------------------------------------------------------
+// INTERRUPT/KNOCKDOWN SKILLS
+// ----------------------------------------------------------------------------
+
+const daze_followup_array = [_]effects.Effect{effects.DAZE_FOLLOWUP_EFFECT};
+
+pub const GROUND_POUND = Skill{
+    .name = "Ground Pound",
+    .description = "Throw. Deals 16 damage. +50% damage to knocked down targets.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 6,
+    .activation_time_ms = 500,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 6000,
+    .damage = 16.0,
+    .cast_range = 150.0,
+    .effects = &daze_followup_array,
+};
+
+const interrupt_bonus_array = [_]effects.Effect{effects.INTERRUPT_BONUS_EFFECT};
+
+pub const DISRUPTIVE_SHOT = Skill{
+    .name = "Disruptive Shot",
+    .description = "Throw. Deals 10 damage. Interrupts. On interrupt: double energy regen for 5s.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 8,
+    .activation_time_ms = 250, // Very fast for interrupting
+    .aftercast_ms = 750,
+    .recharge_time_ms = 12000,
+    .damage = 10.0,
+    .cast_range = 200.0,
+    .interrupts = true,
+    .effects = &interrupt_bonus_array,
+};
+
+// ============================================================================
+// BLOCKING SKILLS - GW1-style defensive stances
+// ============================================================================
+
+const shield_effect_array = [_]effects.Effect{effects.SNOWBALL_SHIELD_EFFECT};
+
+pub const SHIELD_STANCE = Skill{
+    .name = "Shield Stance",
+    .description = "Stance. (8 seconds.) 75% chance to block incoming snowballs.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 15000,
+    .target_type = .self,
+    .duration_ms = 8000,
+    .effects = &shield_effect_array,
+};
+
+const reflexes_effect_array = [_]effects.Effect{effects.QUICK_REFLEXES_EFFECT};
+
+pub const QUICK_DODGE = Skill{
+    .name = "Quick Dodge",
+    .description = "Stance. (10 seconds.) Block the next attack. After blocking, move 33% faster for 4s.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 12000,
+    .target_type = .self,
+    .duration_ms = 10000,
+    .effects = &reflexes_effect_array,
+};
+
+const breaker_effect_array = [_]effects.Effect{effects.SHIELD_BREAKER_EFFECT};
+
+pub const WILD_THROW = Skill{
+    .name = "Wild Throw",
+    .description = "Throw. Deals 18 damage. +50% damage against blocking targets.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 7,
+    .activation_time_ms = 750,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 8000,
+    .damage = 18.0,
+    .cast_range = 200.0,
+    .effects = &breaker_effect_array,
+};
+
+// ============================================================================
+// SKILL DISABLE SKILLS - Snow-themed silence/daze
+// ============================================================================
+
+const brain_freeze_effect_array = [_]effects.Effect{effects.BRAIN_FREEZE_DISABLE_EFFECT};
+
+pub const SNOW_MOUTHFUL = Skill{
+    .name = "Snow Mouthful",
+    .description = "Trick. Target eats snow and gets Brain Freeze (can't use skills) for 3 seconds.",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 15,
+    .activation_time_ms = 1000,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 25000,
+    .damage = 5.0,
+    .cast_range = 150.0,
+    .effects = &brain_freeze_effect_array,
+};
+
+const numb_fingers_effect_array = [_]effects.Effect{effects.NUMB_FINGERS_EFFECT};
+
+pub const FREEZING_GRIP = Skill{
+    .name = "Freezing Grip",
+    .description = "Trick. Target's hands go numb (can't use Throw skills) for 5 seconds.",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 10,
+    .activation_time_ms = 750,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 18000,
+    .damage = 8.0,
+    .cast_range = 180.0,
+    .effects = &numb_fingers_effect_array,
+};
+
+const foggy_goggles_effect_array = [_]effects.Effect{effects.FOGGY_GOGGLES_EFFECT};
+
+pub const FOG_BREATH = Skill{
+    .name = "Fog Breath",
+    .description = "Trick. Fog up target's goggles (can't use Trick/Gesture skills) for 4 seconds.",
+    .skill_type = .trick,
+    .mechanic = .concentrate,
+    .energy_cost = 8,
+    .activation_time_ms = 500,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 15000,
+    .damage = 5.0,
+    .cast_range = 120.0, // Short range - need to breathe on them
+    .effects = &foggy_goggles_effect_array,
+};
+
+// ============================================================================
+// DURATION MODIFIER SKILLS
+// ============================================================================
+
+const lingering_cold_effect_array = [_]effects.Effect{effects.LINGERING_COLD_EFFECT};
+
+pub const BITTER_COLD = Skill{
+    .name = "Bitter Cold",
+    .description = "Stance. (20 seconds.) Chills you apply last 50% longer.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 30000,
+    .target_type = .self,
+    .duration_ms = 20000,
+    .effects = &lingering_cold_effect_array,
+};
+
+const cozy_aura_effect_array = [_]effects.Effect{effects.COZY_AURA_EFFECT};
+
+pub const EXTRA_SNUG = Skill{
+    .name = "Extra Snug",
+    .description = "Stance. (30 seconds.) Cozy effects on you last 33% longer.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 45000,
+    .target_type = .self,
+    .duration_ms = 30000,
+    .effects = &cozy_aura_effect_array,
+};
+
+const chill_resist_effect_array = [_]effects.Effect{effects.CHILL_RESISTANCE_EFFECT};
+
+pub const TOUGH_IT_OUT = Skill{
+    .name = "Tough It Out",
+    .description = "Stance. (15 seconds.) Chills on you expire 50% faster.",
+    .skill_type = .stance,
+    .mechanic = .shift,
+    .energy_cost = 5,
+    .activation_time_ms = 0,
+    .aftercast_ms = 0,
+    .recharge_time_ms = 25000,
+    .target_type = .self,
+    .duration_ms = 15000,
+    .effects = &chill_resist_effect_array,
+};
+
+// ============================================================================
+// ENCHANTMENT-CONDITIONAL SKILLS
+// ============================================================================
+
+const fire_inside_strike_array = [_]effects.Effect{effects.FIRE_INSIDE_BONUS_EFFECT};
+
+pub const INNER_FIRE_THROW = Skill{
+    .name = "Inner Fire Throw",
+    .description = "Throw. Deals 15 damage. +12 bonus damage while you have Fire Inside.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 6,
+    .activation_time_ms = 500,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 6000,
+    .damage = 15.0,
+    .cast_range = 200.0,
+    .effects = &fire_inside_strike_array,
+};
+
+const strip_cozy_effect_array = [_]effects.Effect{effects.STRIP_COZY_EFFECT};
+
+pub const LAYER_STRIPPER = Skill{
+    .name = "Layer Stripper",
+    .description = "Throw. Deals 12 damage. +20 bonus damage against targets with Cozy effects.",
+    .skill_type = .throw,
+    .mechanic = .windup,
+    .energy_cost = 8,
+    .activation_time_ms = 750,
+    .aftercast_ms = 750,
+    .recharge_time_ms = 10000,
+    .damage = 12.0,
+    .cast_range = 220.0,
+    .effects = &strip_cozy_effect_array,
+};
+
 // Default skill bar for new characters
 pub const DEFAULT_SKILLS = [_]*const Skill{
     &QUICK_TOSS,
