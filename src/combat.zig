@@ -8,6 +8,7 @@ const vfx = @import("vfx.zig");
 const palette = @import("color_palette.zig");
 const telemetry = @import("telemetry.zig");
 const terrain_mod = @import("terrain.zig");
+const school_resources = @import("character_school_resources.zig");
 
 // Component modules
 const validation = @import("combat_validation.zig");
@@ -141,6 +142,12 @@ fn executeSkillAtGround(
     // Set cooldown with reduction from effects
     setCooldown(caster, skill, skill_index);
 
+    // Deduct school resource costs (grit, credit, warmth sacrifice)
+    deductSchoolResourceCosts(caster, skill);
+
+    // Grant resources on cast (some skills grant grit/rhythm just for casting)
+    grantSchoolResourcesOnCast(caster, skill);
+
     // Record telemetry
     recordSkillCastTelemetry(caster, skill, telem);
 
@@ -178,6 +185,12 @@ pub fn executeSkill(
     // Set cooldown with reduction from effects
     setCooldown(caster, skill, skill_index);
 
+    // Deduct school resource costs (grit, credit, warmth sacrifice)
+    deductSchoolResourceCosts(caster, skill);
+
+    // Grant resources on cast (some skills grant grit/rhythm just for casting)
+    grantSchoolResourcesOnCast(caster, skill);
+
     // Record telemetry
     recordSkillCastTelemetry(caster, skill, telem);
 
@@ -201,6 +214,9 @@ fn executeTargetedSkill(
 ) void {
     const tgt = target orelse return;
 
+    // Track if skill hit (for resource grants)
+    var skill_hit = false;
+
     // Calculate and apply damage
     if (skill.damage > 0) {
         const dmg_ctx = damage.DamageContext{
@@ -220,7 +236,16 @@ fn executeTargetedSkill(
         // Apply damage
         if (dmg_result.final_damage > 0) {
             applyDamageToTarget(caster, tgt, skill, dmg_result.final_damage, vfx_manager, telem);
+            skill_hit = true;
         }
+    } else {
+        // Non-damage skills (heals, buffs) always "hit"
+        skill_hit = true;
+    }
+
+    // Grant resources on hit
+    if (skill_hit) {
+        grantSchoolResourcesOnHit(caster, skill);
     }
 
     // Check for interrupt skills
@@ -436,6 +461,146 @@ fn applyEffects(caster: *Character, target: *Character, skill: *const Skill) voi
             effect.name,
             target.name,
             effect.duration_ms,
+        });
+    }
+}
+
+// ============================================================================
+// SCHOOL RESOURCE FUNCTIONS
+// ============================================================================
+
+/// Deduct school-specific resource costs when a skill is cast
+/// Called after validation passes, before skill executes
+pub fn deductSchoolResourceCosts(caster: *Character, skill: *const Skill) void {
+    switch (caster.school) {
+        .public_school => {
+            // Spend grit stacks
+            if (skill.grit_cost > 0) {
+                if (caster.school_resources.grit.spend(skill.grit_cost)) {
+                    print("{s} spent {d} grit (now {d})\n", .{
+                        caster.name,
+                        skill.grit_cost,
+                        caster.school_resources.grit.stacks,
+                    });
+                }
+            }
+        },
+        .private_school => {
+            // Take on credit (reduce max energy temporarily)
+            if (skill.credit_cost > 0) {
+                const actual_credit = caster.school_resources.credit_debt.takeCredit(
+                    skill.credit_cost,
+                    caster.stats.max_energy,
+                );
+                if (actual_credit > 0) {
+                    print("{s} took {d} credit (debt now {d})\n", .{
+                        caster.name,
+                        actual_credit,
+                        caster.school_resources.credit_debt.debt,
+                    });
+                }
+            }
+        },
+        .homeschool => {
+            // Sacrifice warmth (health)
+            if (skill.warmth_cost_percent > 0) {
+                const warmth_cost = school_resources.SacrificeState.calculateWarmthCost(
+                    skill.warmth_cost_percent,
+                    caster.stats.max_warmth,
+                );
+                caster.stats.warmth = @max(1, caster.stats.warmth - warmth_cost);
+                print("{s} sacrificed {d:.1} warmth ({d:.1}/{d:.1})\n", .{
+                    caster.name,
+                    warmth_cost,
+                    caster.stats.warmth,
+                    caster.stats.max_warmth,
+                });
+            }
+        },
+        .waldorf => {
+            // Reset consumed rhythm tracker
+            caster.school_resources.rhythm.last_consumed = 0;
+
+            // Handle rhythm consumption
+            if (skill.consumes_all_rhythm) {
+                // Consume all rhythm (for Crescendo-style skills)
+                const consumed = caster.school_resources.rhythm.consumeAll();
+                caster.school_resources.rhythm.last_consumed = consumed;
+                if (consumed > 0) {
+                    print("{s} consumed all {d} rhythm\n", .{
+                        caster.name,
+                        consumed,
+                    });
+                }
+            } else if (skill.rhythm_cost > 0) {
+                // Spend specific amount of rhythm
+                if (caster.school_resources.rhythm.spend(skill.rhythm_cost)) {
+                    caster.school_resources.rhythm.last_consumed = skill.rhythm_cost;
+                    print("{s} spent {d} rhythm (now {d})\n", .{
+                        caster.name,
+                        skill.rhythm_cost,
+                        caster.school_resources.rhythm.charge,
+                    });
+                }
+            }
+        },
+        .montessori => {
+            // Variety is passive, no cost to deduct
+        },
+    }
+
+    // Record skill use for school mechanics (rhythm building, variety tracking)
+    caster.school_resources.onSkillUse(caster.school, skill.skill_type);
+}
+
+/// Grant school-specific resources when a skill is cast (regardless of hit)
+pub fn grantSchoolResourcesOnCast(caster: *Character, skill: *const Skill) void {
+    // Public School: Some skills grant grit on cast
+    if (caster.school == .public_school and skill.grants_grit_on_cast > 0) {
+        caster.school_resources.grit.gain(skill.grants_grit_on_cast);
+        print("{s} gained {d} grit on cast (now {d})\n", .{
+            caster.name,
+            skill.grants_grit_on_cast,
+            caster.school_resources.grit.stacks,
+        });
+    }
+
+    // Waldorf: Some skills grant rhythm on cast
+    if (caster.school == .waldorf and skill.grants_rhythm_on_cast > 0) {
+        caster.school_resources.rhythm.grant(skill.grants_rhythm_on_cast);
+        print("{s} gained {d} rhythm on cast (now {d})\n", .{
+            caster.name,
+            skill.grants_rhythm_on_cast,
+            caster.school_resources.rhythm.charge,
+        });
+    }
+}
+
+/// Grant school-specific resources when a skill hits
+pub fn grantSchoolResourcesOnHit(caster: *Character, skill: *const Skill) void {
+    // Public School: Some skills grant grit on hit
+    if (caster.school == .public_school and skill.grants_grit_on_hit > 0) {
+        caster.school_resources.grit.gain(skill.grants_grit_on_hit);
+        print("{s} gained {d} grit on hit (now {d})\n", .{
+            caster.name,
+            skill.grants_grit_on_hit,
+            caster.school_resources.grit.stacks,
+        });
+    }
+
+    // Use the generic onHitLanded hook for additional effects
+    caster.school_resources.onHitLanded(caster.school, skill.grants_grit_on_hit);
+
+    // Energy on hit (any school)
+    if (skill.grants_energy_on_hit > 0) {
+        caster.stats.energy = @min(
+            caster.stats.max_energy,
+            caster.stats.energy + skill.grants_energy_on_hit,
+        );
+        print("{s} gained {d} energy on hit (now {d})\n", .{
+            caster.name,
+            skill.grants_energy_on_hit,
+            caster.stats.energy,
         });
     }
 }

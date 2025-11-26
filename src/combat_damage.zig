@@ -5,9 +5,11 @@ const skills = @import("skills.zig");
 const effects = @import("effects.zig");
 const vfx = @import("vfx.zig");
 const terrain_mod = @import("terrain.zig");
+const school = @import("school.zig");
 
 const Character = character.Character;
 const Skill = skills.Skill;
+const School = school.School;
 const print = std.debug.print;
 
 // ============================================================================
@@ -86,6 +88,54 @@ pub fn calculateCasterOffensiveMultiplier(caster: *const Character) f32 {
         caster.conditions.effects.count,
     );
     multiplier *= effect_mult;
+
+    // School-specific damage bonuses
+    multiplier *= calculateSchoolDamageBonus(caster);
+
+    return multiplier;
+}
+
+/// Calculate school-specific damage bonuses
+pub fn calculateSchoolDamageBonus(caster: *const Character) f32 {
+    var multiplier: f32 = 1.0;
+
+    switch (caster.school) {
+        .montessori => {
+            // Variety bonus: Using different skill types grants damage bonus
+            // 0 unique = 0%, 2 = 10%, 3 = 20%, 4 = 30%, 5 = 40-50%
+            multiplier *= caster.school_resources.variety.getDamageMultiplier();
+        },
+        .private_school => {
+            // Debt bonus: Some skills get bonus damage when in debt
+            // This is skill-specific and handled in calculateDamage
+            // But we can add a general small bonus for being in debt
+            if (caster.school_resources.credit_debt.isInDebt()) {
+                // Small general bonus for being in debt (risk/reward)
+                multiplier *= 1.05; // 5% bonus damage while in debt
+            }
+        },
+        .public_school => {
+            // Grit bonus: More grit = slightly more damage (adrenaline rush)
+            // Small incremental bonus based on grit stacks
+            const grit_bonus = @as(f32, @floatFromInt(caster.school_resources.grit.stacks)) * 0.02;
+            multiplier *= (1.0 + grit_bonus); // 2% per grit stack (up to 10% at max)
+        },
+        .waldorf => {
+            // Rhythm bonus: Being "in rhythm" grants bonus damage
+            if (caster.school_resources.rhythm.isInPerfectWindow()) {
+                multiplier *= 1.1; // 10% bonus in perfect timing window
+            }
+        },
+        .homeschool => {
+            // Sacrifice bonus: Lower health = more damage (desperate power)
+            const health_percent = caster.stats.warmth / caster.stats.max_warmth;
+            if (health_percent < 0.5) {
+                // Below 50% health: bonus damage scaling up to 20%
+                const missing_health_factor = (0.5 - health_percent) * 2.0; // 0 to 1
+                multiplier *= (1.0 + missing_health_factor * 0.2); // Up to 20% bonus
+            }
+        },
+    }
 
     return multiplier;
 }
@@ -240,8 +290,33 @@ pub fn calculateDamage(ctx: DamageContext) DamageResult {
         return result;
     }
 
-    // Step 3: Apply caster offensive modifiers
+    // Step 3: Apply caster offensive modifiers (includes school bonuses)
     result.final_damage *= calculateCasterOffensiveMultiplier(ctx.caster);
+
+    // Step 3b: Apply skill-specific debt bonus (Private School)
+    if (ctx.skill.bonus_if_in_debt and ctx.caster.school == .private_school) {
+        if (ctx.caster.school_resources.credit_debt.isInDebt()) {
+            result.final_damage *= 1.25; // 25% bonus for skill designed for debt play
+            print("{s}'s skill enhanced by debt!\n", .{ctx.caster.name});
+        }
+    }
+
+    // Step 3c: Apply warmth-conditional bonuses (GW1-style)
+    result.final_damage *= calculateWarmthConditionalBonus(ctx.caster, ctx.target, ctx.skill);
+
+    // Step 3d: Apply rhythm-consumed flat damage bonus (Waldorf Crescendo-style)
+    if (ctx.skill.damage_per_rhythm_consumed > 0 and ctx.caster.school == .waldorf) {
+        const rhythm_bonus = @as(f32, @floatFromInt(ctx.caster.school_resources.rhythm.last_consumed)) *
+            ctx.skill.damage_per_rhythm_consumed;
+        if (rhythm_bonus > 0) {
+            result.final_damage += rhythm_bonus;
+            print("{s}'s skill deals +{d:.0} bonus damage from {d} rhythm!\n", .{
+                ctx.caster.name,
+                rhythm_bonus,
+                ctx.caster.school_resources.rhythm.last_consumed,
+            });
+        }
+    }
 
     // Step 4: Apply target defensive modifiers
     result.final_damage *= calculateTargetDefensiveMultiplier(ctx.target);
@@ -267,6 +342,32 @@ pub fn calculateDamage(ctx: DamageContext) DamageResult {
     }
 
     return result;
+}
+
+/// Calculate warmth-conditional damage bonuses (GW1-style health conditionals)
+fn calculateWarmthConditionalBonus(caster: *const Character, target: *const Character, skill: *const Skill) f32 {
+    var multiplier: f32 = 1.0;
+
+    const caster_health_percent = caster.stats.warmth / caster.stats.max_warmth;
+    const target_health_percent = target.stats.warmth / target.stats.max_warmth;
+
+    // Self health conditionals
+    if (skill.bonus_damage_if_self_above_50_warmth > 0 and caster_health_percent > 0.5) {
+        multiplier += skill.bonus_damage_if_self_above_50_warmth;
+    }
+    if (skill.bonus_damage_if_self_below_50_warmth > 0 and caster_health_percent < 0.5) {
+        multiplier += skill.bonus_damage_if_self_below_50_warmth;
+    }
+
+    // Target health conditionals
+    if (skill.bonus_damage_if_foe_above_50_warmth > 0 and target_health_percent > 0.5) {
+        multiplier += skill.bonus_damage_if_foe_above_50_warmth;
+    }
+    if (skill.bonus_damage_if_foe_below_50_warmth > 0 and target_health_percent < 0.5) {
+        multiplier += skill.bonus_damage_if_foe_below_50_warmth;
+    }
+
+    return multiplier;
 }
 
 /// Simplified damage calculation for auto-attacks (no skill context)

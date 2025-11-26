@@ -249,6 +249,9 @@ pub const Skill = struct {
     min_warmth_percent: f32 = 0.0, // Homeschool - can't cast below this warmth %
     credit_cost: u8 = 0, // Private School - reduces max energy temporarily (spending on credit)
     requires_rhythm_stacks: u8 = 0, // Waldorf - minimum rhythm stacks to cast
+    rhythm_cost: u8 = 0, // Waldorf - rhythm stacks consumed on cast
+    consumes_all_rhythm: bool = false, // Waldorf - consume all rhythm (for skills like Crescendo)
+    damage_per_rhythm_consumed: f32 = 0.0, // Waldorf - bonus damage per rhythm stack consumed
 
     // Private School - Credit bonus effects
     bonus_if_in_debt: bool = false, // Does this skill get bonus effects when in debt (credit > 0)?

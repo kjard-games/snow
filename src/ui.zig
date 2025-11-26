@@ -5,10 +5,222 @@ const input = @import("input.zig");
 const entity_types = @import("entity.zig");
 const skill_icons = @import("skill_icons.zig");
 const palette = @import("color_palette.zig");
+const skills = @import("skills.zig");
 
 const Character = character.Character;
 const InputState = input.InputState;
 const EntityId = entity_types.EntityId;
+const SkillType = skills.SkillType;
+const Skill = skills.Skill;
+
+// ============================================================================
+// SCHOOL MECHANIC HINTS - Visual indicators for skill synergy
+// ============================================================================
+
+/// Types of school mechanic hints for skill slots
+const SchoolHint = enum {
+    none, // No special hint
+    flow_continue, // Waldorf: This skill type will continue rhythm flow
+    flow_break, // Waldorf: This skill type will break rhythm (same as last)
+    variety_new, // Montessori: This skill type hasn't been used recently
+    variety_repeat, // Montessori: This skill type was used recently (less bonus)
+    grit_spender, // Public School: This skill costs grit
+    grit_builder, // Public School: This skill grants grit
+    debt_bonus, // Private School: This skill gets bonus while in debt
+    credit_cost, // Private School: This skill costs credit
+    sacrifice_ready, // Homeschool: Sacrifice is ready, skill costs warmth
+    sacrifice_cooldown, // Homeschool: Sacrifice on cooldown
+    rhythm_required, // Waldorf: Skill requires rhythm stacks (show if met)
+    rhythm_insufficient, // Waldorf: Not enough rhythm for this skill
+};
+
+/// Get the primary school mechanic hint for a skill
+fn getSchoolHint(player: *const Character, skill: *const Skill) SchoolHint {
+    switch (player.school) {
+        .waldorf => {
+            // Check rhythm requirement first
+            if (skill.requires_rhythm_stacks > 0) {
+                if (!player.school_resources.rhythm.has(skill.requires_rhythm_stacks)) {
+                    return .rhythm_insufficient;
+                }
+                return .rhythm_required;
+            }
+            // Check if this skill type will continue or break flow
+            if (player.school_resources.rhythm.last_skill_type) |last_type| {
+                if (skill.skill_type != last_type) {
+                    return .flow_continue;
+                } else {
+                    return .flow_break;
+                }
+            }
+            // No last skill - any skill continues flow
+            return .flow_continue;
+        },
+        .montessori => {
+            // Check if this skill type has been used recently
+            const unique_count = player.school_resources.variety.countUnique();
+            if (player.school_resources.variety.hasUsedRecently(skill.skill_type)) {
+                return .variety_repeat;
+            }
+            // If we haven't maxed variety, new types are valuable
+            if (unique_count < character.MAX_RECENT_SKILLS) {
+                return .variety_new;
+            }
+            return .none;
+        },
+        .public_school => {
+            // Grit spending/building hints
+            if (skill.grit_cost > 0) {
+                if (player.school_resources.grit.has(skill.grit_cost)) {
+                    return .grit_spender;
+                }
+                // Can't afford - no special hint (affordability shown elsewhere)
+                return .none;
+            }
+            if (skill.grants_grit_on_hit > 0 or skill.grants_grit_on_cast > 0) {
+                return .grit_builder;
+            }
+            return .none;
+        },
+        .private_school => {
+            // Credit/debt hints
+            if (skill.bonus_if_in_debt) {
+                if (player.school_resources.credit_debt.isInDebt()) {
+                    return .debt_bonus;
+                }
+            }
+            if (skill.credit_cost > 0) {
+                return .credit_cost;
+            }
+            return .none;
+        },
+        .homeschool => {
+            // Sacrifice hints
+            if (skill.warmth_cost_percent > 0) {
+                if (player.school_resources.sacrifice.isReady()) {
+                    return .sacrifice_ready;
+                }
+                return .sacrifice_cooldown;
+            }
+            return .none;
+        },
+    }
+}
+
+/// Get the hint color for drawing
+fn getHintColor(hint: SchoolHint) ?rl.Color {
+    return switch (hint) {
+        .none => null,
+        .flow_continue => rl.Color.init(180, 100, 255, 200), // Purple glow - flow!
+        .flow_break => rl.Color.init(255, 100, 100, 150), // Red tint - breaks flow
+        .variety_new => rl.Color.init(100, 255, 150, 200), // Green glow - new type!
+        .variety_repeat => rl.Color.init(150, 150, 150, 100), // Gray - already used
+        .grit_spender => rl.Color.init(255, 200, 50, 200), // Gold glow - spend grit!
+        .grit_builder => rl.Color.init(255, 150, 50, 150), // Orange tint - builds grit
+        .debt_bonus => rl.Color.init(255, 50, 50, 200), // Red glow - debt bonus active!
+        .credit_cost => rl.Color.init(200, 100, 50, 150), // Bronze tint - costs credit
+        .sacrifice_ready => rl.Color.init(255, 100, 50, 200), // Orange glow - sacrifice ready
+        .sacrifice_cooldown => rl.Color.init(100, 100, 100, 100), // Dark gray - on cooldown
+        .rhythm_required => rl.Color.init(200, 150, 255, 200), // Light purple - rhythm met!
+        .rhythm_insufficient => rl.Color.init(100, 50, 150, 150), // Dark purple - need rhythm
+    };
+}
+
+/// Get a single character indicator for the hint
+fn getHintIndicator(hint: SchoolHint) ?[:0]const u8 {
+    return switch (hint) {
+        .none => null,
+        .flow_continue => "+", // Flow continues
+        .flow_break => "X", // Breaks flow
+        .variety_new => "*", // New type
+        .variety_repeat => "-", // Repeat
+        .grit_spender => "G", // Grit spend
+        .grit_builder => "g", // Grit build
+        .debt_bonus => "$", // Debt bonus
+        .credit_cost => "C", // Credit cost
+        .sacrifice_ready => "!", // Sacrifice ready
+        .sacrifice_cooldown => "~", // On cooldown
+        .rhythm_required => "R", // Rhythm ready
+        .rhythm_insufficient => "r", // Need rhythm
+    };
+}
+
+// ============================================================================
+// INTERRUPT HINTS - Visual indicators for interrupt opportunities
+// ============================================================================
+
+/// Types of interrupt hints for skill slots
+const InterruptHint = enum {
+    none, // No interrupt relevance
+    will_interrupt, // Skill will interrupt (direct interrupt + target casting)
+    can_interrupt_dazed, // Skill deals damage + target is dazed + target casting
+    has_interrupt, // Skill can interrupt but target not casting
+    applies_dazed, // Skill applies dazed (future interrupt setup)
+};
+
+/// Check if a skill will interrupt the current target
+fn getInterruptHint(skill: *const Skill, target: ?*const Character) InterruptHint {
+    // No target = can't assess interrupt
+    const tgt = target orelse return .none;
+
+    const target_casting = tgt.casting.state == .activating;
+    const target_dazed = tgt.hasChill(.dazed);
+    const skill_deals_damage = skill.damage > 0;
+    const skill_interrupts = skill.interrupts;
+
+    // Check if skill applies dazed
+    var applies_dazed = false;
+    for (skill.chills) |chill_effect| {
+        if (chill_effect.chill == .dazed) {
+            applies_dazed = true;
+            break;
+        }
+    }
+
+    // Priority order for hints
+    if (target_casting) {
+        if (skill_interrupts) {
+            return .will_interrupt; // Direct interrupt on casting target!
+        }
+        if (skill_deals_damage and target_dazed) {
+            return .can_interrupt_dazed; // Damage will interrupt dazed caster!
+        }
+    }
+
+    // Not casting, but skill has interrupt capability
+    if (skill_interrupts) {
+        return .has_interrupt;
+    }
+
+    // Skill sets up future interrupts
+    if (applies_dazed) {
+        return .applies_dazed;
+    }
+
+    return .none;
+}
+
+/// Get the interrupt hint color
+fn getInterruptHintColor(hint: InterruptHint) ?rl.Color {
+    return switch (hint) {
+        .none => null,
+        .will_interrupt => rl.Color.init(255, 255, 0, 255), // Bright yellow - GO!
+        .can_interrupt_dazed => rl.Color.init(255, 200, 50, 230), // Gold - dazed interrupt
+        .has_interrupt => rl.Color.init(200, 200, 100, 120), // Dim yellow - has capability
+        .applies_dazed => rl.Color.init(150, 100, 200, 150), // Purple tint - sets up daze
+    };
+}
+
+/// Get interrupt indicator character
+fn getInterruptIndicator(hint: InterruptHint) ?[:0]const u8 {
+    return switch (hint) {
+        .none => null,
+        .will_interrupt => "I", // Interrupt!
+        .can_interrupt_dazed => "i", // Can interrupt (dazed)
+        .has_interrupt => "^", // Has interrupt
+        .applies_dazed => "D", // Applies dazed
+    };
+}
 
 // Helper to convert float coordinates to integer screen positions
 inline fn toI32(val: f32) i32 {
@@ -203,11 +415,22 @@ pub fn drawUI(player: *const Character, entities: []const Character, selected_ta
     const screen_height = rl.getScreenHeight();
     drawEffectsMonitor(player, 400, @as(f32, @floatFromInt(screen_height)) - 200, input_state, selected_target);
 
+    // Find target for interrupt hints
+    var target_ptr: ?*const Character = null;
+    if (selected_target) |target_id| {
+        for (entities) |*ent| {
+            if (ent.id == target_id) {
+                target_ptr = ent;
+                break;
+            }
+        }
+    }
+
     // Draw skill bar (and detect mouse hover)
-    drawSkillBar(player, input_state);
+    drawSkillBar(player, input_state, target_ptr);
 }
 
-fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f32, input_state: *InputState) void {
+fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f32, input_state: *InputState, target: ?*const Character) void {
     const xi = toI32(x);
     const yi = toI32(y);
     const sizei = toI32(size);
@@ -249,6 +472,51 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
         const can_afford = player.stats.energy >= skill.energy_cost;
 
         skill_icons.drawSkillIcon(icon_x, icon_y, icon_size, skill, player.school, player.player_position, can_afford);
+
+        // Draw school mechanic hint overlay (if not on cooldown)
+        if (player.casting.cooldowns[index] == 0 and can_afford) {
+            const hint = getSchoolHint(player, skill);
+            if (getHintColor(hint)) |hint_color| {
+                // Draw colored border/glow effect
+                const border_thickness: i32 = 3;
+                rl.drawRectangleLinesEx(
+                    .{ .x = x + 1, .y = y + 1, .width = size - 2, .height = size - 2 },
+                    @floatFromInt(border_thickness),
+                    hint_color,
+                );
+
+                // Draw indicator in corner (top-right)
+                if (getHintIndicator(hint)) |indicator| {
+                    const indicator_x = toI32(x + size - 12);
+                    const indicator_y = toI32(y + 2);
+                    // Dark background for readability
+                    rl.drawRectangle(indicator_x - 1, indicator_y - 1, 12, 12, rl.Color.init(0, 0, 0, 180));
+                    rl.drawText(indicator, indicator_x, indicator_y, 10, hint_color);
+                }
+            }
+
+            // Draw interrupt hint (bottom-left corner, separate from school hint)
+            const int_hint = getInterruptHint(skill, target);
+            if (getInterruptHintColor(int_hint)) |int_color| {
+                // Draw interrupt indicator in bottom-left
+                if (getInterruptIndicator(int_hint)) |int_indicator| {
+                    const int_x = toI32(x + 2);
+                    const int_y = toI32(y + size - 14);
+                    // Dark background for readability
+                    rl.drawRectangle(int_x - 1, int_y - 1, 12, 12, rl.Color.init(0, 0, 0, 180));
+                    rl.drawText(int_indicator, int_x, int_y, 10, int_color);
+
+                    // For high-priority interrupts, add a pulsing border effect
+                    if (int_hint == .will_interrupt or int_hint == .can_interrupt_dazed) {
+                        rl.drawRectangleLinesEx(
+                            .{ .x = x, .y = y, .width = size, .height = size },
+                            2.0,
+                            int_color,
+                        );
+                    }
+                }
+            }
+        }
 
         // Draw cooldown overlay (visual only, no text)
         if (player.casting.cooldowns[index] > 0) {
@@ -409,12 +677,28 @@ fn drawTargetFrame(player: *const Character, target: *const Character, x: f32, y
             rl.drawText(skill.name, cast_bar_xi + 2, cast_bar_yi + 2, 10, .white);
 
             current_y += icon_size + 4;
+
+            // Show INTERRUPTIBLE indicator below cast bar
+            if (player.isEnemy(target.*)) {
+                const int_text = if (target.hasChill(.dazed))
+                    "DAZED - Any damage interrupts! [i]"
+                else
+                    "CASTING - Use interrupt! [I]";
+                const int_color = rl.Color.init(255, 255, 0, 255); // Bright yellow
+                rl.drawText(int_text, toI32(x + padding), toI32(current_y), 9, int_color);
+            }
         }
     } else {
         // Just show buffs/debuffs if not casting
         const icon_size: f32 = 16;
         const icon_spacing: f32 = 2;
         drawCompactConditions(target, x + padding, current_y, icon_size, icon_spacing);
+
+        // Show dazed status hint if target has dazed (setup for future interrupts)
+        if (target.hasChill(.dazed) and player.isEnemy(target.*)) {
+            current_y += icon_size + 4;
+            rl.drawText("DAZED - Attacks will interrupt casts", toI32(x + padding), toI32(current_y), 8, rl.Color.init(200, 150, 255, 255));
+        }
     }
 }
 
@@ -482,6 +766,7 @@ fn drawPartyFrames(entities: []const Character, x: f32, y: f32) void {
 fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void {
     _ = width; // May be used by some schools for sizing
     const yi = toI32(y);
+    const hint_y = yi + 14; // Second line for hint legend
 
     switch (player.school) {
         .public_school => {
@@ -500,6 +785,9 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
                 rl.drawCircleLines(toI32(circle_x + circle_size / 2), yi + 5, circle_size / 2, palette.UI.BORDER);
                 circle_x += circle_size + circle_spacing;
             }
+
+            // Hint legend
+            rl.drawText("[G]=spend [g]=build", toI32(x), hint_y, 8, palette.UI.TEXT_SECONDARY);
         },
         .waldorf => {
             // Rhythm stacks (0-5) - show as filled musical note symbols
@@ -523,9 +811,24 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
                 circle_x += circle_size + circle_spacing;
             }
 
-            // Show "Perfect!" text if at max rhythm
-            if (player.school_resources.rhythm.charge >= max_rhythm) {
-                rl.drawText("Perfect!", toI32(circle_x + 4), yi, 9, rl.Color.gold);
+            // Show perfect window indicator (timing bonus active)
+            if (player.school_resources.rhythm.isInPerfectWindow()) {
+                rl.drawText("Flow!", toI32(circle_x + 4), yi, 9, rl.Color.gold);
+            } else if (player.school_resources.rhythm.charge >= max_rhythm) {
+                rl.drawText("MAX", toI32(circle_x + 4), yi, 9, rl.Color.purple);
+            }
+
+            // Hint legend - show last skill type
+            if (player.school_resources.rhythm.last_skill_type) |last_type| {
+                var hint_buf: [48]u8 = undefined;
+                const hint_text = std.fmt.bufPrintZ(
+                    &hint_buf,
+                    "[+]=flow [X]=break (last: {s})",
+                    .{@tagName(last_type)},
+                ) catch unreachable;
+                rl.drawText(hint_text, toI32(x), hint_y, 8, palette.UI.TEXT_SECONDARY);
+            } else {
+                rl.drawText("[+]=flow [X]=break", toI32(x), hint_y, 8, palette.UI.TEXT_SECONDARY);
             }
         },
         .montessori => {
@@ -561,6 +864,17 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
                     count += 1;
                 }
             }
+
+            // Show variety bonus and hint
+            const unique = player.school_resources.variety.countUnique();
+            var hint_buf: [48]u8 = undefined;
+            const bonus_pct = @as(u8, @intFromFloat(player.school_resources.variety.bonus_damage * 100));
+            const hint_text = std.fmt.bufPrintZ(
+                &hint_buf,
+                "[*]=new [-]=used ({d} types, +{d}%)",
+                .{ unique, bonus_pct },
+            ) catch unreachable;
+            rl.drawText(hint_text, toI32(x), hint_y, 8, palette.UI.TEXT_SECONDARY);
         },
         .homeschool => {
             // Sacrifice cooldown - show timer if on cooldown
@@ -575,6 +889,9 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
             } else {
                 rl.drawText("Sacrifice: Ready", toI32(x), yi, 9, rl.Color.green);
             }
+
+            // Hint legend
+            rl.drawText("[!]=ready [~]=cooldown", toI32(x), hint_y, 8, palette.UI.TEXT_SECONDARY);
         },
         .private_school => {
             // Show credit debt if in debt
@@ -586,8 +903,11 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
                     .{player.school_resources.credit_debt.debt},
                 ) catch unreachable;
                 rl.drawText(text, toI32(x), yi, 9, rl.Color.red);
+                // Show debt bonus hint when in debt
+                rl.drawText("[$]=bonus active [C]=credit cost", toI32(x), hint_y, 8, palette.UI.TEXT_SECONDARY);
             } else {
                 rl.drawText("Credit: Available", toI32(x), yi, 9, rl.Color.gold);
+                rl.drawText("[C]=credit cost [$]=debt bonus", toI32(x), hint_y, 8, palette.UI.TEXT_SECONDARY);
             }
         },
     }
@@ -885,7 +1205,7 @@ fn drawConditionIcons(player: *const Character, x: f32, y: f32, icon_size: f32, 
     }
 }
 
-fn drawSkillBar(player: *const Character, input_state: *InputState) void {
+fn drawSkillBar(player: *const Character, input_state: *InputState, target: ?*const Character) void {
     const screen_width = rl.getScreenWidth();
     const screen_height = rl.getScreenHeight();
 
@@ -942,7 +1262,7 @@ fn drawSkillBar(player: *const Character, input_state: *InputState) void {
     drawSchoolMechanic(player, skill_x, mechanic_y, energy_bar_width);
 
     for (0..4) |i| {
-        drawSkillSlot(player, i, skill_x, skill_y, skill_size, input_state);
+        drawSkillSlot(player, i, skill_x, skill_y, skill_size, input_state, target);
         skill_x += skill_size + skill_spacing;
     }
 
@@ -959,7 +1279,7 @@ fn drawSkillBar(player: *const Character, input_state: *InputState) void {
     drawConditionIcons(player, skill_x, conditions_y, icon_size, icon_spacing);
 
     for (4..8) |i| {
-        drawSkillSlot(player, i, skill_x, skill_y, skill_size, input_state);
+        drawSkillSlot(player, i, skill_x, skill_y, skill_size, input_state, target);
         skill_x += skill_size + skill_spacing;
     }
 

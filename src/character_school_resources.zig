@@ -176,6 +176,11 @@ pub const SacrificeState = struct {
         return self.cooldown <= 0;
     }
 
+    /// Alias for canSacrifice (used by UI)
+    pub fn isReady(self: SacrificeState) bool {
+        return self.canSacrifice();
+    }
+
     /// Start sacrifice cooldown
     pub fn startCooldown(self: *SacrificeState, duration: f32) void {
         self.cooldown = duration;
@@ -221,6 +226,13 @@ pub const RhythmState = struct {
 
     /// Last skill type used (for alternation tracking)
     last_skill_type: ?SkillType = null,
+
+    /// Time accumulator for decay (counts up when not in perfect window)
+    decay_timer: f32 = 0.0,
+
+    /// Rhythm consumed by the last skill cast (for damage calculation)
+    /// Reset after damage is calculated
+    last_consumed: u8 = 0,
 
     /// Attempt to build rhythm (returns true if rhythm was gained)
     pub fn attemptBuild(self: *RhythmState, skill_type: SkillType) bool {
@@ -281,10 +293,17 @@ pub const RhythmState = struct {
     pub fn update(self: *RhythmState, delta_time: f32) void {
         if (self.perfect_window > 0) {
             self.perfect_window = @max(0, self.perfect_window - delta_time);
-        }
+            self.decay_timer = 0.0; // Reset decay while in perfect window
+        } else if (self.charge > 0) {
+            // Rhythm decays when not maintaining perfect window
+            self.decay_timer += delta_time;
 
-        // Rhythm decays slowly when not in perfect window
-        // TODO: Implement rhythm decay if needed
+            // Decay 1 stack per second after perfect window expires
+            if (self.decay_timer >= 1.0) {
+                self.charge -= 1;
+                self.decay_timer = 0.0;
+            }
+        }
     }
 
     /// Clear rhythm (death, etc.)
@@ -292,6 +311,8 @@ pub const RhythmState = struct {
         self.charge = 0;
         self.perfect_window = 0.0;
         self.last_skill_type = null;
+        self.decay_timer = 0.0;
+        self.last_consumed = 0;
     }
 
     /// Grant rhythm directly (from skills like "Find Your Rhythm")
@@ -339,6 +360,23 @@ pub const VarietyState = struct {
         }
 
         return count;
+    }
+
+    /// Alias for countUniqueTypes (used by UI)
+    pub fn countUnique(self: VarietyState) u8 {
+        return self.countUniqueTypes();
+    }
+
+    /// Check if a skill type has been used recently (in the buffer)
+    pub fn hasUsedRecently(self: VarietyState, skill_type: SkillType) bool {
+        for (self.recent_types) |maybe_type| {
+            if (maybe_type) |recorded_type| {
+                if (recorded_type == skill_type) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /// Recalculate variety bonus based on unique skill types

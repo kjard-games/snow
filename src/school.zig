@@ -958,7 +958,8 @@ const waldorf_skills = [_]Skill{
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        // TODO: +5 damage per rhythm stack, consume all rhythm
+        .consumes_all_rhythm = true,
+        .damage_per_rhythm_consumed = 5.0,
     },
 
     // 9. WALL: Harmonic Wall - rhythmic wall that pulses
