@@ -8,8 +8,16 @@ const gear_slot = @import("gear_slot.zig");
 const entity = @import("entity.zig");
 const effects = @import("effects.zig");
 
+// Component modules
+const character_stats = @import("character_stats.zig");
+const character_casting = @import("character_casting.zig");
+const character_conditions = @import("character_conditions.zig");
+const character_school_resources = @import("character_school_resources.zig");
+const character_combat = @import("character_combat.zig");
+
 const print = std.debug.print;
 
+// Re-export types for backward compatibility
 pub const School = school.School;
 pub const Position = position.Position;
 pub const Skill = skills.Skill;
@@ -19,188 +27,161 @@ pub const GearSlot = gear_slot.GearSlot;
 pub const EntityId = entity.EntityId;
 pub const Team = entity.Team;
 
-// Character configuration constants
-pub const MAX_SKILLS: usize = 8;
-pub const MAX_ACTIVE_CONDITIONS: usize = 10;
-pub const MAX_RECENT_SKILLS: usize = 5;
-pub const MAX_GRIT_STACKS: u8 = 5;
-pub const MAX_RHYTHM_CHARGE: u8 = 5; // Updated to match new rhythm design (0-5 stacks)
-pub const MAX_DAMAGE_SOURCES: usize = 6; // Track last 6 damage sources (GW1 damage monitor size)
+// Re-export component types
+pub const WarmthState = character_stats.WarmthState;
+pub const EnergyState = character_stats.EnergyState;
+pub const GearStats = character_stats.GearStats;
+pub const CastState = character_casting.CastState;
+pub const CastingState = character_casting.CastingState;
+pub const SkillBar = character_casting.SkillBar;
+pub const QueuedSkill = character_casting.QueuedSkill;
+pub const ChillState = character_conditions.ChillState;
+pub const CozyState = character_conditions.CozyState;
+pub const EffectState = character_conditions.EffectState;
+pub const ConditionState = character_conditions.ConditionState;
+pub const SchoolResourceState = character_school_resources.SchoolResourceState;
+pub const CombatState = character_combat.CombatState;
+pub const DamageSource = character_combat.DamageSource;
+pub const DamageMonitor = character_combat.DamageMonitor;
+pub const AutoAttackState = character_combat.AutoAttackState;
+pub const MeleeLungeState = character_combat.MeleeLungeState;
 
-// Cast state for GW1-accurate skill timing
-pub const CastState = enum {
-    idle, // Not casting or in aftercast
-    activating, // Currently casting (activation phase)
-    aftercast, // Skill fired, but locked in aftercast animation
-};
-
-// Damage source tracking (GW1 damage monitor)
-pub const DamageSource = struct {
-    skill_name: [:0]const u8,
-    skill_ptr: ?*const Skill, // For displaying icon
-    source_id: EntityId, // Who dealt the damage
-    hit_count: u32, // How many times this source hit us
-    time_since_last_hit: f32, // Fade out if not hit recently
-};
-
-// Compile-time safety: ensure MAX_SKILLS fits in u8 for skill indexing
-comptime {
-    if (MAX_SKILLS > 255) {
-        @compileError("MAX_SKILLS must fit in u8 for skill bar indexing");
-    }
-}
+// Re-export constants for backward compatibility
+pub const MAX_SKILLS: usize = character_casting.MAX_SKILLS;
+pub const MAX_ACTIVE_CONDITIONS: usize = character_conditions.MAX_ACTIVE_CONDITIONS;
+pub const MAX_RECENT_SKILLS: usize = character_school_resources.MAX_RECENT_SKILLS;
+pub const MAX_GRIT_STACKS: u8 = character_school_resources.MAX_GRIT_STACKS;
+pub const MAX_RHYTHM_CHARGE: u8 = character_school_resources.MAX_RHYTHM_CHARGE;
+pub const MAX_DAMAGE_SOURCES: usize = character_combat.MAX_DAMAGE_SOURCES;
 
 pub const Character = struct {
+    // === IDENTITY ===
     id: EntityId, // Unique identifier for this entity (stable across ticks)
+    name: [:0]const u8,
+    team: Team, // Which team this character belongs to
+
+    // === POSITION & PHYSICS ===
     position: rl.Vector3, // Current tick position (authoritative)
     previous_position: rl.Vector3 = .{ .x = 0, .y = 0, .z = 0 }, // Previous tick position (for interpolation)
     radius: f32,
+    facing_angle: f32 = 0.0, // Entity's actual facing direction (decoupled from camera)
+
+    // === VISUAL ===
     color: rl.Color,
     school_color: rl.Color, // For halftone rendering
     position_color: rl.Color, // For halftone rendering
-    name: [:0]const u8,
-    warmth: f32,
-    max_warmth: f32,
-    team: Team, // Which team this character belongs to
 
-    // Skill system components
+    // === SCHOOL & POSITION ===
     school: School,
     player_position: Position,
 
-    // Gear system (6 slots: toque, scarf, jacket, gloves, pants, boots)
+    // === CORE STATS (component) ===
+    warmth: f32,
+    max_warmth: f32,
+    energy: u8,
+    max_energy: u8,
+    energy_accumulator: f32 = 0.0, // Tracks fractional energy for smooth regen
+    warmth_regen_pips: i8 = 0, // -10 to +10 pips (like GW1 health regen/degen)
+    warmth_pip_accumulator: f32 = 0.0, // Tracks fractional warmth for pip ticking
+
+    // === GEAR SYSTEM (6 slots: toque, scarf, jacket, gloves, pants, boots) ===
     gear: [gear_slot.SLOT_COUNT]?*const Gear = [_]?*const Gear{null} ** gear_slot.SLOT_COUNT,
     total_padding: f32 = 0.0, // Cached total armor value from equipped gear
 
-    // Equipment system (flexible hand slots + worn) - separate from gear padding system
+    // === EQUIPMENT SYSTEM (flexible hand slots + worn) ===
     main_hand: ?*const equipment.Equipment = null,
     off_hand: ?*const equipment.Equipment = null,
     worn: ?*const equipment.Equipment = null, // Mittens, Blanket, etc.
 
-    // Universal primary resource
-    energy: u8,
-    max_energy: u8,
-    energy_accumulator: f32 = 0.0, // Tracks fractional energy for smooth regen
-
-    // Facing angle (decoupled from camera - for deterministic movement/targeting)
-    // This is the entity's actual facing direction, independent of camera angle
-    facing_angle: f32 = 0.0,
-
-    // School-specific secondary mechanics
-    // Private School: Credit/Debt (max energy temporarily reduced)
-    credit_debt: u8 = 0, // How much max energy is locked away (spending on credit)
-    credit_recovery_timer: f32 = 0.0, // Time until next credit recovery (1 per 3s)
-
-    // Public School: Grit stacks
-    grit_stacks: u8 = 0, // Every 5 stacks = free skill
-    max_grit_stacks: u8 = MAX_GRIT_STACKS,
-
-    // Homeschool: Warmth-to-Energy conversion (cooldown tracker)
-    sacrifice_cooldown: f32 = 0.0, // seconds until can sacrifice again
-
-    // Waldorf: Rhythm timing
-    rhythm_charge: u8 = 0, // 0-10, builds with alternating skill types
-    rhythm_perfect_window: f32 = 0.0, // timing window tracker
-    max_rhythm_charge: u8 = MAX_RHYTHM_CHARGE,
-    last_skill_type_for_rhythm: ?skills.SkillType = null, // Track last type for rhythm building
-
-    // Montessori: Skill variety bonus
-    last_skill_types_used: [MAX_RECENT_SKILLS]?skills.SkillType = [_]?skills.SkillType{null} ** MAX_RECENT_SKILLS, // tracks last 5 skill types
-    last_skill_type_index: u8 = 0, // circular buffer index
-    variety_bonus_damage: f32 = 0.0, // 0.0 to 0.5 (0% to 50% bonus)
-
+    // === SKILL SYSTEM (component) ===
     skill_bar: [MAX_SKILLS]?*const Skill,
     selected_skill: u8 = 0,
-
-    // Skill cooldowns and activation tracking (GW1-accurate)
     skill_cooldowns: [MAX_SKILLS]f32 = [_]f32{0.0} ** MAX_SKILLS, // time remaining in seconds
 
-    // Cast state tracking
+    // === CASTING STATE (component) ===
     cast_state: CastState = .idle,
     casting_skill_index: u8 = 0,
     cast_time_remaining: f32 = 0.0, // seconds remaining on current cast phase
     skill_executed: bool = false, // Has skill effect/projectile been fired?
     cast_target_id: ?EntityId = null, // Target entity ID for cast completion
-
-    // Aftercast tracking
     aftercast_time_remaining: f32 = 0.0, // seconds remaining in aftercast
 
-    // Auto-attack state (Guild Wars style)
-    is_auto_attacking: bool = false, // Whether auto-attack loop is active
-    auto_attack_timer: f32 = 0.0, // Time until next auto-attack
-    auto_attack_target_id: ?EntityId = null, // Current auto-attack target
-
-    // Melee lunge animation state
-    lunge_time_remaining: f32 = 0.0, // Time remaining in lunge animation (seconds)
-    lunge_return_position: rl.Vector3 = .{ .x = 0, .y = 0, .z = 0 }, // Position to return to after lunge
-
-    // Skill queue (GW1 style: run into range and cast)
+    // === SKILL QUEUE (GW1 style: run into range and cast) ===
     queued_skill_index: ?u8 = null, // Which skill to cast when in range
     queued_skill_target_id: ?EntityId = null, // Target for queued skill
     is_approaching_for_skill: bool = false, // Moving toward target to cast
 
-    // Active chills (debuffs) on this character
+    // === CONDITIONS (component) ===
     active_chills: [MAX_ACTIVE_CONDITIONS]?skills.ActiveChill = [_]?skills.ActiveChill{null} ** MAX_ACTIVE_CONDITIONS,
     active_chill_count: u8 = 0,
-
-    // Active cozies (buffs) on this character
     active_cozies: [MAX_ACTIVE_CONDITIONS]?skills.ActiveCozy = [_]?skills.ActiveCozy{null} ** MAX_ACTIVE_CONDITIONS,
     active_cozy_count: u8 = 0,
-
-    // Active composable effects (new system - replaces chills/cozies in future)
     active_effects: [MAX_ACTIVE_CONDITIONS]?effects.ActiveEffect = [_]?effects.ActiveEffect{null} ** MAX_ACTIVE_CONDITIONS,
     active_effect_count: u8 = 0,
 
-    // Death state
-    is_dead: bool = false,
+    // === SCHOOL RESOURCES (component) ===
+    // Private School: Credit/Debt
+    credit_debt: u8 = 0,
+    credit_recovery_timer: f32 = 0.0,
+    // Public School: Grit
+    grit_stacks: u8 = 0,
+    max_grit_stacks: u8 = MAX_GRIT_STACKS,
+    // Homeschool: Sacrifice
+    sacrifice_cooldown: f32 = 0.0,
+    // Waldorf: Rhythm
+    rhythm_charge: u8 = 0,
+    rhythm_perfect_window: f32 = 0.0,
+    max_rhythm_charge: u8 = MAX_RHYTHM_CHARGE,
+    last_skill_type_for_rhythm: ?skills.SkillType = null,
+    // Montessori: Variety
+    last_skill_types_used: [MAX_RECENT_SKILLS]?skills.SkillType = [_]?skills.SkillType{null} ** MAX_RECENT_SKILLS,
+    last_skill_type_index: u8 = 0,
+    variety_bonus_damage: f32 = 0.0,
 
-    // Damage monitor (GW1-style damage tracking)
+    // === COMBAT STATE (component) ===
+    is_auto_attacking: bool = false,
+    auto_attack_timer: f32 = 0.0,
+    auto_attack_target_id: ?EntityId = null,
+    lunge_time_remaining: f32 = 0.0,
+    lunge_return_position: rl.Vector3 = .{ .x = 0, .y = 0, .z = 0 },
+
+    // === DAMAGE MONITOR (component) ===
     damage_sources: [MAX_DAMAGE_SOURCES]?DamageSource = [_]?DamageSource{null} ** MAX_DAMAGE_SOURCES,
     damage_source_count: u8 = 0,
     damage_monitor_frozen: bool = false, // Freeze on death until resurrection
 
-    // Warmth regeneration/degeneration system (GW1-style pips)
-    warmth_regen_pips: i8 = 0, // -10 to +10 pips (like GW1 health regen/degen)
-    warmth_pip_accumulator: f32 = 0.0, // Tracks fractional warmth for pip ticking
+    // === DEATH STATE ===
+    is_dead: bool = false,
 
-    // TODO: Natural warmth regeneration (GW1 out-of-combat regen)
-    // Tracks time since last warmth loss for natural regen scaling
-    // time_since_last_warmth_loss: f32 = 0.0,
-    // time_safe_for_natural_regen: f32 = 0.0,
-
-    // TODO: Combat tracking for natural regen (future)
-    // last_attacked_time: f32 = 0.0,
-    // last_damaged_time: f32 = 0.0,
-    // last_offensive_skill_time: f32 = 0.0,
-    // last_targeted_by_offensive_skill_time: f32 = 0.0,
+    // ========================================================================
+    // BASIC QUERIES
+    // ========================================================================
 
     pub fn isAlive(self: Character) bool {
         return !self.is_dead and self.warmth > 0;
     }
 
-    /// Check if another character is an ally
     pub fn isAlly(self: Character, other: Character) bool {
         return self.team.isAlly(other.team);
     }
 
-    /// Check if another character is an enemy
     pub fn isEnemy(self: Character, other: Character) bool {
         return self.team.isEnemy(other.team);
     }
 
     /// Check if character is freezing (below 25% warmth)
-    /// Causes movement speed penalty and slower skill activation
     pub fn isFreezing(self: Character) bool {
         return (self.warmth / self.max_warmth) < 0.25;
     }
 
-    /// Get movement speed multiplier based on warmth
+    // ========================================================================
+    // MOVEMENT
+    // ========================================================================
+
     pub fn getMovementSpeedMultiplier(self: Character) f32 {
         if (self.isFreezing()) {
             return 0.75; // -25% movement speed when freezing
         }
-
-        // TODO: Apply slippery chill slow
-        // TODO: Apply sure_footed cozy speed boost
 
         // Apply gear speed modifiers
         var speed_mult: f32 = 1.0;
@@ -217,7 +198,49 @@ pub const Character = struct {
         return speed_mult;
     }
 
-    /// Recalculate total padding from equipped gear
+    pub fn getInterpolatedPosition(self: Character, alpha: f32) rl.Vector3 {
+        return rl.Vector3{
+            .x = self.previous_position.x + (self.position.x - self.previous_position.x) * alpha,
+            .y = self.previous_position.y + (self.position.y - self.previous_position.y) * alpha,
+            .z = self.previous_position.z + (self.position.z - self.previous_position.z) * alpha,
+        };
+    }
+
+    pub fn distanceTo(self: Character, other: Character) f32 {
+        const dx = self.position.x - other.position.x;
+        const dy = self.position.y - other.position.y;
+        const dz = self.position.z - other.position.z;
+        return @sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    pub fn overlaps(self: Character, other: Character) bool {
+        const distance = self.distanceTo(other);
+        const min_distance = self.radius + other.radius;
+        return distance < min_distance;
+    }
+
+    pub fn resolveCollision(self: *Character, other: Character) void {
+        const dx = self.position.x - other.position.x;
+        const dz = self.position.z - other.position.z;
+        const distance = @sqrt(dx * dx + dz * dz);
+
+        if (distance < 0.1) return;
+
+        const min_distance = self.radius + other.radius;
+        if (distance < min_distance) {
+            const overlap = min_distance - distance;
+            const push_x = (dx / distance) * overlap;
+            const push_z = (dz / distance) * overlap;
+
+            self.position.x += push_x;
+            self.position.z += push_z;
+        }
+    }
+
+    // ========================================================================
+    // GEAR SYSTEM
+    // ========================================================================
+
     pub fn recalculatePadding(self: *Character) void {
         var total: f32 = 0.0;
         for (self.gear) |maybe_gear| {
@@ -228,32 +251,27 @@ pub const Character = struct {
         self.total_padding = total;
     }
 
-    /// Get total padding (armor rating) from all equipped gear
     pub fn getTotalPadding(self: Character) f32 {
         return self.total_padding;
     }
 
-    /// Equip gear in a specific slot
     pub fn equipGear(self: *Character, gear_to_equip: *const Gear) void {
         const slot_index = @intFromEnum(gear_to_equip.slot);
         self.gear[slot_index] = gear_to_equip;
         self.recalculatePadding();
     }
 
-    /// Unequip gear from a specific slot
     pub fn unequipGear(self: *Character, slot: GearSlot) void {
         const slot_index = @intFromEnum(slot);
         self.gear[slot_index] = null;
         self.recalculatePadding();
     }
 
-    /// Get gear in a specific slot (or null if empty)
     pub fn getGearInSlot(self: Character, slot: GearSlot) ?*const Gear {
         const slot_index = @intFromEnum(slot);
         return self.gear[slot_index];
     }
 
-    /// Calculate total warmth regen bonus from all equipped gear
     pub fn getGearWarmthRegen(self: Character) f32 {
         var total: f32 = 0.0;
         for (self.gear) |maybe_gear| {
@@ -264,7 +282,6 @@ pub const Character = struct {
         return total;
     }
 
-    /// Calculate total energy regen bonus from all equipped gear (per tick)
     pub fn getGearEnergyRegen(self: Character) f32 {
         var total: f32 = 0.0;
         for (self.gear) |maybe_gear| {
@@ -275,22 +292,11 @@ pub const Character = struct {
         return total;
     }
 
-    /// Get interpolated position for smooth rendering between ticks
-    pub fn getInterpolatedPosition(self: Character, alpha: f32) rl.Vector3 {
-        // Lerp between previous and current position
-        // alpha = 0.0 → previous position (tick just happened)
-        // alpha = 1.0 → current position (about to tick)
-        const result = rl.Vector3{
-            .x = self.previous_position.x + (self.position.x - self.previous_position.x) * alpha,
-            .y = self.previous_position.y + (self.position.y - self.previous_position.y) * alpha,
-            .z = self.previous_position.z + (self.position.z - self.previous_position.z) * alpha,
-        };
-
-        return result;
-    }
+    // ========================================================================
+    // DAMAGE & DEATH
+    // ========================================================================
 
     pub fn takeDamage(self: *Character, damage: f32) void {
-        // Clamp warmth to 0 minimum (avoid negative health)
         if (damage >= self.warmth) {
             self.warmth = 0.0;
         } else {
@@ -299,15 +305,13 @@ pub const Character = struct {
 
         if (self.warmth <= 0) {
             self.is_dead = true;
-            self.damage_monitor_frozen = true; // Freeze damage monitor on death (GW1 behavior)
-            // Death interrupts casting
+            self.damage_monitor_frozen = true;
             if (self.cast_state != .idle) {
                 self.cancelCasting();
             }
         }
     }
 
-    /// Interrupt current cast (from interrupt skills, dazed condition, etc)
     pub fn interrupt(self: *Character) void {
         if (self.cast_state == .activating) {
             print("{s}'s cast was interrupted!\n", .{self.name});
@@ -315,58 +319,20 @@ pub const Character = struct {
         }
     }
 
-    pub fn distanceTo(self: Character, other: Character) f32 {
-        const dx = self.position.x - other.position.x;
-        const dy = self.position.y - other.position.y;
-        const dz = self.position.z - other.position.z;
-        return @sqrt(dx * dx + dy * dy + dz * dz);
-    }
-
-    /// Check if this character overlaps with another (for collision detection)
-    pub fn overlaps(self: Character, other: Character) bool {
-        const distance = self.distanceTo(other);
-        const min_distance = self.radius + other.radius;
-        return distance < min_distance;
-    }
-
-    /// Push this character away from another to resolve overlap
-    pub fn resolveCollision(self: *Character, other: Character) void {
-        const dx = self.position.x - other.position.x;
-        const dz = self.position.z - other.position.z;
-        const distance = @sqrt(dx * dx + dz * dz);
-
-        if (distance < 0.1) return; // Avoid division by zero
-
-        const min_distance = self.radius + other.radius;
-        if (distance < min_distance) {
-            // Push away to maintain minimum distance
-            const overlap = min_distance - distance;
-            const push_x = (dx / distance) * overlap;
-            const push_z = (dz / distance) * overlap;
-
-            self.position.x += push_x;
-            self.position.z += push_z;
-        }
-    }
+    // ========================================================================
+    // ENERGY SYSTEM
+    // ========================================================================
 
     pub fn updateEnergy(self: *Character, delta_time: f32) void {
-        // Passive energy regeneration based on school
         var regen = self.school.getEnergyRegen();
-
-        // Add gear energy regen bonus
         regen += self.getGearEnergyRegen();
 
-        // Apply energy regen multipliers from effects
         const regen_mult = effects.calculateEnergyRegenMultiplier(&self.active_effects, self.active_effect_count);
         regen *= regen_mult;
 
-        // Apply delta time
         const energy_delta = regen * delta_time;
-
-        // Accumulate fractional energy
         self.energy_accumulator += energy_delta;
 
-        // Convert whole points to energy
         if (self.energy_accumulator >= 1.0) {
             const energy_to_add = @as(u8, @intFromFloat(self.energy_accumulator));
             self.energy = @min(self.max_energy, self.energy + energy_to_add);
@@ -376,7 +342,6 @@ pub const Character = struct {
         // Update school-specific mechanics
         switch (self.school) {
             .private_school => {
-                // Credit recovery: pay back debt at 1 point per 3 seconds
                 if (self.credit_debt > 0) {
                     self.credit_recovery_timer += delta_time;
                     if (self.credit_recovery_timer >= 3.0) {
@@ -385,22 +350,14 @@ pub const Character = struct {
                     }
                 }
             },
-            .public_school => {
-                // Grit stacks decay over time if not in combat
-                // TODO: implement combat state tracking
-            },
-            .montessori => {
-                // Update variety bonus based on recent skill usage
-                // TODO: implement when skills are used
-            },
+            .public_school => {},
+            .montessori => {},
             .homeschool => {
-                // Reduce sacrifice cooldown
                 if (self.sacrifice_cooldown > 0) {
                     self.sacrifice_cooldown = @max(0, self.sacrifice_cooldown - delta_time);
                 }
             },
             .waldorf => {
-                // Rhythm charge decays slowly
                 if (self.rhythm_perfect_window > 0) {
                     self.rhythm_perfect_window = @max(0, self.rhythm_perfect_window - delta_time);
                 }
@@ -408,25 +365,21 @@ pub const Character = struct {
         }
     }
 
-    /// Update warmth regeneration/degeneration (GW1-style pips)
-    /// Call this every tick (50ms) for accurate pip timing
+    // ========================================================================
+    // WARMTH SYSTEM
+    // ========================================================================
+
     pub fn updateWarmth(self: *Character, delta_time: f32) void {
-        // Calculate warmth change per second from pips
-        // In GW1: 1 pip of regen/degen = 2 health per second
-        // We'll use the same ratio: 1 pip = 2 warmth per second
         const warmth_per_second = @as(f32, @floatFromInt(self.warmth_regen_pips)) * 2.0;
         const warmth_delta = warmth_per_second * delta_time;
 
-        // Accumulate fractional warmth
         self.warmth_pip_accumulator += warmth_delta;
 
-        // Apply whole points of warmth
         if (@abs(self.warmth_pip_accumulator) >= 1.0) {
             const warmth_to_apply = self.warmth_pip_accumulator;
             self.warmth = @max(0.0, @min(self.max_warmth, self.warmth + warmth_to_apply));
             self.warmth_pip_accumulator -= warmth_to_apply;
 
-            // Check for death
             if (self.warmth <= 0) {
                 self.is_dead = true;
                 if (self.cast_state != .idle) {
@@ -436,17 +389,15 @@ pub const Character = struct {
         }
     }
 
-    /// Recalculate warmth regen/degen pips from active conditions and gear
-    /// Call this whenever conditions change (add/remove/expire) or gear is equipped/unequipped
     pub fn recalculateWarmthPips(self: *Character) void {
-        var total_pips: i16 = 0; // Use i16 to detect overflow before clamping
+        var total_pips: i16 = 0;
 
         // Add regeneration from cozies
         for (self.active_cozies[0..self.active_cozy_count]) |maybe_cozy| {
             if (maybe_cozy) |cozy| {
                 const pips = switch (cozy.cozy) {
-                    .hot_cocoa => @as(i16, 2) * @as(i16, cozy.stack_intensity), // +2 per stack
-                    .fire_inside => @as(i16, 1) * @as(i16, cozy.stack_intensity), // +1 per stack
+                    .hot_cocoa => @as(i16, 2) * @as(i16, cozy.stack_intensity),
+                    .fire_inside => @as(i16, 1) * @as(i16, cozy.stack_intensity),
                     else => 0,
                 };
                 total_pips += pips;
@@ -457,49 +408,38 @@ pub const Character = struct {
         for (self.active_chills[0..self.active_chill_count]) |maybe_chill| {
             if (maybe_chill) |chill| {
                 const pips = switch (chill.chill) {
-                    .soggy => -@as(i16, 2) * @as(i16, chill.stack_intensity), // -2 per stack (DoT)
-                    .windburn => -@as(i16, 3) * @as(i16, chill.stack_intensity), // -3 per stack (DoT)
-                    .brain_freeze => -@as(i16, 1) * @as(i16, chill.stack_intensity), // -1 per stack
+                    .soggy => -@as(i16, 2) * @as(i16, chill.stack_intensity),
+                    .windburn => -@as(i16, 3) * @as(i16, chill.stack_intensity),
+                    .brain_freeze => -@as(i16, 1) * @as(i16, chill.stack_intensity),
                     else => 0,
                 };
                 total_pips += pips;
             }
         }
 
-        // Add gear warmth regen bonus (convert warmth/sec to pips)
-        // 1 pip = 2 warmth/sec, so gear_regen/2 = pips
+        // Add gear warmth regen bonus
         const gear_warmth_regen = self.getGearWarmthRegen();
         const gear_warmth_pips = @as(i16, @intFromFloat(gear_warmth_regen / 2.0));
         total_pips += gear_warmth_pips;
 
-        // TODO: Add natural regeneration pips (GW1 out-of-combat regen)
-        // if (self.time_safe_for_natural_regen >= 5.0) {
-        //     const natural_pips = calculateNaturalRegenPips(self.time_safe_for_natural_regen);
-        //     total_pips += natural_pips;
-        // }
-
-        // Clamp to GW1 limits: -10 to +10
         self.warmth_regen_pips = @intCast(@max(-10, @min(10, total_pips)));
     }
 
+    // ========================================================================
+    // COOLDOWNS & CASTING
+    // ========================================================================
+
     pub fn updateCooldowns(self: *Character, delta_time: f32) void {
-        // Update skill cooldowns
         for (&self.skill_cooldowns) |*cooldown| {
             if (cooldown.* > 0) {
                 cooldown.* = @max(0, cooldown.* - delta_time);
             }
         }
 
-        // Update casting state (activation phase)
         if (self.cast_state == .activating) {
             self.cast_time_remaining = @max(0, self.cast_time_remaining - delta_time);
-            if (self.cast_time_remaining <= 0) {
-                // Cast is complete - will be executed by game_state.finishCasts()
-                // Don't change state here - game_state handles transition to aftercast
-            }
         }
 
-        // Update aftercast state
         if (self.cast_state == .aftercast) {
             self.aftercast_time_remaining = @max(0, self.aftercast_time_remaining - delta_time);
             if (self.aftercast_time_remaining <= 0) {
@@ -508,21 +448,86 @@ pub const Character = struct {
         }
     }
 
+    pub fn canUseSkill(self: Character, skill_index: u8) bool {
+        if (skill_index >= MAX_SKILLS) return false;
+        if (self.cast_state != .idle) return false;
+        if (self.skill_cooldowns[skill_index] > 0) return false;
+
+        const skill_to_check = self.skill_bar[skill_index] orelse return false;
+        if (self.energy < skill_to_check.energy_cost) return false;
+
+        return true;
+    }
+
+    pub fn startCasting(self: *Character, skill_index: u8) void {
+        const skill_to_cast = self.skill_bar[skill_index] orelse return;
+
+        self.cast_state = .activating;
+        self.casting_skill_index = skill_index;
+        self.cast_time_remaining = @as(f32, @floatFromInt(skill_to_cast.activation_time_ms)) / 1000.0;
+        self.skill_executed = false;
+
+        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&self.active_effects, self.active_effect_count);
+        const energy_cost = @as(u8, @intFromFloat(@as(f32, @floatFromInt(skill_to_cast.energy_cost)) * energy_cost_mult));
+        self.energy -= energy_cost;
+    }
+
+    pub fn cancelCasting(self: *Character) void {
+        if (self.cast_state == .activating) {
+            self.cast_state = .idle;
+            self.cast_time_remaining = 0;
+            self.skill_executed = false;
+            self.cast_target_id = null;
+        }
+    }
+
+    pub fn canCancelCast(self: Character) bool {
+        if (self.cast_state != .activating) return false;
+
+        const skill_to_check = self.skill_bar[self.casting_skill_index] orelse return false;
+        return skill_to_check.activation_time_ms > 0;
+    }
+
+    pub fn isCasting(self: Character) bool {
+        return self.cast_state != .idle;
+    }
+
+    // ========================================================================
+    // SKILL QUEUE
+    // ========================================================================
+
+    pub fn queueSkill(self: *Character, skill_index: u8, target_id: EntityId) void {
+        self.queued_skill_index = skill_index;
+        self.queued_skill_target_id = target_id;
+        self.is_approaching_for_skill = true;
+    }
+
+    pub fn clearSkillQueue(self: *Character) void {
+        self.queued_skill_index = null;
+        self.queued_skill_target_id = null;
+        self.is_approaching_for_skill = false;
+    }
+
+    pub fn hasQueuedSkill(self: Character) bool {
+        return self.queued_skill_index != null;
+    }
+
+    // ========================================================================
+    // CONDITIONS
+    // ========================================================================
+
     pub fn updateConditions(self: *Character, delta_time_ms: u32) void {
         var conditions_changed = false;
 
-        // Update active chills (debuffs), removing expired ones
-        // Use swap-with-last pattern for efficient removal (order doesn't matter for conditions)
+        // Update active chills
         var i: usize = 0;
         while (i < self.active_chill_count) {
             if (self.active_chills[i]) |*chill| {
                 if (chill.time_remaining_ms <= delta_time_ms) {
-                    // Chill expired, remove it by swapping with last element
                     self.active_chill_count -= 1;
                     self.active_chills[i] = self.active_chills[self.active_chill_count];
                     self.active_chills[self.active_chill_count] = null;
                     conditions_changed = true;
-                    // Don't increment i since we need to check the swapped element
                 } else {
                     chill.time_remaining_ms -= delta_time_ms;
                     i += 1;
@@ -532,17 +537,15 @@ pub const Character = struct {
             }
         }
 
-        // Update active cozies (buffs), removing expired ones
+        // Update active cozies
         i = 0;
         while (i < self.active_cozy_count) {
             if (self.active_cozies[i]) |*cozy| {
                 if (cozy.time_remaining_ms <= delta_time_ms) {
-                    // Cozy expired, remove it by swapping with last element
                     self.active_cozy_count -= 1;
                     self.active_cozies[i] = self.active_cozies[self.active_cozy_count];
                     self.active_cozies[self.active_cozy_count] = null;
                     conditions_changed = true;
-                    // Don't increment i since we need to check the swapped element
                 } else {
                     cozy.time_remaining_ms -= delta_time_ms;
                     i += 1;
@@ -552,16 +555,14 @@ pub const Character = struct {
             }
         }
 
-        // Update active effects, removing expired ones
+        // Update active effects
         i = 0;
         while (i < self.active_effect_count) {
             if (self.active_effects[i]) |*effect| {
                 if (effect.time_remaining_ms <= delta_time_ms) {
-                    // Effect expired, remove it by swapping with last element
                     self.active_effect_count -= 1;
                     self.active_effects[i] = self.active_effects[self.active_effect_count];
                     self.active_effects[self.active_effect_count] = null;
-                    // Don't increment i since we need to check the swapped element
                 } else {
                     effect.time_remaining_ms -= delta_time_ms;
                     i += 1;
@@ -571,7 +572,6 @@ pub const Character = struct {
             }
         }
 
-        // Recalculate warmth pips if any conditions expired
         if (conditions_changed) {
             self.recalculateWarmthPips();
         }
@@ -600,20 +600,17 @@ pub const Character = struct {
     }
 
     pub fn addChill(self: *Character, effect: skills.ChillEffect, source_id: ?u32) void {
-        // Check if chill already exists (stack or refresh)
         for (self.active_chills[0..self.active_chill_count]) |*maybe_active| {
             if (maybe_active.*) |*active| {
                 if (active.chill == effect.chill) {
-                    // Refresh duration and stack intensity
                     active.time_remaining_ms = @max(active.time_remaining_ms, effect.duration_ms);
                     active.stack_intensity = @min(255, active.stack_intensity + effect.stack_intensity);
-                    self.recalculateWarmthPips(); // Pips changed!
+                    self.recalculateWarmthPips();
                     return;
                 }
             }
         }
 
-        // Add new chill if we have space
         if (self.active_chill_count < self.active_chills.len) {
             self.active_chills[self.active_chill_count] = .{
                 .chill = effect.chill,
@@ -622,26 +619,22 @@ pub const Character = struct {
                 .source_character_id = source_id,
             };
             self.active_chill_count += 1;
-            self.recalculateWarmthPips(); // New chill added!
+            self.recalculateWarmthPips();
         }
-        // Silently ignore if array is full - this is a game, not critical
     }
 
     pub fn addCozy(self: *Character, effect: skills.CozyEffect, source_id: ?u32) void {
-        // Check if cozy already exists (stack or refresh)
         for (self.active_cozies[0..self.active_cozy_count]) |*maybe_active| {
             if (maybe_active.*) |*active| {
                 if (active.cozy == effect.cozy) {
-                    // Refresh duration and stack intensity
                     active.time_remaining_ms = @max(active.time_remaining_ms, effect.duration_ms);
                     active.stack_intensity = @min(255, active.stack_intensity + effect.stack_intensity);
-                    self.recalculateWarmthPips(); // Pips changed!
+                    self.recalculateWarmthPips();
                     return;
                 }
             }
         }
 
-        // Add new cozy if we have space
         if (self.active_cozy_count < self.active_cozies.len) {
             self.active_cozies[self.active_cozy_count] = .{
                 .cozy = effect.cozy,
@@ -650,30 +643,23 @@ pub const Character = struct {
                 .source_character_id = source_id,
             };
             self.active_cozy_count += 1;
-            self.recalculateWarmthPips(); // New cozy added!
+            self.recalculateWarmthPips();
         }
-        // Silently ignore if array is full - this is a game, not critical
     }
 
-    /// Add a composable effect to this character
-    /// Handles stacking behavior (refresh duration, add intensity, or ignore)
     pub fn addEffect(self: *Character, effect: *const effects.Effect, source_id: ?u32) void {
-        // Check if effect already exists (handle stacking)
         for (self.active_effects[0..self.active_effect_count]) |*maybe_active| {
             if (maybe_active.*) |*active| {
-                // Match by effect pointer
                 if (active.effect == effect) {
-                    // Apply stacking behavior
                     switch (effect.stack_behavior) {
                         .refresh_duration => {
                             active.time_remaining_ms = @max(active.time_remaining_ms, effect.duration_ms);
                         },
                         .add_intensity => {
                             active.stack_count = @min(effect.max_stacks, active.stack_count + 1);
-                            active.time_remaining_ms = effect.duration_ms; // Reset duration when stacking
+                            active.time_remaining_ms = effect.duration_ms;
                         },
                         .ignore_if_active => {
-                            // Do nothing - keep existing effect
                             return;
                         },
                     }
@@ -682,7 +668,6 @@ pub const Character = struct {
             }
         }
 
-        // Add new effect if we have space
         if (self.active_effect_count < self.active_effects.len) {
             self.active_effects[self.active_effect_count] = .{
                 .effect = effect,
@@ -692,102 +677,17 @@ pub const Character = struct {
             };
             self.active_effect_count += 1;
         }
-        // Silently ignore if array is full - this is a game, not critical
     }
 
-    pub fn canUseSkill(self: Character, skill_index: u8) bool {
-        if (skill_index >= MAX_SKILLS) return false;
-        // Can't use skills while casting or in aftercast
-        if (self.cast_state != .idle) return false;
-        if (self.skill_cooldowns[skill_index] > 0) return false;
+    // ========================================================================
+    // SKILL BAR / AP VALIDATION
+    // ========================================================================
 
-        const skill = self.skill_bar[skill_index] orelse return false;
-        if (self.energy < skill.energy_cost) return false;
-
-        return true;
-    }
-
-    pub fn startCasting(self: *Character, skill_index: u8) void {
-        const skill = self.skill_bar[skill_index] orelse return;
-
-        self.cast_state = .activating;
-        self.casting_skill_index = skill_index;
-        self.cast_time_remaining = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
-        self.skill_executed = false;
-
-        // Consume energy immediately (even if cancelled later), applying modifiers from effects
-        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&self.active_effects, self.active_effect_count);
-        const energy_cost = @as(u8, @intFromFloat(@as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult));
-        self.energy -= energy_cost;
-    }
-
-    /// Cancel current cast (GW1-accurate)
-    /// Only works during activation phase (not aftercast)
-    /// Only works on skills with activation_time_ms > 0 (instant skills can't be cancelled)
-    /// Results:
-    /// - Energy cost is STILL incurred (no refund)
-    /// - Skill does NOT go on cooldown
-    /// - No aftercast delay
-    /// - Skill effect does NOT happen
-    pub fn cancelCasting(self: *Character) void {
-        if (self.cast_state == .activating) {
-            // No energy refund (costs are incurred)
-            // No cooldown set (skill doesn't go on recharge)
-
-            self.cast_state = .idle;
-            self.cast_time_remaining = 0;
-            self.skill_executed = false;
-            self.cast_target_id = null;
-        }
-    }
-
-    /// Check if character can cancel their current cast
-    pub fn canCancelCast(self: Character) bool {
-        if (self.cast_state != .activating) return false;
-
-        const skill = self.skill_bar[self.casting_skill_index] orelse return false;
-        // Only skills with activation time can be cancelled
-        // NOTE: In GW1, instant attack skills (0 activation) can be cancelled by weapon swapping
-        // We could implement this later if needed for advanced play
-        return skill.activation_time_ms > 0;
-    }
-
-    /// Check if character is casting (activating or in aftercast)
-    pub fn isCasting(self: Character) bool {
-        return self.cast_state != .idle;
-    }
-
-    // === SKILL QUEUE SYSTEM (GW1-style auto-approach) ===
-
-    /// Queue a skill to cast when in range (GW1 behavior)
-    pub fn queueSkill(self: *Character, skill_index: u8, target_id: EntityId) void {
-        self.queued_skill_index = skill_index;
-        self.queued_skill_target_id = target_id;
-        self.is_approaching_for_skill = true;
-    }
-
-    /// Clear the skill queue
-    pub fn clearSkillQueue(self: *Character) void {
-        self.queued_skill_index = null;
-        self.queued_skill_target_id = null;
-        self.is_approaching_for_skill = false;
-    }
-
-    /// Check if character has a queued skill
-    pub fn hasQueuedSkill(self: Character) bool {
-        return self.queued_skill_index != null;
-    }
-
-    // === DAMAGE MONITOR SYSTEM (Guild Wars style) ===
-
-    // === AP SKILL VALIDATION (Elite/Advanced Placement skills) ===
-
-    /// Count how many AP skills are currently equipped
     pub fn countApSkills(self: Character) u8 {
         var count: u8 = 0;
         for (self.skill_bar) |maybe_skill| {
-            if (maybe_skill) |skill| {
-                if (skill.is_ap) {
+            if (maybe_skill) |skill_item| {
+                if (skill_item.is_ap) {
                     count += 1;
                 }
             }
@@ -795,16 +695,14 @@ pub const Character = struct {
         return count;
     }
 
-    /// Check if character has an AP skill equipped
     pub fn hasApSkill(self: Character) bool {
         return self.countApSkills() > 0;
     }
 
-    /// Get the index of the equipped AP skill (if any)
     pub fn getApSkillIndex(self: Character) ?u8 {
         for (self.skill_bar, 0..) |maybe_skill, i| {
-            if (maybe_skill) |skill| {
-                if (skill.is_ap) {
+            if (maybe_skill) |skill_item| {
+                if (skill_item.is_ap) {
                     return @intCast(i);
                 }
             }
@@ -812,21 +710,15 @@ pub const Character = struct {
         return null;
     }
 
-    /// Check if a skill can be equipped at the given slot
-    /// Returns false if:
-    /// - The skill is AP and an AP skill is already equipped elsewhere
-    /// - The slot index is out of bounds
-    pub fn canEquipSkill(self: Character, skill: *const Skill, slot_index: u8) bool {
+    pub fn canEquipSkill(self: Character, skill_to_equip: *const Skill, slot_index: u8) bool {
         if (slot_index >= MAX_SKILLS) return false;
 
-        // If the skill is AP, check if we already have an AP skill
-        if (skill.is_ap) {
-            // Check all slots except the target slot
+        if (skill_to_equip.is_ap) {
             for (self.skill_bar, 0..) |maybe_existing, i| {
-                if (i == slot_index) continue; // Skip the slot we're equipping to
+                if (i == slot_index) continue;
                 if (maybe_existing) |existing| {
                     if (existing.is_ap) {
-                        return false; // Already have an AP skill elsewhere
+                        return false;
                     }
                 }
             }
@@ -835,38 +727,30 @@ pub const Character = struct {
         return true;
     }
 
-    /// Equip a skill to a slot, enforcing the one-AP rule
-    /// Returns true if successful, false if the skill can't be equipped
-    pub fn equipSkill(self: *Character, skill: *const Skill, slot_index: u8) bool {
-        if (!self.canEquipSkill(skill, slot_index)) {
+    pub fn equipSkill(self: *Character, skill_to_equip: *const Skill, slot_index: u8) bool {
+        if (!self.canEquipSkill(skill_to_equip, slot_index)) {
             return false;
         }
 
-        self.skill_bar[slot_index] = skill;
+        self.skill_bar[slot_index] = skill_to_equip;
         return true;
     }
 
-    /// Unequip a skill from a slot
     pub fn unequipSkill(self: *Character, slot_index: u8) void {
         if (slot_index < MAX_SKILLS) {
             self.skill_bar[slot_index] = null;
         }
     }
 
-    /// Swap an AP skill with a new AP skill (convenience for UI)
-    /// Removes the existing AP skill and equips the new one
-    /// Returns the slot index of the old AP skill (where new one was equipped)
     pub fn swapApSkill(self: *Character, new_ap_skill: *const Skill) ?u8 {
-        if (!new_ap_skill.is_ap) return null; // Only works with AP skills
+        if (!new_ap_skill.is_ap) return null;
 
-        // Find and remove existing AP skill
         const existing_slot = self.getApSkillIndex();
         if (existing_slot) |slot| {
             self.skill_bar[slot] = new_ap_skill;
             return slot;
         }
 
-        // No existing AP skill - find first empty slot
         for (self.skill_bar, 0..) |maybe_skill, i| {
             if (maybe_skill == null) {
                 self.skill_bar[i] = new_ap_skill;
@@ -874,24 +758,23 @@ pub const Character = struct {
             }
         }
 
-        return null; // No slots available
+        return null;
     }
 
-    /// Validate the entire skill bar (useful for loading saved builds)
-    /// Returns true if the build is valid (at most one AP skill)
     pub fn validateSkillBar(self: Character) bool {
         return self.countApSkills() <= 1;
     }
 
-    /// Record damage from a skill source (for damage monitor UI)
-    pub fn recordDamageSource(self: *Character, skill: *const Skill, source_id: EntityId) void {
-        if (self.damage_monitor_frozen) return; // Don't update if frozen (dead)
+    // ========================================================================
+    // DAMAGE MONITOR
+    // ========================================================================
 
-        // Check if this source already exists
+    pub fn recordDamageSource(self: *Character, skill_source: *const Skill, source_id: EntityId) void {
+        if (self.damage_monitor_frozen) return;
+
         for (self.damage_sources[0..self.damage_source_count]) |*maybe_source| {
             if (maybe_source.*) |*source| {
-                // Match by skill name and source
-                if (std.mem.eql(u8, source.skill_name, skill.name) and source.source_id == source_id) {
+                if (std.mem.eql(u8, source.skill_name, skill_source.name) and source.source_id == source_id) {
                     source.hit_count += 1;
                     source.time_since_last_hit = 0.0;
                     return;
@@ -899,24 +782,22 @@ pub const Character = struct {
             }
         }
 
-        // Add new damage source if we have space
         if (self.damage_source_count < self.damage_sources.len) {
             self.damage_sources[self.damage_source_count] = DamageSource{
-                .skill_name = skill.name,
-                .skill_ptr = skill,
+                .skill_name = skill_source.name,
+                .skill_ptr = skill_source,
                 .source_id = source_id,
                 .hit_count = 1,
                 .time_since_last_hit = 0.0,
             };
             self.damage_source_count += 1;
         } else {
-            // Replace oldest source (first in array)
-            for (1..self.damage_sources.len) |i| {
-                self.damage_sources[i - 1] = self.damage_sources[i];
+            for (1..self.damage_sources.len) |j| {
+                self.damage_sources[j - 1] = self.damage_sources[j];
             }
             self.damage_sources[self.damage_sources.len - 1] = DamageSource{
-                .skill_name = skill.name,
-                .skill_ptr = skill,
+                .skill_name = skill_source.name,
+                .skill_ptr = skill_source,
                 .source_id = source_id,
                 .hit_count = 1,
                 .time_since_last_hit = 0.0,
@@ -924,7 +805,6 @@ pub const Character = struct {
         }
     }
 
-    /// Update damage monitor timers (call every tick)
     pub fn updateDamageMonitor(self: *Character, delta_time: f32) void {
         if (self.damage_monitor_frozen) return;
 
@@ -933,84 +813,70 @@ pub const Character = struct {
             if (self.damage_sources[i]) |*source| {
                 source.time_since_last_hit += delta_time;
 
-                // Remove sources that haven't hit in 10 seconds
                 if (source.time_since_last_hit > 10.0) {
-                    // Shift remaining sources down
                     for (i + 1..self.damage_source_count) |j| {
                         self.damage_sources[j - 1] = self.damage_sources[j];
                     }
                     self.damage_sources[self.damage_source_count - 1] = null;
                     self.damage_source_count -= 1;
-                    continue; // Don't increment i, check this slot again
+                    continue;
                 }
             }
             i += 1;
         }
     }
 
-    // === AUTO-ATTACK SYSTEM (Guild Wars style) ===
+    // ========================================================================
+    // AUTO-ATTACK
+    // ========================================================================
 
-    /// Start auto-attacking a target (spacebar default in GW1)
     pub fn startAutoAttack(self: *Character, target_id: EntityId) void {
         self.is_auto_attacking = true;
         self.auto_attack_target_id = target_id;
-        // Reset timer to attack immediately
         self.auto_attack_timer = 0.0;
     }
 
-    /// Stop auto-attacking
     pub fn stopAutoAttack(self: *Character) void {
         self.is_auto_attacking = false;
         self.auto_attack_target_id = null;
     }
 
-    /// Get the attack interval for this character's equipped weapon
     pub fn getAttackInterval(self: Character) f32 {
-        // Two-handed weapon takes priority
         if (self.main_hand) |main| {
             if (main.hand_requirement == .two_hands) {
                 return main.attack_interval;
             }
         }
 
-        // One-handed weapon in main hand
         if (self.main_hand) |main| {
             if (main.hand_requirement == .one_hand) {
                 return main.attack_interval;
             }
         }
 
-        // Default bare-hand snowball throw
         return 1.5;
     }
 
-    /// Calculate auto-attack damage based on equipment
     pub fn getAutoAttackDamage(self: Character) f32 {
-        var base_damage: f32 = 10.0; // Bare-hand snowball damage
+        var base_damage: f32 = 10.0;
 
-        // Two-handed weapon replaces auto-attack entirely
         if (self.main_hand) |main| {
             if (main.hand_requirement == .two_hands) {
                 return main.damage;
             }
         }
 
-        // One-handed weapon in main hand
         if (self.main_hand) |main| {
             if (main.hand_requirement == .one_hand) {
-                // Melee weapons replace auto-attack
                 if (main.category == .melee_weapon) {
                     return main.damage;
                 }
-                // Throwing tools modify snowball throw
                 if (main.category == .throwing_tool) {
                     return main.damage;
                 }
-                // Shields and utility don't attack (fall through to bare hands)
             }
         }
 
-        // Apply worn equipment bonuses (mittens add damage to bare hands)
         if (self.worn) |worn_item| {
             base_damage += worn_item.damage;
         }
@@ -1018,62 +884,49 @@ pub const Character = struct {
         return base_damage;
     }
 
-    /// Get auto-attack range
     pub fn getAutoAttackRange(self: Character) f32 {
-        const base_range: f32 = 80.0; // Default snowball throw range
+        const base_range: f32 = 80.0;
 
-        // Two-handed weapon sets range
         if (self.main_hand) |main| {
             if (main.hand_requirement == .two_hands) {
                 return main.range;
             }
         }
 
-        // One-handed weapon in main hand
         if (self.main_hand) |main| {
             if (main.hand_requirement == .one_hand) {
-                // Melee weapons and throwing tools set range
                 if (main.category == .melee_weapon or main.category == .throwing_tool) {
                     return main.range;
                 }
-                // Shields don't affect range (fall through)
             }
         }
 
-        // Apply worn equipment range modifiers
         var final_range = base_range;
         if (self.worn) |worn_item| {
-            final_range += worn_item.range; // Can be negative (mittens penalty)
+            final_range += worn_item.range;
         }
 
-        return @max(30.0, final_range); // Minimum throw range
+        return @max(30.0, final_range);
     }
 
-    /// Check if character is using ranged auto-attacks
     pub fn hasRangedAutoAttack(self: Character) bool {
-        // Two-handed weapon determines ranged/melee
         if (self.main_hand) |main| {
             if (main.hand_requirement == .two_hands) {
                 return main.is_ranged;
             }
         }
 
-        // One-handed weapon
         if (self.main_hand) |main| {
             if (main.hand_requirement == .one_hand) {
-                // Melee weapons are not ranged
                 if (main.category == .melee_weapon) {
                     return false;
                 }
-                // Throwing tools are ranged
                 if (main.category == .throwing_tool) {
                     return true;
                 }
-                // Shields/utility means bare hands (ranged snowballs)
             }
         }
 
-        // Default: bare-hand snowball throws are ranged
         return true;
     }
 };
