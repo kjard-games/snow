@@ -17,41 +17,114 @@ const Position = position.Position;
 const print = std.debug.print;
 
 // ============================================================================
+// AI SYSTEM OVERVIEW
+// ============================================================================
+//
+// This AI system is designed around Guild Wars 1 (GW1) principles:
+//
+// 1. BEHAVIOR TREES: Hierarchical decision-making with Selectors (try until success)
+//    and Sequences (do all in order). Each role (damage/support/disruptor) has its
+//    own priority tree.
+//
+// 2. FORMATION ROLES: GW1-style frontline/midline/backline positioning where:
+//    - Frontline: Melee fighters who hold the line and body-block for backline
+//    - Midline: Ranged damage/control who kite and maintain optimal range
+//    - Backline: Healers/support who stay safe, protected by frontline
+//
+// 3. SKILL SELECTION: Role-based priority (healers heal first, disruptors interrupt
+//    first) with cover-awareness (prefer arcing projectiles over walls).
+//
+// 4. MOVEMENT: Formation-aware positioning that responds to threats, maintains
+//    optimal ranges, and avoids AoE clumping through spreading forces.
+//
+// ============================================================================
+
+// ============================================================================
 // AI CONFIGURATION CONSTANTS
 // ============================================================================
 
+// ----------------------------------------------------------------------------
+// Formation Positioning (in game units)
+// ----------------------------------------------------------------------------
+// These define the spatial relationships between team members and enemies.
+// GW1 formations are critical for protecting fragile backline characters.
+
 /// Formation positioning thresholds (in game units)
 pub const FORMATION = struct {
-    pub const FRONTLINE_RANGE: f32 = 200.0; // Distance from enemy center to be considered frontline
-    pub const SAFE_DISTANCE: f32 = 180.0; // Safe distance for backline from enemy center
-    pub const DANGER_DISTANCE: f32 = 120.0; // Backline retreat threshold
-    pub const SPREAD_RADIUS: f32 = 40.0; // Begin spreading when ally is this close
-    pub const COMFORT_ZONE: f32 = 20.0; // Range tolerance for positioning
+    /// Distance from enemy center to be considered frontline - these characters
+    /// engage enemies directly and protect teammates behind them
+    pub const FRONTLINE_RANGE: f32 = 200.0;
+
+    /// Safe distance for backline from enemy center - healers and support
+    /// characters should stay at least this far from the enemy cluster
+    pub const SAFE_DISTANCE: f32 = 180.0;
+
+    /// Backline retreat threshold - if enemies get closer than this, backline
+    /// characters should actively retreat (they're being "dove")
+    pub const DANGER_DISTANCE: f32 = 120.0;
+
+    /// Begin spreading when ally is this close - prevents AoE from hitting
+    /// multiple teammates (GW1's "balling up" counter)
+    pub const SPREAD_RADIUS: f32 = 40.0;
+
+    /// Range tolerance for positioning - don't micro-adjust if within this
+    /// distance of optimal position (prevents jittering)
+    pub const COMFORT_ZONE: f32 = 20.0;
 };
+
+// ----------------------------------------------------------------------------
+// Threat Detection
+// ----------------------------------------------------------------------------
+// Determines when AI characters should react defensively
 
 /// Threat detection thresholds
 pub const THREAT = struct {
-    pub const CLOSE_RANGE: f32 = 150.0; // Enemy within this range is threatening
+    /// Enemy within this range is considered threatening - triggers defensive
+    /// behaviors like kiting (midline) or retreat (backline)
+    pub const CLOSE_RANGE: f32 = 150.0;
 };
+
+// ----------------------------------------------------------------------------
+// Healing Priorities
+// ----------------------------------------------------------------------------
+// Thresholds for support AI to decide when healing is needed
 
 /// Healing priorities
 pub const HEALING = struct {
-    pub const CRITICAL_THRESHOLD: f32 = 0.4; // Below 40% health = critical
-    pub const LOW_THRESHOLD: f32 = 0.6; // Below 60% health = needs healing
+    /// Below 40% health = critical - support should prioritize healing immediately
+    pub const CRITICAL_THRESHOLD: f32 = 0.4;
+
+    /// Below 60% health = needs healing - support should look for healing opportunities
+    pub const LOW_THRESHOLD: f32 = 0.6;
 };
 
 // ============================================================================
 // BEHAVIOR TREE STRUCTURE
 // ============================================================================
+//
+// Behavior trees provide hierarchical decision-making for AI. Each node returns
+// one of three statuses:
+//   - success: Action completed or condition met
+//   - failure: Action failed or condition not met
+//   - running: Action in progress (continue next frame)
+//
+// Two composite node types control flow:
+//   - Selector: Try children in order until one succeeds (OR logic)
+//   - Sequence: Run children in order, stop if any fails (AND logic)
+//
+// This allows complex behaviors like:
+//   "If (can cast AND target casting) then interrupt, else damage, else move"
+//
 
-// Behavior tree node status
+/// Behavior tree node status - the result of evaluating any node
 pub const NodeStatus = enum {
-    success,
-    failure,
-    running,
+    success, // Action completed successfully or condition is true
+    failure, // Action failed or condition is false
+    running, // Action still in progress (rare in our tick-based system)
 };
 
-// Context passed to all behavior tree nodes
+/// Context passed to all behavior tree nodes - contains everything needed
+/// for AI decision-making in a single frame
 pub const BehaviorContext = struct {
     self: *Character,
     all_entities: []Character,
@@ -74,14 +147,82 @@ pub const BehaviorContext = struct {
     formation_anchors: FormationAnchors = undefined,
 };
 
-// Base behavior tree node function pointer
+/// Base behavior tree node function pointer - all nodes share this signature
 pub const BehaviorNodeFn = *const fn (ctx: *BehaviorContext) NodeStatus;
+
+// ============================================================================
+// AI ROLES AND FORMATION TYPES
+// ============================================================================
+//
+// AI roles determine behavior priority (what to do first), while formation
+// roles determine positioning (where to stand). These are orthogonal:
+// a support can be frontline (paladin-style) or backline (traditional healer).
+//
+
+/// AI combat role - determines skill selection priority
+/// This is the "what should I do?" question
+pub const AIRole = enum {
+    damage_dealer, // Focus on dealing damage, use interrupts opportunistically
+    support, // Focus on healing/buffing allies, damage when team is healthy
+    disruptor, // Focus on interrupts and debuffs, damage as fallback
+};
+
+/// GW1-style formation roles - determines positioning behavior
+/// This is the "where should I stand?" question
+pub const FormationRole = enum {
+    frontline, // Melee/aggressive, holds the line, body blocks for backline
+    midline, // Ranged damage/control, mobile, kites when pressured
+    backline, // Healers/support, protected position, retreats when dove
+
+    /// Classify player position into formation role
+    /// Creates a balanced 2-2-2 distribution across the team
+    pub fn fromPosition(pos: Position) FormationRole {
+        return switch (pos) {
+            // Close range melee - aggressive skirmisher + tank
+            .sledder, .shoveler => .frontline,
+            // Ranged damage dealers - pure DPS + generalist
+            .pitcher, .fielder => .midline,
+            // Support/control - summoner + healer
+            .animator, .thermos => .backline,
+        };
+    }
+};
+
+/// Per-entity AI state - tracks timing and role assignment
+pub const AIState = struct {
+    /// Cooldown timer for AI skill decisions (prevents spam)
+    next_skill_time: f32 = 0.0,
+    /// Minimum seconds between AI skill casts - GW1-like frequent decisions,
+    /// individual skill cooldowns enforce actual recharge
+    skill_cooldown: f32 = 0.2,
+    /// Combat role determining skill priority
+    role: AIRole = .damage_dealer,
+    /// Formation role determining positioning
+    formation_role: FormationRole = .midline,
+};
+
+/// Skill decision result from behavior tree
+pub const SkillDecision = struct {
+    skill_idx: u8,
+    target_ally: bool, // true = target ally, false = target enemy
+};
 
 // ============================================================================
 // FORMATION CALCULATIONS
 // ============================================================================
+//
+// Formation anchors are key positions used by the AI to maintain GW1-style
+// team formations. They include:
+//   - team_center: Average position of all allies
+//   - ally_frontline_center: Average position of allies near enemies
+//   - ally_backline_center: Average position of allies far from enemies
+//   - enemy_center: Average position of all enemies
+//
+// These anchors help backline characters know where to retreat to, frontline
+// characters know where to hold, and midline characters know safe distances.
+//
 
-// Calculate team formation anchors (center, front, back)
+/// Formation anchor points for team positioning
 pub const FormationAnchors = struct {
     team_center: rl.Vector3,
     ally_frontline_center: rl.Vector3,
@@ -89,6 +230,7 @@ pub const FormationAnchors = struct {
     enemy_center: rl.Vector3,
 };
 
+/// Calculate formation anchors from current ally and enemy positions
 fn calculateFormationAnchors(allies: []*Character, enemies: []*Character, allies_count: usize, enemies_count: usize) FormationAnchors {
     var anchors = FormationAnchors{
         .team_center = .{ .x = 0, .y = 0, .z = 0 },
@@ -170,9 +312,13 @@ fn calculateFormationAnchors(allies: []*Character, enemies: []*Character, allies
     return anchors;
 }
 
-// Threat assessment - who is being targeted by whom?
+// ----------------------------------------------------------------------------
+// Tactical Assessment Helpers
+// ----------------------------------------------------------------------------
+
+/// Check if character is under threat (any enemy within close range)
+/// Used by midline/backline to trigger kiting or retreat behavior
 pub fn isUnderThreat(self: *const Character, enemies: []const *Character, enemies_count: usize) bool {
-    // Check if any enemy is close - basic threat detection
     for (enemies[0..enemies_count]) |enemy| {
         const dist = self.distanceTo(enemy.*);
         if (dist < THREAT.CLOSE_RANGE) return true;
@@ -180,13 +326,13 @@ pub fn isUnderThreat(self: *const Character, enemies: []const *Character, enemie
     return false;
 }
 
-// Find closest ally in a given formation role
+/// Find closest ally in a given formation role (useful for coordinated positioning)
 pub fn findClosestAllyInRole(self: *const Character, allies: []const *Character, allies_count: usize, role: FormationRole) ?*Character {
     var closest: ?*Character = null;
     var closest_dist: f32 = std.math.floatMax(f32);
 
     for (allies[0..allies_count]) |ally| {
-        if (ally.id == self.id) continue; // Skip self
+        if (ally.id == self.id) continue;
 
         const ally_role = FormationRole.fromPosition(ally.player_position);
         if (ally_role == role) {
@@ -201,7 +347,8 @@ pub fn findClosestAllyInRole(self: *const Character, allies: []const *Character,
     return closest;
 }
 
-// Calculate spreading force to avoid clumping (repulsion from nearby allies)
+/// Calculate spreading force to avoid clumping (repulsion from nearby allies)
+/// This is the GW1 "don't ball up" mechanic - prevents AoE from hitting multiple targets
 pub fn calculateSpreadingForce(self: *const Character, allies: []const *Character, allies_count: usize) rl.Vector3 {
     var spread_force = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
     const spread_radius = FORMATION.SPREAD_RADIUS;
@@ -224,7 +371,14 @@ pub fn calculateSpreadingForce(self: *const Character, allies: []const *Characte
     return spread_force;
 }
 
-// Composite Nodes (parent nodes that execute children)
+// ----------------------------------------------------------------------------
+// Behavior Tree Composite Nodes
+// ----------------------------------------------------------------------------
+// Composite nodes control the flow of execution through child nodes.
+
+/// Selector: Try children in order until one succeeds (OR logic)
+/// Returns first non-failure result, or failure if all children fail.
+/// Use for "try this, else try that, else try this other thing"
 pub fn Selector(comptime children: []const BehaviorNodeFn) BehaviorNodeFn {
     return struct {
         fn execute(ctx: *BehaviorContext) NodeStatus {
@@ -239,6 +393,9 @@ pub fn Selector(comptime children: []const BehaviorNodeFn) BehaviorNodeFn {
     }.execute;
 }
 
+/// Sequence: Run children in order, stop if any fails (AND logic)
+/// Returns first non-success result, or success if all children succeed.
+/// Use for "do this, then do that, then do this other thing"
 pub fn Sequence(comptime children: []const BehaviorNodeFn) BehaviorNodeFn {
     return struct {
         fn execute(ctx: *BehaviorContext) NodeStatus {
@@ -253,42 +410,23 @@ pub fn Sequence(comptime children: []const BehaviorNodeFn) BehaviorNodeFn {
     }.execute;
 }
 
-pub const AIRole = enum {
-    damage_dealer, // Focus on dealing damage
-    support, // Focus on healing/buffing allies
-    disruptor, // Focus on interrupts and debuffs
-};
-
-// GW1-style formation roles
-pub const FormationRole = enum {
-    frontline, // Melee/aggressive, holds the line
-    midline, // Ranged damage/control, mobile
-    backline, // Healers/support, protected
-
-    // Classify position into formation role (balanced 2-2-2 distribution)
-    pub fn fromPosition(pos: Position) FormationRole {
-        return switch (pos) {
-            .sledder, .shoveler => .frontline, // Close range melee - aggressive skirmisher + tank
-            .pitcher, .fielder => .midline, // Ranged damage dealers - pure DPS + generalist
-            .animator, .thermos => .backline, // Support/control - summoner + healer
-        };
-    }
-};
-
-pub const AIState = struct {
-    next_skill_time: f32 = 0.0,
-    skill_cooldown: f32 = 0.2, // seconds between AI skill casts (GW1-like: allow frequent decisions, individual skill cooldowns enforce recharge)
-    role: AIRole = .damage_dealer,
-    formation_role: FormationRole = .midline,
-};
-
 // ============================================================================
 // BEHAVIOR TREE LEAF NODES (Conditions and Actions)
 // ============================================================================
+//
+// Leaf nodes are the actual work of the behavior tree:
+//   - Conditions: Check game state, return success/failure (never running)
+//   - Actions: Perform operations, can return any status
+//
 
-// Conditions (return success/failure, never running)
+// ----------------------------------------------------------------------------
+// Conditions - State checks that gate behavior tree branches
+// ----------------------------------------------------------------------------
+// All conditions return success/failure only (never running). They check the
+// current game state without modifying it.
+
 pub const Conditions = struct {
-    // Check if target is in range for any skill
+    /// Check if target is in range for any of our skills
     pub fn targetInRange(ctx: *BehaviorContext) NodeStatus {
         if (ctx.target == null) return .failure;
         const target = ctx.target.?;
@@ -302,13 +440,13 @@ pub const Conditions = struct {
         return .failure;
     }
 
-    // Check if target is casting (interruptible)
+    /// Check if target is casting (interruptible) - key for disruptor role
     pub fn targetCasting(ctx: *BehaviorContext) NodeStatus {
         if (ctx.target == null) return .failure;
         return if (ctx.target.?.casting.state == .activating) .success else .failure;
     }
 
-    // Check if any ally needs healing (below healing threshold)
+    /// Check if any ally needs healing (below 60% warmth)
     pub fn allyNeedsHealing(ctx: *BehaviorContext) NodeStatus {
         for (ctx.allies[0..ctx.allies_count]) |ally| {
             const health_pct = ally.stats.warmth / ally.stats.max_warmth;
@@ -317,26 +455,26 @@ pub const Conditions = struct {
         return .failure;
     }
 
-    // Check if skill is ready to cast
+    /// Check if skill is ready to cast - currently always true since
+    /// individual skill cooldowns are checked in canUseSkill()
     pub fn canCastSkill(_: *BehaviorContext) NodeStatus {
-        // Individual skill cooldowns are checked in canUseSkill() - no need for global gate
         return .success;
     }
 
-    // Check if self is under threat (low health or being targeted)
+    /// Check if self is under threat (below critical health threshold)
     pub fn underThreat(ctx: *BehaviorContext) NodeStatus {
         const health_pct = ctx.self.stats.warmth / ctx.self.stats.max_warmth;
         return if (health_pct < HEALING.CRITICAL_THRESHOLD) .success else .failure;
     }
 
-    // Check if it's a good time to use terrain skill
+    /// Check if it's a good time to use terrain skill (20% random chance)
+    /// This adds variety to terrain skill usage rather than spamming
     pub fn shouldUseTerrainSkill(ctx: *BehaviorContext) NodeStatus {
-        // Use terrain skills opportunistically (20% chance when off cooldown)
         const roll = ctx.rng.intRangeAtMost(u32, 0, 100);
         return if (roll < 20) .success else .failure;
     }
 
-    // Check if there's an enemy wall blocking our target
+    /// Check if there's an enemy wall blocking line of sight to target
     pub fn enemyWallBlocking(ctx: *BehaviorContext) NodeStatus {
         if (ctx.target == null) return .failure;
         const target = ctx.target.?;
@@ -352,14 +490,13 @@ pub const Conditions = struct {
         return if (has_wall) .success else .failure;
     }
 
-    // Check if we should build a defensive wall (under threat)
+    /// Check if we should build a defensive wall (low health + taking damage)
     pub fn shouldBuildDefensiveWall(ctx: *BehaviorContext) NodeStatus {
         const health_pct = ctx.self.stats.warmth / ctx.self.stats.max_warmth;
-        const under_fire = ctx.self.combat.damage_monitor.count > 0; // Being hit by enemies
+        const under_fire = ctx.self.combat.damage_monitor.count > 0;
 
-        // Build wall if low health AND under fire
+        // Build wall if low health AND under fire (50% chance to add variety)
         if (health_pct < 0.5 and under_fire) {
-            // 50% chance to prioritize wall
             return if (ctx.rng.boolean()) .success else .failure;
         }
 
@@ -456,6 +593,15 @@ pub const Conditions = struct {
     }
 };
 
+// ============================================================================
+// TERRAIN SKILL PLACEMENT HELPERS
+// ============================================================================
+//
+// These functions determine optimal locations for ground-targeted skills.
+// Healing terrain should be placed on wounded allies, damage terrain on
+// enemy clusters, utility terrain between caster and threats.
+//
+
 /// Calculate the maximum cast range available to a character across all their skills
 fn getMaxSkillRange(ent: *Character) f32 {
     var max_range: f32 = 100.0; // Fallback default
@@ -471,9 +617,8 @@ fn getMaxSkillRange(ent: *Character) f32 {
     return max_range;
 }
 
-// Helper functions for terrain skill placement
+/// Find the center of wounded allies for healing terrain placement
 fn findBestAllyClumpLocation(ctx: *BehaviorContext) ?rl.Vector3 {
-    // Find center of wounded allies
     var center = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
     var wounded_count: usize = 0;
 
@@ -496,8 +641,8 @@ fn findBestAllyClumpLocation(ctx: *BehaviorContext) ?rl.Vector3 {
     return ctx.self.position;
 }
 
+/// Find the best enemy cluster center for AoE damage terrain
 fn findBestEnemyClumpLocation(ctx: *BehaviorContext) ?rl.Vector3 {
-    // Find center of enemy clump (most enemies within radius)
     if (ctx.enemies_count == 0) return null;
 
     var best_pos = ctx.enemies[0].position;
@@ -578,16 +723,23 @@ fn findBestDefensiveWallPosition(ctx: *BehaviorContext) rl.Vector3 {
     };
 }
 
-// Actions (can return success/failure/running)
+// ----------------------------------------------------------------------------
+// Actions - Behavior tree nodes that perform game actions
+// ----------------------------------------------------------------------------
+// Actions can modify game state (cast skills, trigger movement). They return
+// success if the action completed, failure if it couldn't be performed, or
+// running if still in progress (rare in our tick-based system).
+
 pub const Actions = struct {
-    // Move toward target
+    /// Move toward target - signals movement system, actual movement happens in
+    /// calculateFormationMovementIntent
     pub fn moveToTarget(ctx: *BehaviorContext) NodeStatus {
         if (ctx.target == null) return .failure;
-        // Movement handled by calculateMovementIntent - just signal success
         return .success;
     }
 
-    // Cast best damage skill on target (cover-aware)
+    /// Cast best damage skill on target, preferring arcing projectiles when
+    /// target has cover (wall between us). This is the core damage dealer action.
     pub fn castDamageSkill(ctx: *BehaviorContext) NodeStatus {
         if (ctx.target == null) return .failure;
         const target = ctx.target.?;
@@ -852,14 +1004,15 @@ pub const Actions = struct {
     }
 };
 
-pub const SkillDecision = struct {
-    skill_idx: u8,
-    target_ally: bool, // true = target ally, false = target enemy
-};
-
 // ============================================================================
 // ROLE-SPECIFIC BEHAVIOR TREES
 // ============================================================================
+//
+// Each AI role has its own behavior tree defining priority order:
+//   - Damage Dealer: Defensive wall > Break walls > Interrupt > Terrain > Damage > Move
+//   - Support: Heal allies > Protective walls > Healing terrain > Terrain > Damage > Move
+//   - Disruptor: Interrupt always > Break walls > Terrain > Damage > Move
+//
 
 // Damage Dealer: Defensive wall > Break walls > Interrupt > Terrain > Damage > Move
 const DamageDealerTree = Selector(&[_]BehaviorNodeFn{
@@ -943,8 +1096,22 @@ const DisruptorTree = Selector(&[_]BehaviorNodeFn{
     Actions.moveToTarget,
 });
 
-// Behavior tree decision making
-// Returns skill index and whether to target ally (true) or enemy (false)
+// ============================================================================
+// SKILL SELECTION FUNCTIONS
+// ============================================================================
+//
+// These functions implement role-specific skill selection logic. Each role
+// has different priorities:
+//   - Damage: High damage > Interrupts > Walls (when low health)
+//   - Support: Heals > Protective walls > Buffs > Damage
+//   - Disruptor: Interrupts > Debuffs > Damage
+//
+// Cover awareness: When a wall blocks line of sight to target, prefer arcing
+// projectiles (snowballs that go over walls) over direct projectiles.
+//
+
+/// Behavior tree decision making entry point
+/// Returns skill index and whether to target ally (true) or enemy (false)
 fn selectSkillWithBehaviorTree(
     caster: *Character,
     target: *Character,
@@ -970,13 +1137,16 @@ fn selectSkillWithBehaviorTree(
     }
 }
 
-// Damage dealer: prioritize high damage, use interrupts on casting targets, build walls defensively
-// Cover-aware: prefers arcing projectiles when target has cover
+// ----------------------------------------------------------------------------
+// Damage Dealer Skill Selection
+// ----------------------------------------------------------------------------
+
+/// Select best damage skill, with cover awareness for arcing projectiles.
+/// Priority: Defensive wall (when low) > Interrupt (if target casting) > Highest damage
 fn selectDamageSkillWithCover(caster: *Character, target: *Character, rng: *std.Random, target_has_cover: bool) ?u8 {
     // Check if we should build a defensive wall (low health + being attacked)
     const health_pct = caster.stats.warmth / caster.stats.max_warmth;
     if (health_pct < 0.5 and caster.combat.damage_monitor.count > 0) {
-        // Look for wall-building skill
         for (caster.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.creates_wall and caster.canUseSkill(@intCast(idx))) {
@@ -1038,9 +1208,12 @@ fn selectDamageSkillWithCover(caster: *Character, target: *Character, rng: *std.
     return best_skill;
 }
 
-// Wall-breaking specialist: Use demolition/breakthrough skills to destroy enemy walls
+// ----------------------------------------------------------------------------
+// Wall-Breaking Skill Selection
+// ----------------------------------------------------------------------------
+
+/// Select wall-breaking skill if an enemy wall blocks line of sight to target
 fn selectWallBreakingSkill(caster: *Character, terrain_grid: *const @import("terrain.zig").TerrainGrid, target: *Character) ?u8 {
-    // Check if there's a wall between us and the target
     const has_blocking_wall = terrain_grid.hasWallBetween(
         caster.position.x,
         caster.position.z,
@@ -1055,7 +1228,6 @@ fn selectWallBreakingSkill(caster: *Character, terrain_grid: *const @import("ter
     for (caster.casting.skills, 0..) |maybe_skill, idx| {
         if (maybe_skill) |skill| {
             if (skill.destroys_walls and caster.canUseSkill(@intCast(idx))) {
-                // Found a wall-breaker! Use it!
                 return @intCast(idx);
             }
         }
@@ -1064,16 +1236,18 @@ fn selectWallBreakingSkill(caster: *Character, terrain_grid: *const @import("ter
     return null;
 }
 
-// Support: heal low health allies, buff team, protect with walls
-// Returns skill index and whether it should be cast on an ally (true) or enemy (false)
-fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.Random) ?SkillDecision {
+// ----------------------------------------------------------------------------
+// Support Skill Selection
+// ----------------------------------------------------------------------------
 
-    // Find lowest health ally (check all entities - player is in entities array now!)
+/// Select support skill - heals, protective walls, or buffs
+/// Priority: Protective wall (ally under fire) > Heal (ally hurt) > Buff/Damage
+fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.Random) ?SkillDecision {
+    // Find lowest health ally (player is in entities array)
     var lowest_health_pct: f32 = 1.0;
     var needs_healing = false;
     var ally_under_fire = false;
 
-    // Check all allies in entities
     for (all_entities) |ent| {
         if (caster.isAlly(ent) and ent.isAlive()) {
             const health_pct = ent.stats.warmth / ent.stats.max_warmth;
@@ -1126,9 +1300,13 @@ fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.R
     return null;
 }
 
-// Disruptor: interrupt casts, apply debuffs
-fn selectDisruptorSkill(caster: *Character, target: *Character, rng: *std.Random) ?u8 {
+// ----------------------------------------------------------------------------
+// Disruptor Skill Selection
+// ----------------------------------------------------------------------------
 
+/// Select disruptor skill - prioritizes interrupts and debuffs
+/// Priority: Interrupt (if target casting) > Debuffs (chills) > Damage (fallback)
+fn selectDisruptorSkill(caster: *Character, target: *Character, rng: *std.Random) ?u8 {
     // Always interrupt if target is casting
     if (target.casting.state == .activating) {
         for (caster.casting.skills, 0..) |maybe_skill, idx| {
@@ -1154,7 +1332,26 @@ fn selectDisruptorSkill(caster: *Character, target: *Character, rng: *std.Random
     return selectDamageSkillWithCover(caster, target, rng, false);
 }
 
-// Calculate movement intent for AI based on formation role and tactical situation
+// ============================================================================
+// FORMATION MOVEMENT SYSTEM
+// ============================================================================
+//
+// GW1-style formation movement where each role has different positioning goals:
+//
+// FRONTLINE: Press forward toward enemies, stay within melee/short range,
+//   position between enemies and backline allies. Body-blocks for teammates.
+//
+// MIDLINE: Maintain optimal attack range, kite backward when pressured,
+//   spread out to avoid AoE damage. More mobile than other roles.
+//
+// BACKLINE: Stay far from enemy center, retreat when "dove" (enemies rushing
+//   the backline), cluster with other backliners for mutual protection.
+//
+// All roles apply "spreading force" - a soft repulsion from nearby allies
+// to prevent AoE damage from hitting multiple teammates ("don't ball up").
+//
+
+/// Calculate movement intent for AI based on formation role and tactical situation
 fn calculateFormationMovementIntent(
     ctx: *const BehaviorContext,
 ) MovementIntent {
@@ -1173,7 +1370,6 @@ fn calculateFormationMovementIntent(
     // If queued skill exists, find its target and use that instead
     if (ent.hasQueuedSkill()) {
         if (ent.casting.queued_skill) |queued| {
-            // Find the queued target in all entities
             for (ctx.all_entities) |*potential_target| {
                 if (potential_target.id == queued.target_id) {
                     target = potential_target;
@@ -1359,7 +1555,7 @@ fn calculateFormationMovementIntent(
     };
 }
 
-// Helper: Populate behavior context with allies and enemies
+/// Populate behavior context with allies and enemies from entity list
 fn populateContext(ctx: *BehaviorContext) void {
     ctx.allies_count = 0;
     ctx.enemies_count = 0;
@@ -1368,13 +1564,11 @@ fn populateContext(ctx: *BehaviorContext) void {
         if (!ent.isAlive()) continue;
 
         if (ctx.self.isAlly(ent.*)) {
-            // Same team = ally
             if (ctx.allies_count < ctx.allies.len) {
                 ctx.allies[ctx.allies_count] = ent;
                 ctx.allies_count += 1;
             }
         } else {
-            // Different team = enemy
             if (ctx.enemies_count < ctx.enemies.len) {
                 ctx.enemies[ctx.enemies_count] = ent;
                 ctx.enemies_count += 1;
@@ -1382,10 +1576,23 @@ fn populateContext(ctx: *BehaviorContext) void {
         }
     }
 
-    // Calculate formation anchors
+    // Calculate formation anchors for positioning
     ctx.formation_anchors = calculateFormationAnchors(&ctx.allies, &ctx.enemies, ctx.allies_count, ctx.enemies_count);
 }
 
+// ============================================================================
+// MAIN AI UPDATE LOOP
+// ============================================================================
+//
+// Called each frame to update all AI-controlled entities. The loop:
+// 1. Finds targets (player-controlled entity or nearest enemy)
+// 2. Creates behavior context with allies/enemies/formation data
+// 3. Runs the appropriate behavior tree based on AI role
+// 4. Manages auto-attack state
+// 5. Applies formation-aware movement (if not casting)
+//
+
+/// Main AI update function - processes all AI-controlled entities each frame
 pub fn updateAI(
     entities: []Character,
     controlled_entity_id: EntityId,
