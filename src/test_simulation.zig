@@ -106,7 +106,7 @@ pub fn main() !void {
             std.debug.print("Final Results:\n", .{});
             for (state.entities) |ent| {
                 if (ent.isAlive()) {
-                    std.debug.print("  {s}: {d:.0}/{d:.0} HP\n", .{ ent.name, ent.warmth, ent.max_warmth });
+                    std.debug.print("  {s}: {d:.0}/{d:.0} HP\n", .{ ent.name, ent.stats.warmth, ent.stats.max_warmth });
                 } else {
                     std.debug.print("  {s}: DEAD\n", .{ent.name});
                 }

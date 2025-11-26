@@ -579,7 +579,7 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
             rl.drawRectangle(bar_x, current_y, ui.bar_width, ui.bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
 
             // Health fill
-            const health_percent = ent.warmth / ent.max_warmth;
+            const health_percent = ent.stats.warmth / ent.stats.max_warmth;
             const fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(ui.bar_width - 2)) * health_percent));
             const health_color = if (player.isEnemy(ent)) rl.Color.red else rl.Color.green;
             rl.drawRectangle(bar_x + 1, current_y + 1, fill_width, ui.bar_height - 2, health_color);
@@ -589,11 +589,11 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
             current_y += ui.bar_height + 2;
 
             // Cast bar (if casting)
-            if (ent.cast_state == .activating) {
-                const casting_skill = ent.skill_bar[ent.casting_skill_index];
+            if (ent.casting.state == .activating) {
+                const casting_skill = ent.casting.skills[ent.casting.casting_skill_index];
                 if (casting_skill) |skill| {
                     const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
-                    const progress = 1.0 - (ent.cast_time_remaining / cast_time_total);
+                    const progress = 1.0 - (ent.casting.cast_time_remaining / cast_time_total);
 
                     // Cast bar
                     rl.drawRectangle(bar_x, current_y, ui.bar_width, ui.bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
@@ -629,18 +629,18 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
         const bar_x = screen_pos.x - @divTrunc(ui.bar_width, 2);
 
         rl.drawRectangle(bar_x, current_y, ui.bar_width, ui.bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
-        const health_percent = player.*.warmth / player.*.max_warmth;
+        const health_percent = player.*.stats.warmth / player.*.stats.max_warmth;
         const fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(ui.bar_width - 2)) * health_percent));
         rl.drawRectangle(bar_x + 1, current_y + 1, fill_width, ui.bar_height - 2, rl.Color.green);
         rl.drawRectangleLines(bar_x, current_y, ui.bar_width, ui.bar_height, .white);
         current_y += ui.bar_height + 2;
 
         // Cast bar (if casting)
-        if (player.*.cast_state == .activating) {
-            const casting_skill = player.*.skill_bar[player.*.casting_skill_index];
+        if (player.*.casting.state == .activating) {
+            const casting_skill = player.*.casting.skills[player.*.casting.casting_skill_index];
             if (casting_skill) |skill| {
                 const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
-                const progress = 1.0 - (player.*.cast_time_remaining / cast_time_total);
+                const progress = 1.0 - (player.*.casting.cast_time_remaining / cast_time_total);
 
                 rl.drawRectangle(bar_x, current_y, ui.bar_width, ui.bar_height, rl.Color{ .r = 20, .g = 20, .b = 20, .a = 200 });
                 const cast_fill_width = @as(i32, @intFromFloat(@as(f32, @floatFromInt(ui.bar_width - 2)) * progress));

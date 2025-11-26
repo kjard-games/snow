@@ -69,7 +69,7 @@ pub fn main() !void {
             .withName("Wall Builder")
             .build();
 
-        const has_wall = if (char.skill_bar[0]) |skill| skill.creates_wall else false;
+        const has_wall = if (char.casting.skills[0]) |skill| skill.creates_wall else false;
         std.debug.print("   {s} - Slot 0 creates wall: {}\n", .{ char.name, has_wall });
     }
 

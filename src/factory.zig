@@ -179,16 +179,20 @@ pub const CharacterBuilder = struct {
             .school_color = self.color,
             .position_color = self.color,
             .name = selected_name,
-            .warmth = self.warmth,
-            .max_warmth = self.max_warmth,
+            .stats = .{
+                .warmth = self.warmth,
+                .max_warmth = self.max_warmth,
+                .energy = selected_school.getMaxEnergy(),
+                .max_energy = selected_school.getMaxEnergy(),
+            },
             .team = self.team,
             .school = selected_school,
             .player_position = selected_position,
-            .energy = selected_school.getMaxEnergy(),
-            .max_energy = selected_school.getMaxEnergy(),
-            .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
+            .casting = .{
+                .skills = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_index = 0,
+            },
             .gear = [_]?*const character.Gear{null} ** 6,
-            .selected_skill = 0,
         };
 
         // Apply equipment constraints
@@ -198,7 +202,7 @@ pub const CharacterBuilder = struct {
         self.skillCharacter(&char);
 
         // Recalculate totals
-        char.recalculatePadding();
+        char.recalculateGearStats();
 
         return char;
     }
@@ -233,18 +237,18 @@ pub const CharacterBuilder = struct {
             if (slot >= character.MAX_SKILLS) break;
 
             if (constraint != .none) {
-                char.skill_bar[slot] = self.resolveSkillConstraint(constraint, position_skills, school_skills);
+                char.casting.skills[slot] = self.resolveSkillConstraint(constraint, position_skills, school_skills);
             }
         }
 
         // Fill remaining slots with random skills
         var filled_count: usize = 0;
-        for (char.skill_bar) |maybe_skill| {
+        for (char.casting.skills) |maybe_skill| {
             if (maybe_skill != null) filled_count += 1;
         }
 
         // Guarantee at least 1 wall skill in slot 0 if not set
-        if (char.skill_bar[0] == null) {
+        if (char.casting.skills[0] == null) {
             var wall_skill_idx: ?usize = null;
             for (position_skills, 0..) |skill, idx| {
                 if (skill.creates_wall) {
@@ -253,7 +257,7 @@ pub const CharacterBuilder = struct {
                 }
             }
             if (wall_skill_idx) |idx| {
-                char.skill_bar[0] = &position_skills[idx];
+                char.casting.skills[0] = &position_skills[idx];
                 filled_count += 1;
             }
         }
@@ -263,7 +267,7 @@ pub const CharacterBuilder = struct {
         var slot_idx: usize = 1;
         while (slot_idx < 4 and attempts < position_skills.len * 3) : (attempts += 1) {
             if (position_skills.len == 0) break;
-            if (char.skill_bar[slot_idx] != null) {
+            if (char.casting.skills[slot_idx] != null) {
                 slot_idx += 1;
                 continue;
             }
@@ -274,14 +278,14 @@ pub const CharacterBuilder = struct {
             // Check not already loaded
             var already_loaded = false;
             for (0..slot_idx) |check_idx| {
-                if (char.skill_bar[check_idx] == skill) {
+                if (char.casting.skills[check_idx] == skill) {
                     already_loaded = true;
                     break;
                 }
             }
 
             if (!already_loaded) {
-                char.skill_bar[slot_idx] = skill;
+                char.casting.skills[slot_idx] = skill;
                 slot_idx += 1;
             }
         }
@@ -291,7 +295,7 @@ pub const CharacterBuilder = struct {
         slot_idx = 4;
         while (slot_idx < 7 and attempts < school_skills.len * 3) : (attempts += 1) {
             if (school_skills.len == 0) break;
-            if (char.skill_bar[slot_idx] != null) {
+            if (char.casting.skills[slot_idx] != null) {
                 slot_idx += 1;
                 continue;
             }
@@ -302,21 +306,21 @@ pub const CharacterBuilder = struct {
             // Check not already loaded
             var already_loaded = false;
             for (4..slot_idx) |check_idx| {
-                if (char.skill_bar[check_idx] == skill) {
+                if (char.casting.skills[check_idx] == skill) {
                     already_loaded = true;
                     break;
                 }
             }
 
             if (!already_loaded) {
-                char.skill_bar[slot_idx] = skill;
+                char.casting.skills[slot_idx] = skill;
                 slot_idx += 1;
             }
         }
 
         // Slot 7: Assign a random AP skill if not already set
-        if (char.skill_bar[7] == null) {
-            char.skill_bar[7] = skills.getRandomAPSkill(self.rng);
+        if (char.casting.skills[7] == null) {
+            char.casting.skills[7] = skills.getRandomAPSkill(self.rng);
         }
     }
 

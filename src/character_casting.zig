@@ -83,6 +83,10 @@ pub const QueuedSkill = struct {
 
 /// Complete casting state for a character
 pub const CastingState = struct {
+    // Skill bar (what skills are equipped)
+    skills: [MAX_SKILLS]?*const Skill = [_]?*const Skill{null} ** MAX_SKILLS,
+    selected_index: u8 = 0,
+
     // Current cast state
     state: CastState = .idle,
 
@@ -118,11 +122,11 @@ pub const CastingState = struct {
 
     /// Check if the current cast can be cancelled
     /// Only skills with activation time > 0 can be cancelled
-    pub fn canCancelCast(self: CastingState, skill_bar: []const ?*const Skill) bool {
+    pub fn canCancelCast(self: CastingState) bool {
         if (self.state != .activating) return false;
-        if (self.casting_skill_index >= skill_bar.len) return false;
+        if (self.casting_skill_index >= MAX_SKILLS) return false;
 
-        const skill = skill_bar[self.casting_skill_index] orelse return false;
+        const skill = self.skills[self.casting_skill_index] orelse return false;
         return skill.activation_time_ms > 0;
     }
 

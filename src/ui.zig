@@ -222,14 +222,14 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
     }
 
     // Draw skill slot background
-    const bg_color = if (player.skill_cooldowns[index] > 0)
+    const bg_color = if (player.casting.cooldowns[index] > 0)
         palette.UI.SKILL_SLOT_COOLDOWN
     else
         palette.UI.SKILL_SLOT_READY;
     rl.drawRectangle(xi, yi, sizei, sizei, bg_color);
 
     // Draw border - highlight if currently casting this skill OR if inspected
-    const is_casting_this = player.cast_state == .activating and player.casting_skill_index == index;
+    const is_casting_this = player.casting.state == .activating and player.casting.casting_skill_index == index;
     const is_inspected = if (input_state.inspected_skill_index) |idx| idx == index else false;
     const final_border = if (is_casting_this)
         palette.UI.BORDER_ACTIVE
@@ -240,20 +240,20 @@ fn drawSkillSlot(player: *const Character, index: usize, x: f32, y: f32, size: f
     rl.drawRectangleLines(xi, yi, sizei, sizei, final_border);
 
     // Draw skill icon (centered in slot) if available
-    if (player.skill_bar[index]) |skill| {
+    if (player.casting.skills[index]) |skill| {
         const icon_size: f32 = size * 0.8; // Icon takes 80% of slot (larger now, no text)
         const icon_x = x + (size - icon_size) / 2.0;
         const icon_y = y + (size - icon_size) / 2.0;
 
         // Check if player can afford this skill
-        const can_afford = player.energy >= skill.energy_cost;
+        const can_afford = player.stats.energy >= skill.energy_cost;
 
         skill_icons.drawSkillIcon(icon_x, icon_y, icon_size, skill, player.school, player.player_position, can_afford);
 
         // Draw cooldown overlay (visual only, no text)
-        if (player.skill_cooldowns[index] > 0) {
+        if (player.casting.cooldowns[index] > 0) {
             const cooldown_total = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
-            const cooldown_progress = player.skill_cooldowns[index] / cooldown_total;
+            const cooldown_progress = player.casting.cooldowns[index] / cooldown_total;
             const overlay_height = size * cooldown_progress;
 
             // Dark overlay showing cooldown progress (drains from top)
@@ -275,7 +275,7 @@ fn drawWarmthOrb(player: *const Character, x: f32, y: f32, width: f32, height: f
     rl.drawCircleLines(center_xi, center_yi, radius, .white);
 
     // Calculate fill percentage (drains from bottom to top)
-    const fill_percent = player.warmth / player.max_warmth;
+    const fill_percent = player.stats.warmth / player.stats.max_warmth;
 
     // Draw filled circle portion (bottom to top)
     // We'll draw the circle in red, then cover the top unfilled portion with black
@@ -299,7 +299,7 @@ fn drawWarmthOrb(player: *const Character, x: f32, y: f32, width: f32, height: f
     const warmth_text = std.fmt.bufPrintZ(
         &warmth_buf,
         "{d:.0}/{d:.0}",
-        .{ player.warmth, player.max_warmth },
+        .{ player.stats.warmth, player.stats.max_warmth },
     ) catch unreachable;
 
     const text_width = rl.measureText(warmth_text, 12);
@@ -316,18 +316,18 @@ fn drawEnergyBar(player: *const Character, x: f32, y: f32, width: f32, height: f
     rl.drawRectangleLines(xi, yi, widthi, heighti, .white);
 
     // Calculate effective max energy (reduced by credit debt)
-    const effective_max = player.max_energy - player.credit_debt;
+    const effective_max = player.stats.max_energy - player.school_resources.credit_debt.debt;
 
     // Calculate fill (based on current energy / effective max)
-    const fill_percent = @as(f32, @floatFromInt(player.energy)) / @as(f32, @floatFromInt(effective_max));
+    const fill_percent = @as(f32, @floatFromInt(player.stats.energy)) / @as(f32, @floatFromInt(effective_max));
     const fill_width = (width - 4) * fill_percent;
 
     // Draw energy fill (blue)
     rl.drawRectangle(xi + 2, yi + 2, toI32(fill_width), heighti - 4, palette.UI.ENERGY_BAR);
 
     // Draw credit debt overlay (gray bar showing locked max energy)
-    if (player.credit_debt > 0) {
-        const debt_percent = @as(f32, @floatFromInt(player.credit_debt)) / @as(f32, @floatFromInt(player.max_energy));
+    if (player.school_resources.credit_debt.debt > 0) {
+        const debt_percent = @as(f32, @floatFromInt(player.school_resources.credit_debt.debt)) / @as(f32, @floatFromInt(player.stats.max_energy));
         const debt_start_x = width - 4 - ((width - 4) * debt_percent);
         const debt_width = (width - 4) * debt_percent;
         rl.drawRectangle(xi + 2 + toI32(debt_start_x), yi + 2, toI32(debt_width), heighti - 4, rl.Color{ .r = 80, .g = 80, .b = 80, .a = 200 });
@@ -338,7 +338,7 @@ fn drawEnergyBar(player: *const Character, x: f32, y: f32, width: f32, height: f
     const energy_text = std.fmt.bufPrintZ(
         &energy_buf,
         "{d}/{d}",
-        .{ player.energy, effective_max },
+        .{ player.stats.energy, effective_max },
     ) catch unreachable;
 
     const text_width = rl.measureText(energy_text, 10);
@@ -376,16 +376,16 @@ fn drawTargetFrame(player: *const Character, target: *const Character, x: f32, y
     // Warmth bar (health)
     const bar_width = frame_width - (padding * 2);
     const bar_height: f32 = 16;
-    drawHealthBar(target.warmth, target.max_warmth, x + padding, current_y, bar_width, bar_height);
+    drawHealthBar(target.stats.warmth, target.stats.max_warmth, x + padding, current_y, bar_width, bar_height);
     current_y += bar_height + 4;
 
     // Energy bar
-    drawResourceBar(@as(f32, @floatFromInt(target.energy)), @as(f32, @floatFromInt(target.max_energy)), x + padding, current_y, bar_width, 12, palette.UI.ENERGY_BAR);
+    drawResourceBar(@as(f32, @floatFromInt(target.stats.energy)), @as(f32, @floatFromInt(target.stats.max_energy)), x + padding, current_y, bar_width, 12, palette.UI.ENERGY_BAR);
     current_y += 12 + 4;
 
     // Cast bar (if casting) - GW1 style skill monitor
-    if (target.cast_state == .activating) {
-        const casting_skill = target.skill_bar[target.casting_skill_index];
+    if (target.casting.state == .activating) {
+        const casting_skill = target.casting.skills[target.casting.casting_skill_index];
         if (casting_skill) |skill| {
             // Skill icon on left
             const icon_size: f32 = 24;
@@ -395,7 +395,7 @@ fn drawTargetFrame(player: *const Character, target: *const Character, x: f32, y
             const cast_bar_x = x + padding + icon_size + 4;
             const cast_bar_width = bar_width - icon_size - 4;
             const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
-            const progress = 1.0 - (target.cast_time_remaining / cast_time_total);
+            const progress = 1.0 - (target.casting.cast_time_remaining / cast_time_total);
 
             const cast_bar_xi = toI32(cast_bar_x);
             const cast_bar_yi = toI32(current_y + 4);
@@ -466,7 +466,7 @@ fn drawPartyFrames(entities: []const Character, x: f32, y: f32) void {
         // Health bar
         const bar_width = frame_width - (padding * 2);
         const bar_height: f32 = 12;
-        drawHealthBar(ally.warmth, ally.max_warmth, x + padding, text_y, bar_width, bar_height);
+        drawHealthBar(ally.stats.warmth, ally.stats.max_warmth, x + padding, text_y, bar_width, bar_height);
         text_y += bar_height + 3;
 
         // Compact conditions (single row)
@@ -493,8 +493,8 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
             const circle_spacing: f32 = 3;
             var circle_x = x + @as(f32, @floatFromInt(rl.measureText(grit_text, 9))) + 4;
 
-            for (0..player.max_grit_stacks) |i| {
-                const is_filled = i < player.grit_stacks;
+            for (0..character.MAX_GRIT_STACKS) |i| {
+                const is_filled = i < player.school_resources.grit.stacks;
                 const color = if (is_filled) rl.Color.gold else palette.UI.EMPTY_BAR_BG;
                 rl.drawCircle(toI32(circle_x + circle_size / 2), yi + 5, circle_size / 2, color);
                 rl.drawCircleLines(toI32(circle_x + circle_size / 2), yi + 5, circle_size / 2, palette.UI.BORDER);
@@ -513,7 +513,7 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
             // Show up to 5 rhythm stacks (max for our new design)
             const max_rhythm: u8 = 5; // Updated from 10 to match new design
             for (0..max_rhythm) |i| {
-                const is_filled = i < player.rhythm_charge;
+                const is_filled = i < player.school_resources.rhythm.charge;
                 const color = if (is_filled) rl.Color.purple else palette.UI.EMPTY_BAR_BG;
 
                 // Draw circle for musical note
@@ -524,7 +524,7 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
             }
 
             // Show "Perfect!" text if at max rhythm
-            if (player.rhythm_charge >= max_rhythm) {
+            if (player.school_resources.rhythm.charge >= max_rhythm) {
                 rl.drawText("Perfect!", toI32(circle_x + 4), yi, 9, rl.Color.gold);
             }
         },
@@ -540,12 +540,12 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
             var count: usize = 0;
             var i: usize = 0;
             while (i < character.MAX_RECENT_SKILLS and count < 4) : (i += 1) {
-                const idx = if (player.last_skill_type_index >= i)
-                    player.last_skill_type_index - i
+                const idx = if (player.school_resources.variety.buffer_index >= i)
+                    player.school_resources.variety.buffer_index - @as(u8, @intCast(i))
                 else
-                    character.MAX_RECENT_SKILLS - (i - player.last_skill_type_index);
+                    @as(u8, @intCast(character.MAX_RECENT_SKILLS)) - @as(u8, @intCast(i - player.school_resources.variety.buffer_index));
 
-                if (player.last_skill_types_used[idx]) |skill_type| {
+                if (player.school_resources.variety.recent_types[idx]) |skill_type| {
                     // Draw colored square for skill type
                     const type_color = switch (skill_type) {
                         .throw => rl.Color.red,
@@ -564,12 +564,12 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
         },
         .homeschool => {
             // Sacrifice cooldown - show timer if on cooldown
-            if (player.sacrifice_cooldown > 0) {
+            if (player.school_resources.sacrifice.cooldown > 0) {
                 var text_buf: [32]u8 = undefined;
                 const text = std.fmt.bufPrintZ(
                     &text_buf,
                     "Sacrifice: {d:.1}s",
-                    .{player.sacrifice_cooldown},
+                    .{player.school_resources.sacrifice.cooldown},
                 ) catch unreachable;
                 rl.drawText(text, toI32(x), yi, 9, rl.Color.orange);
             } else {
@@ -578,12 +578,12 @@ fn drawSchoolMechanic(player: *const Character, x: f32, y: f32, width: f32) void
         },
         .private_school => {
             // Show credit debt if in debt
-            if (player.credit_debt > 0) {
+            if (player.school_resources.credit_debt.debt > 0) {
                 var text_buf: [32]u8 = undefined;
                 const text = std.fmt.bufPrintZ(
                     &text_buf,
                     "Debt: {d} (-1/3s)",
-                    .{player.credit_debt},
+                    .{player.school_resources.credit_debt.debt},
                 ) catch unreachable;
                 rl.drawText(text, toI32(x), yi, 9, rl.Color.red);
             } else {
@@ -661,7 +661,7 @@ fn drawCompactConditions(char: *const Character, x: f32, y: f32, icon_size: f32,
     var current_x = x;
 
     // Draw buffs (cozies)
-    for (char.active_cozies[0..char.active_cozy_count]) |maybe_cozy| {
+    for (char.conditions.cozies.cozies[0..char.conditions.cozies.count]) |maybe_cozy| {
         if (maybe_cozy) |cozy| {
             const xi = toI32(current_x);
 
@@ -681,7 +681,7 @@ fn drawCompactConditions(char: *const Character, x: f32, y: f32, icon_size: f32,
     }
 
     // Draw debuffs (chills)
-    for (char.active_chills[0..char.active_chill_count]) |maybe_chill| {
+    for (char.conditions.chills.chills[0..char.conditions.chills.count]) |maybe_chill| {
         if (maybe_chill) |chill| {
             const xi = toI32(current_x);
 
@@ -703,14 +703,14 @@ fn drawCompactConditions(char: *const Character, x: f32, y: f32, icon_size: f32,
 
 // Draw damage monitor (GW1-style recent damage sources)
 fn drawDamageMonitor(player: *const Character, x: f32, y: f32) void {
-    if (player.damage_source_count == 0) return;
+    if (player.combat.damage_monitor.count == 0) return;
 
     const frame_width: f32 = 200;
     const icon_size: f32 = 32;
     const spacing: f32 = 4;
     const padding: f32 = 6;
 
-    const frame_height = @as(f32, @floatFromInt(player.damage_source_count)) * (icon_size + spacing) + (padding * 2);
+    const frame_height = @as(f32, @floatFromInt(player.combat.damage_monitor.count)) * (icon_size + spacing) + (padding * 2);
 
     const xi = toI32(x);
     const yi = toI32(y);
@@ -725,7 +725,7 @@ fn drawDamageMonitor(player: *const Character, x: f32, y: f32) void {
     var current_y = y + padding + 14;
 
     // Draw damage sources (most recent at bottom, like GW1)
-    for (player.damage_sources[0..player.damage_source_count]) |maybe_source| {
+    for (player.combat.damage_monitor.sources[0..player.combat.damage_monitor.count]) |maybe_source| {
         if (maybe_source) |source| {
             const source_x = x + padding;
 
@@ -751,7 +751,7 @@ fn drawDamageMonitor(player: *const Character, x: f32, y: f32) void {
     }
 
     // "Frozen" indicator if dead
-    if (player.damage_monitor_frozen) {
+    if (player.combat.damage_monitor.frozen) {
         rl.drawText("(Frozen)", xi + toI32(padding), toI32(y + frame_height - 14), 9, rl.Color.sky_blue);
     }
 }
@@ -767,7 +767,7 @@ fn drawEffectsMonitor(player: *const Character, x: f32, y: f32, input_state: *In
     var current_x = x;
 
     // Draw buffs (cozies) with source info
-    for (player.active_cozies[0..player.active_cozy_count]) |maybe_cozy| {
+    for (player.conditions.cozies.cozies[0..player.conditions.cozies.count]) |maybe_cozy| {
         if (maybe_cozy) |cozy| {
             const xi = toI32(current_x);
             const yi = toI32(y);
@@ -795,7 +795,7 @@ fn drawEffectsMonitor(player: *const Character, x: f32, y: f32, input_state: *In
     }
 
     // Draw debuffs (chills)
-    for (player.active_chills[0..player.active_chill_count]) |maybe_chill| {
+    for (player.conditions.chills.chills[0..player.conditions.chills.count]) |maybe_chill| {
         if (maybe_chill) |chill| {
             const xi = toI32(current_x);
             const yi = toI32(y);
@@ -829,7 +829,7 @@ fn drawConditionIcons(player: *const Character, x: f32, y: f32, icon_size: f32, 
 
     // Draw buffs (cozies) - first row
     var buff_x = x;
-    for (player.active_cozies[0..player.active_cozy_count]) |maybe_cozy| {
+    for (player.conditions.cozies.cozies[0..player.conditions.cozies.count]) |maybe_cozy| {
         if (maybe_cozy) |cozy| {
             const buff_xi = toI32(buff_x);
 
@@ -859,7 +859,7 @@ fn drawConditionIcons(player: *const Character, x: f32, y: f32, icon_size: f32, 
     const debuff_y = y + icon_size + spacing;
     const debuff_yi = toI32(debuff_y);
 
-    for (player.active_chills[0..player.active_chill_count]) |maybe_chill| {
+    for (player.conditions.chills.chills[0..player.conditions.chills.count]) |maybe_chill| {
         if (maybe_chill) |chill| {
             const debuff_xi = toI32(debuff_x);
 
@@ -906,11 +906,11 @@ fn drawSkillBar(player: *const Character, input_state: *InputState) void {
     input_state.hovered_skill_index = null;
 
     // Draw casting bar if casting (centered above entire skill bar)
-    if (player.cast_state == .activating) {
-        const casting_skill = player.skill_bar[player.casting_skill_index];
+    if (player.casting.state == .activating) {
+        const casting_skill = player.casting.skills[player.casting.casting_skill_index];
         if (casting_skill) |skill| {
             const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
-            const progress = 1.0 - (player.cast_time_remaining / cast_time_total);
+            const progress = 1.0 - (player.casting.cast_time_remaining / cast_time_total);
 
             const cast_bar_y = start_y - 40;
             const cast_bar_width: f32 = 400;
@@ -966,7 +966,7 @@ fn drawSkillBar(player: *const Character, input_state: *InputState) void {
     // Draw tooltip if hovering or inspecting a skill
     const tooltip_skill_index = input_state.hovered_skill_index orelse input_state.inspected_skill_index;
     if (tooltip_skill_index) |idx| {
-        if (player.skill_bar[idx]) |skill| {
+        if (player.casting.skills[idx]) |skill| {
             // Position tooltip above the skill bar, centered on screen
             const tooltip_x = (@as(f32, @floatFromInt(screen_width)) - 320) / 2.0;
             const tooltip_y = start_y - 260; // Above the skill bar

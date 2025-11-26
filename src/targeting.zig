@@ -251,7 +251,7 @@ pub fn getLowestHealthAlly(player: Character, entities: []const Character) ?Enti
     var min_health_percent: f32 = std.math.floatMax(f32);
 
     // Include self in the search
-    const self_health_percent = player.warmth / player.max_warmth;
+    const self_health_percent = player.stats.warmth / player.stats.max_warmth;
     if (player.isAlive() and self_health_percent < min_health_percent) {
         min_health_percent = self_health_percent;
         lowest = player.id;
@@ -261,7 +261,7 @@ pub fn getLowestHealthAlly(player: Character, entities: []const Character) ?Enti
         if (!player.isAlly(ent)) continue;
         if (!ent.isAlive()) continue;
 
-        const health_percent = ent.warmth / ent.max_warmth;
+        const health_percent = ent.stats.warmth / ent.stats.max_warmth;
         if (health_percent < min_health_percent) {
             min_health_percent = health_percent;
             lowest = ent.id;

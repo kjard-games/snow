@@ -12,6 +12,7 @@ const character = @import("character.zig");
 const entity_types = @import("entity.zig");
 const vfx = @import("vfx.zig");
 const palette = @import("color_palette.zig");
+const school_resources = @import("character_school_resources.zig");
 
 const Character = character.Character;
 const EntityId = entity_types.EntityId;
@@ -23,43 +24,45 @@ pub fn updateAutoAttacks(entities: []Character, delta_time: f32, rng: *std.Rando
         if (!ent.isAlive()) continue;
 
         // Update lunge animation (return to position after lunge)
-        if (ent.lunge_time_remaining > 0) {
-            ent.lunge_time_remaining -= delta_time;
+        if (ent.combat.melee_lunge.time_remaining > 0) {
+            ent.combat.melee_lunge.time_remaining -= delta_time;
 
             // When lunge expires, smoothly return to original position
-            if (ent.lunge_time_remaining <= 0) {
+            if (ent.combat.melee_lunge.time_remaining <= 0) {
                 // Interpolate back to return position over the next tick
                 const lerp_factor: f32 = 0.3; // 30% per tick = smooth return
-                ent.position.x += (ent.lunge_return_position.x - ent.position.x) * lerp_factor;
-                ent.position.z += (ent.lunge_return_position.z - ent.position.z) * lerp_factor;
+                ent.position.x += (ent.combat.melee_lunge.return_position_x - ent.position.x) * lerp_factor;
+                ent.position.z += (ent.combat.melee_lunge.return_position_z - ent.position.z) * lerp_factor;
 
                 // If very close, snap to return position
-                const dist_to_return = @sqrt((ent.position.x - ent.lunge_return_position.x) * (ent.position.x - ent.lunge_return_position.x) +
-                    (ent.position.z - ent.lunge_return_position.z) * (ent.position.z - ent.lunge_return_position.z));
+                const dist_to_return = @sqrt((ent.position.x - ent.combat.melee_lunge.return_position_x) * (ent.position.x - ent.combat.melee_lunge.return_position_x) +
+                    (ent.position.z - ent.combat.melee_lunge.return_position_z) * (ent.position.z - ent.combat.melee_lunge.return_position_z));
                 if (dist_to_return < 1.0) {
-                    ent.position = ent.lunge_return_position;
+                    ent.position.x = ent.combat.melee_lunge.return_position_x;
+                    ent.position.y = ent.combat.melee_lunge.return_position_y;
+                    ent.position.z = ent.combat.melee_lunge.return_position_z;
                 }
             }
         }
 
-        if (!ent.is_auto_attacking) continue;
+        if (!ent.combat.auto_attack.is_active) continue;
 
         // Can't auto-attack while casting or in aftercast
         if (ent.isCasting()) continue;
 
         // Update attack timer
-        ent.auto_attack_timer -= delta_time;
+        ent.combat.auto_attack.timer -= delta_time;
 
         // Time to attack?
-        if (ent.auto_attack_timer <= 0) {
+        if (ent.combat.auto_attack.timer <= 0) {
             // Try to execute auto-attack
             if (tryAutoAttack(ent, entities, rng, vfx_manager)) {
                 // Reset timer for next attack
-                ent.auto_attack_timer = ent.getAttackInterval();
+                ent.combat.auto_attack.timer = ent.getAttackInterval();
             } else {
                 // Failed to attack (out of range, target dead, etc.)
                 // Try again next tick
-                ent.auto_attack_timer = 0.1; // Small delay before retry
+                ent.combat.auto_attack.timer = 0.1; // Small delay before retry
             }
         }
     }
@@ -67,7 +70,7 @@ pub fn updateAutoAttacks(entities: []Character, delta_time: f32, rng: *std.Rando
 
 /// Attempt to execute an auto-attack
 fn tryAutoAttack(attacker: *Character, entities: []Character, rng: *std.Random, vfx_manager: *vfx.VFXManager) bool {
-    const target_id = attacker.auto_attack_target_id orelse {
+    const target_id = attacker.combat.auto_attack.target_id orelse {
         // No target set, stop auto-attacking
         attacker.stopAutoAttack();
         return false;
@@ -128,14 +131,16 @@ fn executeAutoAttack(attacker: *Character, target: *Character, rng: *std.Random,
             });
 
             // Save current position to return to
-            attacker.lunge_return_position = attacker.position;
+            attacker.combat.melee_lunge.return_position_x = attacker.position.x;
+            attacker.combat.melee_lunge.return_position_y = attacker.position.y;
+            attacker.combat.melee_lunge.return_position_z = attacker.position.z;
 
             // Lunge towards target
             attacker.position.x += (dx / distance) * lunge_amount;
             attacker.position.z += (dz / distance) * lunge_amount;
 
             // Set lunge duration (should last 2-3 frames at 60fps = 0.033-0.05 sec)
-            attacker.lunge_time_remaining = 0.15; // 150ms lunge animation
+            attacker.combat.melee_lunge.time_remaining = 0.15; // 150ms lunge animation
         }
     }
 
@@ -175,7 +180,7 @@ fn executeAutoAttack(attacker: *Character, target: *Character, rng: *std.Random,
     if (target.hasCozy(.snowball_shield)) {
         print("{s}'s Snowball Shield blocked {s}'s auto-attack!\n", .{ target.name, attacker.name });
         // Remove the shield after blocking
-        for (target.active_cozies[0..target.active_cozy_count]) |*maybe_cozy| {
+        for (target.conditions.cozies.cozies[0..target.conditions.cozies.count]) |*maybe_cozy| {
             if (maybe_cozy.*) |*cozy| {
                 if (cozy.cozy == .snowball_shield) {
                     maybe_cozy.* = null;
@@ -196,8 +201,8 @@ fn executeAutoAttack(attacker: *Character, target: *Character, rng: *std.Random,
         attacker.name,
         target.name,
         damage,
-        target.warmth,
-        target.max_warmth,
+        target.stats.warmth,
+        target.stats.max_warmth,
     });
 
     // Check if target is Dazed - if so, damage interrupts
@@ -207,8 +212,8 @@ fn executeAutoAttack(attacker: *Character, target: *Character, rng: *std.Random,
 
     // Build grit stacks for Public School characters (like adrenaline in GW1)
     if (attacker.school == .public_school) {
-        if (attacker.grit_stacks < attacker.max_grit_stacks) {
-            attacker.grit_stacks += 1;
+        if (attacker.school_resources.grit.stacks < school_resources.MAX_GRIT_STACKS) {
+            attacker.school_resources.grit.stacks += 1;
         }
     }
 }

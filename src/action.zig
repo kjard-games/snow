@@ -31,8 +31,8 @@ pub fn executeCommand(
 ) void {
     // === SKILL USAGE ===
     if (command.skill_use) |skill_index| {
-        if (skill_index < actor.skill_bar.len) {
-            if (actor.skill_bar[skill_index]) |skill| {
+        if (skill_index < actor.casting.skills.len) {
+            if (actor.casting.skills[skill_index]) |skill| {
                 // Determine target
                 const target = if (command.target_id) |tid|
                     findEntityById(entities, tid)

@@ -299,16 +299,16 @@ fn createRandomCharacter(
         .school_color = palette.getSchoolColor(selected_school),
         .position_color = palette.getPositionColor(selected_position),
         .name = name,
-        .warmth = 150,
-        .max_warmth = 150,
         .team = team,
         .school = selected_school,
         .player_position = selected_position,
-        .energy = selected_school.getMaxEnergy(),
-        .max_energy = selected_school.getMaxEnergy(),
-        .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-        .selected_skill = 0,
     };
+
+    // Initialize stats
+    char.stats.warmth = 150;
+    char.stats.max_warmth = 150;
+    char.stats.energy = selected_school.getMaxEnergy();
+    char.stats.max_energy = selected_school.getMaxEnergy();
 
     // Set character color based on school + position
     char.color = palette.getCharacterColor(selected_school, selected_position);
@@ -331,7 +331,7 @@ fn loadRandomSkills(char: *Character, rng: *std.Random) void {
     var wall_skill_loaded = false;
     for (position_skills) |*skill| {
         if (skill.creates_wall) {
-            char.skill_bar[0] = skill;
+            char.casting.skills[0] = skill;
             wall_skill_loaded = true;
             break;
         }
@@ -339,7 +339,7 @@ fn loadRandomSkills(char: *Character, rng: *std.Random) void {
 
     // Fallback: use first position skill if no wall skill
     if (!wall_skill_loaded and position_skills.len > 0) {
-        char.skill_bar[0] = &position_skills[0];
+        char.casting.skills[0] = &position_skills[0];
     }
 
     // Fill slots 1-3 with random position skills
@@ -354,14 +354,14 @@ fn loadRandomSkills(char: *Character, rng: *std.Random) void {
         // Check not already loaded
         var already_loaded = false;
         for (0..slot_idx) |check_idx| {
-            if (char.skill_bar[check_idx] == skill) {
+            if (char.casting.skills[check_idx] == skill) {
                 already_loaded = true;
                 break;
             }
         }
 
         if (!already_loaded) {
-            char.skill_bar[slot_idx] = skill;
+            char.casting.skills[slot_idx] = skill;
             slot_idx += 1;
         }
     }
@@ -378,14 +378,14 @@ fn loadRandomSkills(char: *Character, rng: *std.Random) void {
         // Check not already loaded
         var already_loaded = false;
         for (4..slot_idx) |check_idx| {
-            if (char.skill_bar[check_idx] == skill) {
+            if (char.casting.skills[check_idx] == skill) {
                 already_loaded = true;
                 break;
             }
         }
 
         if (!already_loaded) {
-            char.skill_bar[slot_idx] = skill;
+            char.casting.skills[slot_idx] = skill;
             slot_idx += 1;
         }
     }
@@ -452,12 +452,12 @@ fn assignRandomGear(char: *Character, rng: *std.Random) void {
     char.gear[4] = legs_pieces[rng.intRangeAtMost(usize, 0, legs_pieces.len - 1)];
     char.gear[5] = feet_pieces[rng.intRangeAtMost(usize, 0, feet_pieces.len - 1)];
 
-    char.recalculatePadding();
+    char.recalculateGearStats();
 }
 
 /// Create a dummy dead character for unused entity slots
 fn createDummyCharacter(id_gen: *EntityIdGenerator) Character {
-    return Character{
+    var char = Character{
         .id = id_gen.generate(),
         .position = .{ .x = 0, .y = -1000, .z = 0 },
         .previous_position = .{ .x = 0, .y = -1000, .z = 0 },
@@ -466,17 +466,16 @@ fn createDummyCharacter(id_gen: *EntityIdGenerator) Character {
         .school_color = .black,
         .position_color = .black,
         .name = "Unused",
-        .warmth = 0,
-        .max_warmth = 1,
         .team = .blue,
         .school = school.School.montessori,
         .player_position = position.Position.pitcher,
-        .energy = 0,
-        .max_energy = 1,
-        .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
         .gear = [_]?*const character.Gear{null} ** 6,
-        .selected_skill = 0,
     };
+    char.stats.warmth = 0;
+    char.stats.max_warmth = 1;
+    char.stats.energy = 0;
+    char.stats.max_energy = 1;
+    return char;
 }
 
 // Type aliases
@@ -667,7 +666,7 @@ pub const GameState = struct {
                 const player_movement = input.handleInput(player, &self.entities, &self.selected_target, &self.camera, &self.input_state, &random_state, &self.vfx_manager, &self.terrain_grid);
 
                 // Only apply movement if not casting (GW1 rule: can't move while casting)
-                if (player.cast_state == .idle) {
+                if (player.casting.state == .idle) {
                     movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC, &self.terrain_grid);
                 }
             }
@@ -779,40 +778,40 @@ pub const GameState = struct {
     fn finishCasts(self: *GameState, rng: *std.Random) void {
         // Check cast completions for ALL entities (including player!)
         for (&self.entities) |*ent| {
-            if (ent.cast_state == .activating) {
-                const skill = ent.skill_bar[ent.casting_skill_index] orelse continue;
+            if (ent.casting.state == .activating) {
+                const skill = ent.casting.skills[ent.casting.casting_skill_index] orelse continue;
 
                 // Check for attack skills that execute at half activation
                 const half_activation_time = @as(f32, @floatFromInt(skill.activation_time_ms)) / 2000.0;
                 const total_activation_time = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
 
                 // Execute attack skills at half activation time
-                if (skill.mechanic.executesAtHalfActivation() and !ent.skill_executed) {
-                    const time_elapsed = total_activation_time - ent.cast_time_remaining;
+                if (skill.mechanic.executesAtHalfActivation() and !ent.casting.skill_executed) {
+                    const time_elapsed = total_activation_time - ent.casting.cast_time_remaining;
                     if (time_elapsed >= half_activation_time) {
                         self.executeSkillEffect(ent, skill, rng);
-                        ent.skill_executed = true;
+                        ent.casting.skill_executed = true;
                     }
                 }
 
                 // Check if activation phase is complete
-                if (ent.cast_time_remaining <= 0) {
+                if (ent.casting.cast_time_remaining <= 0) {
                     // Execute non-attack skills at end of activation
-                    if (!skill.mechanic.executesAtHalfActivation() and !ent.skill_executed) {
+                    if (!skill.mechanic.executesAtHalfActivation() and !ent.casting.skill_executed) {
                         self.executeSkillEffect(ent, skill, rng);
-                        ent.skill_executed = true;
+                        ent.casting.skill_executed = true;
                     }
 
                     // Transition to aftercast if skill has one
                     if (skill.mechanic.hasAftercast()) {
-                        ent.cast_state = .aftercast;
-                        ent.aftercast_time_remaining = @as(f32, @floatFromInt(skill.aftercast_ms)) / 1000.0;
+                        ent.casting.state = .aftercast;
+                        ent.casting.aftercast_time_remaining = @as(f32, @floatFromInt(skill.aftercast_ms)) / 1000.0;
                     } else {
-                        ent.cast_state = .idle;
+                        ent.casting.state = .idle;
                     }
 
-                    ent.cast_target_id = null;
-                    ent.skill_executed = false;
+                    ent.casting.cast_target_id = null;
+                    ent.casting.skill_executed = false;
                 }
             }
         }
@@ -822,7 +821,7 @@ pub const GameState = struct {
         var target: ?*Character = null;
         var target_valid = false;
 
-        if (ent.cast_target_id) |target_id| {
+        if (ent.casting.cast_target_id) |target_id| {
             // Look up target by ID (could be player or another entity)
             target = self.getEntityById(target_id);
             if (target) |tgt| {
@@ -837,7 +836,7 @@ pub const GameState = struct {
         }
 
         if (target_valid) {
-            combat.executeSkill(ent, skill, target, ent.casting_skill_index, rng, &self.vfx_manager, &self.terrain_grid, self.match_telemetry);
+            combat.executeSkill(ent, skill, target, ent.casting.casting_skill_index, rng, &self.vfx_manager, &self.terrain_grid, self.match_telemetry);
         }
     }
 

@@ -294,7 +294,7 @@ pub const Conditions = struct {
         const target = ctx.target.?;
         const distance = ctx.self.distanceTo(target.*);
 
-        for (ctx.self.skill_bar) |maybe_skill| {
+        for (ctx.self.casting.skills) |maybe_skill| {
             if (maybe_skill) |skill| {
                 if (distance <= skill.cast_range) return .success;
             }
@@ -305,13 +305,13 @@ pub const Conditions = struct {
     // Check if target is casting (interruptible)
     pub fn targetCasting(ctx: *BehaviorContext) NodeStatus {
         if (ctx.target == null) return .failure;
-        return if (ctx.target.?.cast_state == .activating) .success else .failure;
+        return if (ctx.target.?.casting.state == .activating) .success else .failure;
     }
 
     // Check if any ally needs healing (below healing threshold)
     pub fn allyNeedsHealing(ctx: *BehaviorContext) NodeStatus {
         for (ctx.allies[0..ctx.allies_count]) |ally| {
-            const health_pct = ally.warmth / ally.max_warmth;
+            const health_pct = ally.stats.warmth / ally.stats.max_warmth;
             if (health_pct < HEALING.LOW_THRESHOLD) return .success;
         }
         return .failure;
@@ -325,7 +325,7 @@ pub const Conditions = struct {
 
     // Check if self is under threat (low health or being targeted)
     pub fn underThreat(ctx: *BehaviorContext) NodeStatus {
-        const health_pct = ctx.self.warmth / ctx.self.max_warmth;
+        const health_pct = ctx.self.stats.warmth / ctx.self.stats.max_warmth;
         return if (health_pct < HEALING.CRITICAL_THRESHOLD) .success else .failure;
     }
 
@@ -354,8 +354,8 @@ pub const Conditions = struct {
 
     // Check if we should build a defensive wall (under threat)
     pub fn shouldBuildDefensiveWall(ctx: *BehaviorContext) NodeStatus {
-        const health_pct = ctx.self.warmth / ctx.self.max_warmth;
-        const under_fire = ctx.self.damage_source_count > 0; // Being hit by enemies
+        const health_pct = ctx.self.stats.warmth / ctx.self.stats.max_warmth;
+        const under_fire = ctx.self.combat.damage_monitor.count > 0; // Being hit by enemies
 
         // Build wall if low health AND under fire
         if (health_pct < 0.5 and under_fire) {
@@ -375,11 +375,12 @@ pub const Conditions = struct {
             tel.recordExecuteQueueCall(ctx.self.id);
         }
 
-        const queued_skill_idx = ctx.self.queued_skill_index orelse return .failure;
-        const queued_target_id = ctx.self.queued_skill_target_id orelse return .failure;
+        const queued = ctx.self.casting.queued_skill orelse return .failure;
+        const queued_skill_idx = queued.skill_index;
+        const queued_target_id = queued.target_id;
 
         // Get skill
-        const skill = ctx.self.skill_bar[queued_skill_idx] orelse {
+        const skill = ctx.self.casting.skills[queued_skill_idx] orelse {
             ctx.self.clearSkillQueue();
             return .failure;
         };
@@ -459,7 +460,7 @@ pub const Conditions = struct {
 fn getMaxSkillRange(ent: *Character) f32 {
     var max_range: f32 = 100.0; // Fallback default
 
-    for (ent.skill_bar) |maybe_skill| {
+    for (ent.casting.skills) |maybe_skill| {
         if (maybe_skill) |skill| {
             if (skill.cast_range > max_range) {
                 max_range = skill.cast_range;
@@ -477,7 +478,7 @@ fn findBestAllyClumpLocation(ctx: *BehaviorContext) ?rl.Vector3 {
     var wounded_count: usize = 0;
 
     for (ctx.allies[0..ctx.allies_count]) |ally| {
-        const health_pct = ally.warmth / ally.max_warmth;
+        const health_pct = ally.stats.warmth / ally.stats.max_warmth;
         if (health_pct < HEALING.LOW_THRESHOLD) {
             center.x += ally.position.x;
             center.z += ally.position.z;
@@ -636,7 +637,7 @@ pub const Actions = struct {
     pub fn castInterrupt(ctx: *BehaviorContext) NodeStatus {
         if (ctx.target == null) return .failure;
 
-        for (ctx.self.skill_bar, 0..) |maybe_skill, idx| {
+        for (ctx.self.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.interrupts and ctx.self.canUseSkill(@intCast(idx))) {
                     const result = combat.tryStartCast(
@@ -662,7 +663,7 @@ pub const Actions = struct {
     // Cast terrain skill at strategic location
     pub fn castTerrainSkill(ctx: *BehaviorContext) NodeStatus {
         // Find a terrain skill
-        for (ctx.self.skill_bar, 0..) |maybe_skill, idx| {
+        for (ctx.self.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.terrain_effect.shape != .none and ctx.self.canUseSkill(@intCast(idx))) {
                     const terrain_effect = skill.terrain_effect;
@@ -689,15 +690,18 @@ pub const Actions = struct {
                             .school_color = .blue,
                             .position_color = .blue,
                             .name = "Ground",
-                            .warmth = 100,
-                            .max_warmth = 100,
                             .team = .red,
                             .school = .private_school,
                             .player_position = .pitcher,
-                            .energy = 0,
-                            .max_energy = 0,
-                            .skill_bar = [_]?*const Skill{null} ** character.MAX_SKILLS,
-                            .selected_skill = 0,
+                            .stats = .{
+                                .warmth = 100,
+                                .max_warmth = 100,
+                                .energy = 0,
+                                .max_energy = 0,
+                            },
+                            .casting = .{
+                                .selected_index = 0,
+                            },
                         };
 
                         const result = combat.tryStartCast(
@@ -729,7 +733,7 @@ pub const Actions = struct {
         var heal_target_id: ?EntityId = null;
 
         for (ctx.allies[0..ctx.allies_count]) |ally| {
-            const health_pct = ally.warmth / ally.max_warmth;
+            const health_pct = ally.stats.warmth / ally.stats.max_warmth;
             if (health_pct < lowest_health_pct) {
                 lowest_health_pct = health_pct;
                 heal_target = ally;
@@ -744,7 +748,7 @@ pub const Actions = struct {
         }
 
         // Find healing skill
-        for (ctx.self.skill_bar, 0..) |maybe_skill, idx| {
+        for (ctx.self.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.healing > 0 and ctx.self.canUseSkill(@intCast(idx))) {
                     const result = combat.tryStartCast(
@@ -771,7 +775,7 @@ pub const Actions = struct {
     // Cast wall-building skill to protect self or allies
     pub fn castDefensiveWall(ctx: *BehaviorContext) NodeStatus {
         // Find wall-building skill
-        for (ctx.self.skill_bar, 0..) |maybe_skill, idx| {
+        for (ctx.self.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.creates_wall and ctx.self.canUseSkill(@intCast(idx))) {
                     // Calculate position: Between self and enemies
@@ -817,7 +821,7 @@ pub const Actions = struct {
         if (!has_wall) return .failure;
 
         // Find wall-breaking skill
-        for (ctx.self.skill_bar, 0..) |maybe_skill, idx| {
+        for (ctx.self.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.destroys_walls and ctx.self.canUseSkill(@intCast(idx))) {
                     // Cast at midpoint between self and target (where wall likely is)
@@ -970,10 +974,10 @@ fn selectSkillWithBehaviorTree(
 // Cover-aware: prefers arcing projectiles when target has cover
 fn selectDamageSkillWithCover(caster: *Character, target: *Character, rng: *std.Random, target_has_cover: bool) ?u8 {
     // Check if we should build a defensive wall (low health + being attacked)
-    const health_pct = caster.warmth / caster.max_warmth;
-    if (health_pct < 0.5 and caster.damage_source_count > 0) {
+    const health_pct = caster.stats.warmth / caster.stats.max_warmth;
+    if (health_pct < 0.5 and caster.combat.damage_monitor.count > 0) {
         // Look for wall-building skill
-        for (caster.skill_bar, 0..) |maybe_skill, idx| {
+        for (caster.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.creates_wall and caster.canUseSkill(@intCast(idx))) {
                     // 50% chance to build defensive wall when low
@@ -986,8 +990,8 @@ fn selectDamageSkillWithCover(caster: *Character, target: *Character, rng: *std.
     }
 
     // Check if target is casting - use interrupt if available
-    if (target.cast_state == .activating) {
-        for (caster.skill_bar, 0..) |maybe_skill, idx| {
+    if (target.casting.state == .activating) {
+        for (caster.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.interrupts and caster.canUseSkill(@intCast(idx))) {
                     return @intCast(idx);
@@ -1000,7 +1004,7 @@ fn selectDamageSkillWithCover(caster: *Character, target: *Character, rng: *std.
     var best_skill: ?u8 = null;
     var best_damage: f32 = 0.0;
 
-    for (caster.skill_bar, 0..) |maybe_skill, idx| {
+    for (caster.casting.skills, 0..) |maybe_skill, idx| {
         if (maybe_skill) |skill| {
             if (skill.damage > 0 and caster.canUseSkill(@intCast(idx))) {
                 var effective_damage = skill.damage;
@@ -1022,7 +1026,7 @@ fn selectDamageSkillWithCover(caster: *Character, target: *Character, rng: *std.
 
     // Fallback: any available damage skill
     if (best_skill == null) {
-        for (caster.skill_bar, 0..) |maybe_skill, idx| {
+        for (caster.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.damage > 0 and caster.canUseSkill(@intCast(idx))) {
                     return @intCast(idx);
@@ -1048,7 +1052,7 @@ fn selectWallBreakingSkill(caster: *Character, terrain_grid: *const @import("ter
     if (!has_blocking_wall) return null;
 
     // Find wall-breaking skill
-    for (caster.skill_bar, 0..) |maybe_skill, idx| {
+    for (caster.casting.skills, 0..) |maybe_skill, idx| {
         if (maybe_skill) |skill| {
             if (skill.destroys_walls and caster.canUseSkill(@intCast(idx))) {
                 // Found a wall-breaker! Use it!
@@ -1072,7 +1076,7 @@ fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.R
     // Check all allies in entities
     for (all_entities) |ent| {
         if (caster.isAlly(ent) and ent.isAlive()) {
-            const health_pct = ent.warmth / ent.max_warmth;
+            const health_pct = ent.stats.warmth / ent.stats.max_warmth;
             if (health_pct < lowest_health_pct) {
                 lowest_health_pct = health_pct;
             }
@@ -1080,7 +1084,7 @@ fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.R
                 needs_healing = true;
             }
             // Check if ally is taking damage (has active damage sources)
-            if (health_pct < 0.7 and ent.damage_source_count > 0) {
+            if (health_pct < 0.7 and ent.combat.damage_monitor.count > 0) {
                 ally_under_fire = true;
             }
         }
@@ -1088,7 +1092,7 @@ fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.R
 
     // Build protective wall for ally if they're under fire (30% chance)
     if (ally_under_fire and rng.intRangeAtMost(u32, 0, 100) < 30) {
-        for (caster.skill_bar, 0..) |maybe_skill, idx| {
+        for (caster.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.creates_wall and caster.canUseSkill(@intCast(idx))) {
                     return SkillDecision{ .skill_idx = @intCast(idx), .target_ally = false };
@@ -1099,7 +1103,7 @@ fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.R
 
     // Prioritize healing if ally is below 60% health
     if (needs_healing) {
-        for (caster.skill_bar, 0..) |maybe_skill, idx| {
+        for (caster.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 if (skill.healing > 0 and caster.canUseSkill(@intCast(idx))) {
                     return SkillDecision{ .skill_idx = @intCast(idx), .target_ally = true };
@@ -1109,7 +1113,7 @@ fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.R
     }
 
     // Otherwise use buffs or damage
-    for (caster.skill_bar, 0..) |maybe_skill, idx| {
+    for (caster.casting.skills, 0..) |maybe_skill, idx| {
         if (maybe_skill) |skill| {
             if ((skill.cozies.len > 0 or skill.damage > 0) and caster.canUseSkill(@intCast(idx))) {
                 // Buffs should target allies, damage should target enemies
@@ -1126,8 +1130,8 @@ fn selectSupportSkill(caster: *Character, all_entities: []Character, rng: *std.R
 fn selectDisruptorSkill(caster: *Character, target: *Character, rng: *std.Random) ?u8 {
 
     // Always interrupt if target is casting
-    if (target.cast_state == .activating) {
-        for (caster.skill_bar, 0..) |maybe_skill, idx| {
+    if (target.casting.state == .activating) {
+        for (caster.casting.skills, 0..) |maybe_skill, idx| {
             if (maybe_skill) |skill| {
                 // Prefer interrupt skills, but also use daze-applying skills
                 if ((skill.interrupts or skill.chills.len > 0) and caster.canUseSkill(@intCast(idx))) {
@@ -1138,7 +1142,7 @@ fn selectDisruptorSkill(caster: *Character, target: *Character, rng: *std.Random
     }
 
     // Apply debuffs if available
-    for (caster.skill_bar, 0..) |maybe_skill, idx| {
+    for (caster.casting.skills, 0..) |maybe_skill, idx| {
         if (maybe_skill) |skill| {
             if (skill.chills.len > 0 and caster.canUseSkill(@intCast(idx))) {
                 return @intCast(idx);
@@ -1168,10 +1172,10 @@ fn calculateFormationMovementIntent(
 
     // If queued skill exists, find its target and use that instead
     if (ent.hasQueuedSkill()) {
-        if (ent.queued_skill_target_id) |queued_target_id| {
+        if (ent.casting.queued_skill) |queued| {
             // Find the queued target in all entities
             for (ctx.all_entities) |*potential_target| {
-                if (potential_target.id == queued_target_id) {
+                if (potential_target.id == queued.target_id) {
                     target = potential_target;
                     break;
                 }
@@ -1508,9 +1512,9 @@ pub fn updateAI(
         // Auto-attack management: Enable auto-attack when idle and have a target
         if (target_id) |tid| {
             // If not currently auto-attacking this target, start auto-attacking
-            if (!ent.is_auto_attacking or ent.auto_attack_target_id != tid) {
+            if (!ent.combat.auto_attack.is_active or ent.combat.auto_attack.target_id != tid) {
                 // Only start auto-attack if we're in range and not casting
-                if (ent.cast_state == .idle) {
+                if (ent.casting.state == .idle) {
                     if (target) |tgt| {
                         const distance = ent.distanceTo(tgt.*);
                         const attack_range = ent.getAutoAttackRange();
@@ -1524,13 +1528,13 @@ pub fn updateAI(
             }
         } else {
             // No target, stop auto-attacking
-            if (ent.is_auto_attacking) {
+            if (ent.combat.auto_attack.is_active) {
                 ent.stopAutoAttack();
             }
         }
 
         // Only move if not casting (GW1 rule: movement cancels/prevents casting)
-        if (ent.cast_state == .idle) {
+        if (ent.casting.state == .idle) {
             // Calculate and apply formation-aware movement every tick
             const move_intent = calculateFormationMovementIntent(&ctx);
 

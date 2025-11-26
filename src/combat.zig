@@ -34,10 +34,10 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     if (!caster.isAlive()) return .caster_dead;
 
     // Check if already casting or in aftercast
-    if (caster.cast_state != .idle) return .already_casting;
+    if (caster.casting.state != .idle) return .already_casting;
 
     // Check cooldown
-    if (caster.skill_cooldowns[skill_index] > 0) {
+    if (caster.casting.cooldowns[skill_index] > 0) {
         if (telem) |tel| {
             tel.recordCooldownBlock(caster.id);
         }
@@ -45,13 +45,13 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
     }
 
     // Get the skill
-    const skill = caster.skill_bar[skill_index] orelse return .no_target;
+    const skill = caster.casting.skills[skill_index] orelse return .no_target;
 
     // Check energy (accounting for energy cost multipliers from effects)
-    const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.active_effects, caster.active_effect_count);
+    const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.conditions.effects.active, caster.conditions.effects.count);
     const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
-    if (@as(f32, @floatFromInt(caster.energy)) < adjusted_energy_cost) {
-        print("{s} not enough energy ({d:.1}/{d:.1})\n", .{ caster.name, caster.energy, adjusted_energy_cost });
+    if (@as(f32, @floatFromInt(caster.stats.energy)) < adjusted_energy_cost) {
+        print("{s} not enough energy ({d:.1}/{d:.1})\n", .{ caster.name, caster.stats.energy, adjusted_energy_cost });
         // Record failed skill attempt
         if (telem) |tel| {
             tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, false);
@@ -97,12 +97,12 @@ pub fn tryStartCast(caster: *Character, skill_index: u8, target: ?*Character, ta
 
     // Start casting (consumes energy, sets cast state)
     caster.startCasting(skill_index);
-    caster.cast_target_id = target_id; // Store target ID for cast completion
+    caster.casting.cast_target_id = target_id; // Store target ID for cast completion
 
     // If instant cast, execute immediately
     if (skill.activation_time_ms == 0) {
         executeSkill(caster, skill, target, skill_index, rng, vfx_manager, terrain_grid, telem);
-        caster.cast_target_id = null; // Clear target
+        caster.casting.cast_target_id = null; // Clear target
         return .success;
     }
 
@@ -116,10 +116,10 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
     if (!caster.isAlive()) return .caster_dead;
 
     // Check if already casting or in aftercast
-    if (caster.cast_state != .idle) return .already_casting;
+    if (caster.casting.state != .idle) return .already_casting;
 
     // Check cooldown
-    if (caster.skill_cooldowns[skill_index] > 0) {
+    if (caster.casting.cooldowns[skill_index] > 0) {
         if (telem) |tel| {
             tel.recordCooldownBlock(caster.id);
         }
@@ -127,13 +127,13 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
     }
 
     // Get the skill
-    const skill = caster.skill_bar[skill_index] orelse return .no_target;
+    const skill = caster.casting.skills[skill_index] orelse return .no_target;
 
     // Check energy (accounting for energy cost multipliers from effects)
-    const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.active_effects, caster.active_effect_count);
+    const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.conditions.effects.active, caster.conditions.effects.count);
     const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
-    if (@as(f32, @floatFromInt(caster.energy)) < adjusted_energy_cost) {
-        print("{s} not enough energy ({d:.1}/{d:.1})\n", .{ caster.name, caster.energy, adjusted_energy_cost });
+    if (@as(f32, @floatFromInt(caster.stats.energy)) < adjusted_energy_cost) {
+        print("{s} not enough energy ({d:.1}/{d:.1})\n", .{ caster.name, caster.stats.energy, adjusted_energy_cost });
         if (telem) |tel| {
             tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, false);
             tel.recordNoEnergyBlock(caster.id);
@@ -173,7 +173,7 @@ pub fn tryStartCastAtGround(caster: *Character, skill_index: u8, ground_position
 
     // For now, execute ground skills immediately (most wall skills are instant anyway)
     executeSkillAtGround(caster, skill, ground_position, skill_index, rng, vfx_manager, terrain_grid, telem);
-    caster.cast_state = .idle;
+    caster.casting.state = .idle;
     return .success;
 }
 
@@ -185,13 +185,13 @@ fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.
 
     // Set cooldown, applying cooldown reduction from effects
     var cooldown_time = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
-    const cooldown_reduction = effects.calculateCooldownReductionPercent(&caster.active_effects, caster.active_effect_count);
+    const cooldown_reduction = effects.calculateCooldownReductionPercent(&caster.conditions.effects.active, caster.conditions.effects.count);
     cooldown_time *= (1.0 - cooldown_reduction);
-    caster.skill_cooldowns[skill_index] = cooldown_time;
+    caster.casting.cooldowns[skill_index] = cooldown_time;
 
     // Record skill cast in telemetry
     if (telem) |tel| {
-        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.active_effects, caster.active_effect_count);
+        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.conditions.effects.active, caster.conditions.effects.count);
         const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
         tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, true);
     }
@@ -292,13 +292,13 @@ fn executeSkillAtGround(caster: *Character, skill: *const Skill, ground_pos: rl.
 pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character, skill_index: u8, rng: *std.Random, vfx_manager: *vfx.VFXManager, terrain_grid: *@import("terrain.zig").TerrainGrid, telem: ?*MatchTelemetry) void {
     // Set cooldown, applying cooldown reduction from effects
     var cooldown_time = @as(f32, @floatFromInt(skill.recharge_time_ms)) / 1000.0;
-    const cooldown_reduction = effects.calculateCooldownReductionPercent(&caster.active_effects, caster.active_effect_count);
+    const cooldown_reduction = effects.calculateCooldownReductionPercent(&caster.conditions.effects.active, caster.conditions.effects.count);
     cooldown_time *= (1.0 - cooldown_reduction);
-    caster.skill_cooldowns[skill_index] = cooldown_time;
+    caster.casting.cooldowns[skill_index] = cooldown_time;
 
     // Record successful skill cast in telemetry (this is called after cast completes)
     if (telem) |tel| {
-        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.active_effects, caster.active_effect_count);
+        const energy_cost_mult = effects.calculateEnergyCostMultiplier(&caster.conditions.effects.active, caster.conditions.effects.count);
         const adjusted_energy_cost = @as(f32, @floatFromInt(skill.energy_cost)) * energy_cost_mult;
         tel.recordSkillCast(caster.id, skill.name, adjusted_energy_cost, true);
     }
@@ -326,12 +326,12 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         }
 
         // Apply active effect damage multipliers from caster
-        const caster_damage_mult = effects.calculateDamageMultiplier(&caster.active_effects, caster.active_effect_count);
+        const caster_damage_mult = effects.calculateDamageMultiplier(&caster.conditions.effects.active, caster.conditions.effects.count);
         final_damage *= caster_damage_mult;
 
         // Apply active effect damage multipliers against target (negative multipliers)
         // Note: Some effects on target make them take MORE damage
-        const target_damage_mult = effects.calculateDamageMultiplier(&tgt.active_effects, tgt.active_effect_count);
+        const target_damage_mult = effects.calculateDamageMultiplier(&tgt.conditions.effects.active, tgt.conditions.effects.count);
         final_damage *= target_damage_mult;
 
         // Apply armor/padding reduction (GW1-inspired formula)
@@ -342,7 +342,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         var target_padding = tgt.getTotalPadding();
 
         // Apply active effect armor multipliers to target's padding
-        const target_armor_mult = effects.calculateArmorMultiplier(&tgt.active_effects, tgt.active_effect_count);
+        const target_armor_mult = effects.calculateArmorMultiplier(&tgt.conditions.effects.active, tgt.conditions.effects.count);
         target_padding *= target_armor_mult;
 
         const armor_reduction = target_padding / (target_padding + 100.0);
@@ -394,7 +394,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         if (tgt.hasCozy(.snowball_shield)) {
             print("{s}'s Snowball Shield blocked {s}!\n", .{ tgt.name, skill.name });
             // Remove the shield after blocking
-            for (tgt.active_cozies[0..tgt.active_cozy_count]) |*maybe_cozy| {
+            for (tgt.conditions.cozies.cozies[0..tgt.conditions.cozies.count]) |*maybe_cozy| {
                 if (maybe_cozy.*) |*cozy| {
                     if (cozy.cozy == .snowball_shield) {
                         maybe_cozy.* = null;
@@ -429,8 +429,8 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
                 skill.name,
                 tgt.name,
                 final_damage,
-                tgt.warmth,
-                tgt.max_warmth,
+                tgt.stats.warmth,
+                tgt.stats.max_warmth,
             });
 
             // Check if target is Dazed - if so, damage interrupts
@@ -453,11 +453,11 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
                 healing_amount *= 1.5;
             }
 
-            const prev_hp = tgt.warmth;
-            tgt.warmth = @min(tgt.max_warmth, tgt.warmth + healing_amount);
+            const prev_hp = tgt.stats.warmth;
+            tgt.stats.warmth = @min(tgt.stats.max_warmth, tgt.stats.warmth + healing_amount);
 
             // Check if we overhealed
-            const was_overhealing = (prev_hp + healing_amount) > tgt.max_warmth;
+            const was_overhealing = (prev_hp + healing_amount) > tgt.stats.max_warmth;
 
             // Record telemetry
             if (telem) |tel| {
@@ -472,8 +472,8 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
                 caster.name,
                 tgt.name,
                 healing_amount,
-                tgt.warmth,
-                tgt.max_warmth,
+                tgt.stats.warmth,
+                tgt.stats.max_warmth,
             });
         }
 
@@ -514,8 +514,8 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
         // Apply new composable effects
         for (skill.effects) |effect| {
             // Check if condition is met
-            const caster_hp_percent = caster.warmth / caster.max_warmth;
-            const target_hp_percent = tgt.warmth / tgt.max_warmth;
+            const caster_hp_percent = caster.stats.warmth / caster.stats.max_warmth;
+            const target_hp_percent = tgt.stats.warmth / tgt.stats.max_warmth;
             if (!effects.evaluateCondition(effect.condition, caster_hp_percent, target_hp_percent)) {
                 continue;
             }
@@ -540,7 +540,7 @@ pub fn executeSkill(caster: *Character, skill: *const Skill, target: ?*Character
     } else if (skill.target_type == .self) {
         // Self-targeted skill
         if (skill.healing > 0) {
-            caster.warmth = @min(caster.max_warmth, caster.warmth + skill.healing);
+            caster.stats.warmth = @min(caster.stats.max_warmth, caster.stats.warmth + skill.healing);
 
             // Spawn heal effect
             vfx_manager.spawnHeal(caster.position);
