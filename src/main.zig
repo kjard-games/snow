@@ -1,15 +1,18 @@
 const std = @import("std");
 const rl = @import("raylib");
 const game_state = @import("game_state.zig");
+const game_mode = @import("game_mode.zig");
 const render = @import("render.zig");
 
 const GameState = game_state.GameState;
+const GameMode = game_mode.GameMode;
+const ModeType = game_mode.ModeType;
 
 pub fn main() !void {
     const screenWidth = 1280;
     const screenHeight = 720;
 
-    rl.initWindow(screenWidth, screenHeight, "Snow - GW1-Style 3D Tab Targeting");
+    rl.initWindow(screenWidth, screenHeight, "Snow - Snowball Warfare");
     defer rl.closeWindow();
 
     // Initialize outline shader
@@ -36,7 +39,7 @@ pub fn main() !void {
     const target_fps = if (monitor_refresh > 0) monitor_refresh else 60;
     rl.setTargetFPS(target_fps);
 
-    // Initialize allocator for terrain system
+    // Initialize allocator
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const deinit_status = gpa.deinit();
@@ -46,9 +49,9 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    const state = try GameState.initWithFactory(allocator);
-    var mutable_state = state;
-    defer mutable_state.deinit();
+    // Start with main menu
+    var current_mode = GameMode.init(allocator, .main_menu);
+    defer current_mode.deinit();
 
     // Track previous window size for resize detection
     var prev_width: i32 = screenWidth;
@@ -69,12 +72,20 @@ pub fn main() !void {
             prev_height = current_height;
         }
 
-        mutable_state.update();
+        // Update current mode
+        current_mode.update();
 
+        // Handle mode transitions
+        if (current_mode.getTargetMode()) |target| {
+            current_mode.deinit();
+            current_mode = GameMode.init(allocator, target);
+        }
+
+        // Render
         rl.beginDrawing();
         defer rl.endDrawing();
 
-        mutable_state.draw();
-        mutable_state.drawUI();
+        current_mode.draw();
+        current_mode.drawUI();
     }
 }
