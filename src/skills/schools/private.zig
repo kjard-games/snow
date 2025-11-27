@@ -328,6 +328,15 @@ const GOLDEN_PARACHUTE_EFFECT = effects.Effect{
 
 const golden_parachute_effects = [_]effects.Effect{GOLDEN_PARACHUTE_EFFECT};
 
+// Behavior: When would die, heal to 50% instead (one-shot)
+const GOLDEN_PARACHUTE_BEHAVIOR = types.Behavior{
+    .trigger = .on_would_die,
+    .response = .{ .heal_percent = .{ .percent = 0.5 } },
+    .condition = .always, // Trigger already checks "would die"
+    .max_activations = 1,
+    .duration_ms = 30000,
+};
+
 pub const skills = [_]Skill{
     // 1. Energy management - instant energy
     .{
@@ -655,11 +664,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 90000,
         .duration_ms = 30000,
         .is_ap = true,
-        .behavior = .{ .prevent_death = .{
-            .heal_to_percent = 0.5,
-            .invulnerable_ms = 3000,
-            .trigger_below_percent = 0.2,
-        } },
+        .behavior = &GOLDEN_PARACHUTE_BEHAVIOR,
         .effects = &golden_parachute_effects,
     },
 };

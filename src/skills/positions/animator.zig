@@ -221,6 +221,48 @@ const DEATH_NOVA_EFFECT = effects.Effect{
 
 const death_nova_effects = [_]effects.Effect{DEATH_NOVA_EFFECT};
 
+// ============================================================================
+// BEHAVIOR DEFINITIONS
+// ============================================================================
+
+// Snowman Minion summon behavior
+const SNOWMAN_MINION_BEHAVIOR = types.Behavior.summonCreature(.{
+    .summon_type = .snowman,
+    .count = 1,
+    .level = 5,
+    .duration_ms = 30000,
+    .damage_per_attack = 5.0,
+});
+
+// Grotesque Abomination summon behavior
+const GROTESQUE_ABOMINATION_BEHAVIOR = types.Behavior.summonCreature(.{
+    .summon_type = .abomination,
+    .count = 1,
+    .level = 15,
+    .duration_ms = 45000,
+    .damage_per_attack = 15.0,
+});
+
+// Suicide Snowman summon behavior
+const SUICIDE_SNOWMAN_BEHAVIOR = types.Behavior.summonCreature(.{
+    .summon_type = .suicide_snowman,
+    .count = 1,
+    .level = 1,
+    .duration_ms = 15000,
+    .damage_per_attack = 0.0,
+    .explode_damage = 25.0,
+    .explode_radius = 100.0,
+});
+
+// Army of Snow summon behavior (AP skill)
+const ARMY_OF_SNOW_BEHAVIOR = types.Behavior.summonCreature(.{
+    .summon_type = .snowman,
+    .count = 5,
+    .level = 5,
+    .duration_ms = 20000,
+    .damage_per_attack = 8.0,
+});
+
 pub const skills = [_]Skill{
     // 1. Basic summon - weak but cheap
     .{
@@ -235,13 +277,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         .duration_ms = 30000,
-        .behavior = .{ .summon = .{
-            .summon_type = .snowman,
-            .count = 1,
-            .level = 5,
-            .duration_ms = 30000,
-            .damage_per_attack = 5.0,
-        } },
+        .behavior = &SNOWMAN_MINION_BEHAVIOR,
     },
 
     // 2. Elite summon - powerful but expensive
@@ -257,13 +293,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 45000,
         .duration_ms = 45000,
-        .behavior = .{ .summon = .{
-            .summon_type = .abomination,
-            .count = 1,
-            .level = 15,
-            .duration_ms = 45000,
-            .damage_per_attack = 15.0,
-        } },
+        .behavior = &GROTESQUE_ABOMINATION_BEHAVIOR,
     },
 
     // 3. Exploding summon - dies and damages
@@ -279,15 +309,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 20000,
         .duration_ms = 15000,
-        .behavior = .{ .summon = .{
-            .summon_type = .suicide_snowman,
-            .count = 1,
-            .level = 1,
-            .duration_ms = 15000,
-            .damage_per_attack = 0.0,
-            .explode_damage = 25.0,
-            .explode_radius = 100.0,
-        } },
+        .behavior = &SUICIDE_SNOWMAN_BEHAVIOR,
     },
 
     // 4. Buff summons
@@ -514,13 +536,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 20000,
         .is_ap = true,
-        .behavior = .{ .summon = .{
-            .summon_type = .snowman,
-            .count = 5,
-            .level = 5,
-            .duration_ms = 20000,
-            .damage_per_attack = 8.0,
-        } },
+        .behavior = &ARMY_OF_SNOW_BEHAVIOR,
     },
 
     // AP 2: Plague of Frost - spreading DoT

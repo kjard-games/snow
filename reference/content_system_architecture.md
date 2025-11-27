@@ -181,6 +181,209 @@ To add a new **condition** (engine change):
 
 ---
 
+## Behaviors: Intercepting Game Flow
+
+While **Effects modify stats**, **Behaviors intercept and redirect game flow**. They're the action layer that complements the stat layer.
+
+### Philosophy
+
+```
+Effects:  "When X happens, modify stat Y by Z"
+Behaviors: "When X happens, DO something instead"
+```
+
+Examples:
+- **Effect**: "While active, +25% damage" (stat modification)
+- **Behavior**: "When you would die, heal to 50% instead" (flow interception)
+
+### The Four Dimensions of a Behavior
+
+| Dimension | Question | Type | Examples |
+|-----------|----------|------|----------|
+| **WHEN** | What triggers it? | `BehaviorTrigger` | on_would_die, on_take_damage, on_hit_by_projectile |
+| **WHAT** | What happens? | `BehaviorResponse` | prevent, redirect_to_self, heal_percent, summon |
+| **IF** | What condition gates it? | `EffectCondition` | (reuses effect conditions) |
+| **WHO** | Who is affected? | `EffectTarget` | (reuses effect targets) |
+
+### BehaviorTrigger - When Does It Activate?
+
+```zig
+pub const BehaviorTrigger = enum {
+    // Death/Damage Intercepts
+    on_would_die,              // Before death (prevent death skills)
+    on_take_damage,            // Before damage applied to self
+    on_ally_take_damage,       // When linked/nearby ally takes damage
+
+    // Projectile Intercepts
+    on_hit_by_projectile,      // Before projectile damage hits self
+    on_ally_hit_by_projectile, // Before projectile hits ally
+
+    // Targeting Intercepts
+    on_enemy_choose_target,    // When enemy AI/player selects target (taunt)
+
+    // Skill Intercepts
+    on_enemy_cast_nearby,      // When enemy begins casting near self
+    on_ally_cast,              // When ally casts any skill
+
+    // Resource Intercepts
+    on_would_spend_energy,     // Before energy is spent
+    on_gain_rhythm,            // Waldorf: when rhythm gained
+    on_gain_grit,              // Public: when grit gained
+
+    // Periodic/Passive
+    while_active,              // Continuous while behavior active (auras, summons)
+    on_skill_end,              // When skill duration expires
+};
+```
+
+### BehaviorResponse - What Happens?
+
+```zig
+pub const BehaviorResponse = union(enum) {
+    // Prevention
+    prevent,                   // Stop the triggering event entirely
+
+    // Redirection
+    redirect_to_self,          // Transfer effect to self (Guardian Angel)
+    redirect_to_source,        // Send it back (projectile return)
+    redirect_to_target: EffectTarget,
+
+    // Distribution
+    split_damage: struct {
+        among: EffectTarget,
+        split_type: SplitType,     // equal, proportional, absorb_remainder
+        share_percent: f32,
+    },
+
+    // Replacement
+    heal_percent: struct { percent: f32 },
+    grant_effect: *const Effect,
+    deal_damage: struct { amount: f32, to: EffectTarget },
+
+    // Forced Targeting
+    force_target_self,         // Taunt
+
+    // Summoning
+    summon: SummonParams,
+
+    // Chaining
+    chain: *const Behavior,    // Trigger another behavior after
+};
+```
+
+### The Behavior Struct
+
+```zig
+pub const Behavior = struct {
+    trigger: BehaviorTrigger,
+    response: BehaviorResponse,
+    condition: EffectCondition = .always,  // Reuses effect system
+    target: EffectTarget = .self,          // Reuses effect system
+    duration_ms: u32 = 0,                  // 0 = one-shot/instant
+    cooldown_ms: u32 = 0,
+    max_activations: u8 = 0,               // 0 = unlimited
+};
+```
+
+### Helper Constructors
+
+Common behavior patterns have predefined constructors:
+
+```zig
+// Taunt: Force enemies to target self
+const CHALLENGE_BEHAVIOR = Behavior.taunt(8000);
+
+// Prevent death: Heal to 50% instead of dying
+const GOLDEN_PARACHUTE_BEHAVIOR = Behavior.preventDeath(0.50, null);
+
+// Spirit Link: Share damage among linked allies
+const SPIRIT_LINK_BEHAVIOR = Behavior.spiritLink(15000, 1.0);
+
+// Guardian Angel: Redirect damage from ally to self
+const GUARDIAN_ANGEL_BEHAVIOR = Behavior.guardianAngel(10000, 1.0);
+
+// Catch and Return: Block projectile, deal damage back
+const CATCH_AND_RETURN_BEHAVIOR = Behavior.projectileReturn(20.0);
+
+// Summon: Create minions
+const SNOWMAN_MINION_BEHAVIOR = Behavior.summonCreature(.{
+    .summon_type = .snowman,
+    .count = 1,
+    .level = 5,
+    .duration_ms = 30000,
+    .damage_per_attack = 5.0,
+});
+```
+
+### Skills Reference Behaviors
+
+Skills reference behaviors via const pointers, just like effects:
+
+```zig
+// In skill file (e.g., shoveler.zig)
+const CHALLENGE_BEHAVIOR = types.Behavior.taunt(8000);
+
+pub const skills = [_]Skill{
+    .{
+        .name = "Challenge",
+        .description = "Stance. (8 seconds.) Nearby foes are forced to attack you.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 5,
+        .duration_ms = 8000,
+        .behavior = &CHALLENGE_BEHAVIOR,  // Pointer to const behavior
+    },
+};
+```
+
+### Current Behaviors in Codebase
+
+| Skill | Position/School | Behavior Type | Description |
+|-------|-----------------|---------------|-------------|
+| Challenge | Shoveler | `taunt` | Force nearby enemies to target you |
+| Guardian Angel | Shoveler | `guardianAngel` | Redirect ally damage to self |
+| Golden Parachute | Private School | `preventDeath` | Heal to 50% instead of dying |
+| Catch and Return | Fielder | `projectileReturn` | Block projectile, return damage |
+| Spirit Link | Thermos | `spiritLink` | Share damage among linked allies |
+| Snowman Minion | Animator | `summon` | Create snowman minion |
+| Grotesque Abomination | Animator | `summon` | Create powerful abomination |
+| Suicide Snowman | Animator | `summon` | Create exploding snowman |
+| Army of Snow | Animator (AP) | `summon` | Create 5 snowmen |
+
+### Adding New Trigger/Response Types
+
+**To add a new trigger** (engine change):
+1. Add to `BehaviorTrigger` enum
+2. Add interception point in combat/game systems
+3. Call behavior evaluation at that point
+
+**To add a new response** (engine change):
+1. Add to `BehaviorResponse` union
+2. Implement response handling in behavior evaluator
+3. Add helper constructor if common pattern
+
+**To create a new behavior** (content change):
+1. Define const `Behavior` with existing trigger + response
+2. Reference from skill via `behavior = &MY_BEHAVIOR`
+
+### Effects vs Behaviors: When to Use Which
+
+| Scenario | Use Effect | Use Behavior |
+|----------|------------|--------------|
+| +25% damage for 10s | ✓ | |
+| Block next attack | ✓ (snowball_shield cozy) | |
+| When you would die, heal instead | | ✓ |
+| Share damage among allies | | ✓ |
+| Force enemies to attack you | | ✓ |
+| Summon a creature | | ✓ |
+| Return projectile to sender | | ✓ |
+| +50% move speed while on ice | ✓ (conditional) | |
+| Interrupt enemy casting nearby | | ✓ |
+
+**Rule of thumb**: If it modifies a stat, use Effect. If it intercepts/redirects game flow, use Behavior.
+
+---
+
 ## Database Schema
 
 ```sql

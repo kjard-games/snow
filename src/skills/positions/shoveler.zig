@@ -246,6 +246,14 @@ const CHALLENGE_EFFECT = effects.Effect{
 
 const challenge_effects = [_]effects.Effect{CHALLENGE_EFFECT};
 
+// Behavior: Force nearby enemies to target self (taunt)
+const CHALLENGE_BEHAVIOR = types.Behavior{
+    .trigger = .on_enemy_choose_target,
+    .response = .force_target_self,
+    .target = .foes_in_earshot,
+    .duration_ms = 5000,
+};
+
 // Guardian Angel - redirect damage from ally to self
 // This skill uses behavior: .damage_redirect instead of modifiers - it's a whole mechanic
 const guardian_angel_mods = [_]effects.Modifier{.{
@@ -265,6 +273,14 @@ const GUARDIAN_ANGEL_EFFECT = effects.Effect{
 };
 
 const guardian_angel_effects = [_]effects.Effect{GUARDIAN_ANGEL_EFFECT};
+
+// Behavior: Redirect damage from linked ally to self
+const GUARDIAN_ANGEL_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_take_damage,
+    .response = .redirect_to_self,
+    .target = .target, // The ally you cast this on
+    .duration_ms = 15000,
+};
 
 pub const skills = [_]Skill{
     // 1. Armor stance - damage reduction
@@ -344,9 +360,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
-        .behavior = .{ .taunt = .{
-            .duration_ms = 5000,
-        } },
+        .behavior = &CHALLENGE_BEHAVIOR,
         .effects = &challenge_effects,
     },
 
@@ -580,11 +594,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .duration_ms = 15000,
         .is_ap = true,
-        .behavior = .{ .damage_redirect = .{
-            .redirect_percent = 1.0,
-            .to_caster = true,
-            .duration_ms = 15000,
-        } },
+        .behavior = &GUARDIAN_ANGEL_BEHAVIOR,
         .effects = &guardian_angel_effects,
     },
 

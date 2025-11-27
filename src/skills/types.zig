@@ -174,14 +174,54 @@ pub const TerrainEffect = struct {
 };
 
 // ============================================================================
-// SKILL BEHAVIORS - Complex mechanics that aren't stat modifiers
+// SKILL BEHAVIORS - Composable Trigger + Response System
 // ============================================================================
-// These are whole mechanics that require special handling in the combat system.
-// They are NOT composable modifiers - they're complete behaviors that need
-// dedicated implementation. A skill can have at most ONE behavior.
+// Behaviors intercept game events and respond with actions. They compose from:
+// - BehaviorTrigger: WHEN does this activate? (on_would_die, on_take_damage, etc.)
+// - BehaviorResponse: WHAT happens? (prevent, redirect, heal, summon, etc.)
+// - EffectCondition: IF what condition? (reuses existing condition system)
+// - EffectTarget: WHO is affected? (reuses existing targeting system)
 //
-// Philosophy: Effects modify stats. Behaviors change game flow.
+// Philosophy: Effects modify stats. Behaviors intercept and redirect game flow.
+//
+// Adding new trigger/response types requires code. Combining existing ones is data.
 
+/// When does this behavior activate?
+pub const BehaviorTrigger = enum {
+    // ========== Death/Damage Intercepts ==========
+    on_would_die, // Before death is applied (prevent death skills)
+    on_take_damage, // Before damage is applied to self
+    on_ally_take_damage, // When a nearby/linked ally takes damage
+
+    // ========== Projectile Intercepts ==========
+    on_hit_by_projectile, // Before projectile damage hits self
+    on_ally_hit_by_projectile, // Before projectile hits ally
+
+    // ========== Targeting Intercepts ==========
+    on_enemy_choose_target, // When enemy AI/player selects a target (taunt)
+
+    // ========== Skill Intercepts ==========
+    on_enemy_cast_nearby, // When enemy begins casting near self
+    on_ally_cast, // When ally casts any skill
+
+    // ========== Resource Intercepts ==========
+    on_would_spend_energy, // Before energy is spent
+    on_gain_rhythm, // Waldorf: when rhythm is gained
+    on_gain_grit, // Public: when grit is gained
+
+    // ========== Periodic/Passive ==========
+    while_active, // Continuous effect while behavior is active (auras)
+    on_skill_end, // When the skill's duration expires
+};
+
+/// How should damage be split among targets?
+pub const SplitType = enum {
+    equal, // Divide evenly among all targets
+    proportional_max_warmth, // Split based on max warmth ratios
+    absorb_remainder, // Primary target takes remainder after split
+};
+
+/// What type of summon to create?
 pub const SummonType = enum {
     snowman, // Basic snowman minion
     abomination, // Large tanky creature
@@ -189,64 +229,159 @@ pub const SummonType = enum {
     snow_fort, // Stationary turret-like summon
 };
 
+/// Parameters for summoning behaviors
 pub const SummonParams = struct {
     summon_type: SummonType,
-    count: u8 = 1, // How many to summon
-    level: u8 = 1, // Power/health scaling
-    duration_ms: u32 = 30000, // How long summon lasts
-    damage_per_attack: f32 = 5.0, // Base damage
-    explode_damage: f32 = 0.0, // If > 0, explodes on death for this damage
-    explode_radius: f32 = 0.0, // Explosion radius
+    count: u8 = 1,
+    level: u8 = 1,
+    duration_ms: u32 = 30000,
+    damage_per_attack: f32 = 5.0,
+    explode_damage: f32 = 0.0,
+    explode_radius: f32 = 0.0,
 };
 
-pub const LinkParams = struct {
-    max_targets: u8 = 5, // Max allies in the link
-    damage_share_percent: f32 = 1.0, // How much damage is shared (1.0 = 100%)
-    healing_share_percent: f32 = 0.0, // How much healing is shared
-    duration_ms: u32 = 15000,
-};
+/// What happens when the behavior triggers?
+pub const BehaviorResponse = union(enum) {
+    // ========== Prevention ==========
+    prevent, // Stop the triggering event entirely (block damage, prevent death)
 
-pub const RedirectParams = struct {
-    redirect_percent: f32 = 1.0, // How much damage to redirect (1.0 = 100%)
-    to_caster: bool = true, // Redirect TO caster (Guardian Angel) vs FROM caster
-    duration_ms: u32 = 15000,
-};
+    // ========== Redirection ==========
+    redirect_to_self, // Transfer the effect to self (Guardian Angel)
+    redirect_to_source, // Send it back to whoever caused it (projectile return)
+    redirect_to_target: effects.EffectTarget, // Redirect to specified target type
 
-pub const ProjectileReturnParams = struct {
-    return_damage: f32 = 20.0, // Damage when projectile is returned
-    block_count: u8 = 1, // How many projectiles to catch
-    duration_ms: u32 = 5000,
-};
+    // ========== Distribution ==========
+    split_damage: struct {
+        among: effects.EffectTarget, // Who to split among
+        split_type: SplitType = .equal,
+        share_percent: f32 = 1.0, // How much of the damage to share (1.0 = 100%)
+    },
 
-pub const PreventDeathParams = struct {
-    heal_to_percent: f32 = 0.5, // Heal to this % when triggered
-    invulnerable_ms: u32 = 3000, // Invulnerability duration after trigger
-    trigger_below_percent: f32 = 0.2, // Trigger when dropping below this %
-};
+    // ========== Replacement ==========
+    heal_percent: struct {
+        percent: f32, // Heal to this % of max warmth
+    },
+    grant_effect: *const effects.Effect, // Apply an effect instead
+    deal_damage: struct {
+        amount: f32,
+        to: effects.EffectTarget = .source_of_damage, // Default: damage whoever triggered this
+    },
 
-/// Complex skill behaviors that need dedicated combat system handling
-pub const SkillBehavior = union(enum) {
-    none: void, // No special behavior (default)
+    // ========== Forced Targeting ==========
+    force_target_self, // Make enemies target self (taunt)
 
-    // Summoning creatures
+    // ========== Summoning ==========
     summon: SummonParams,
 
-    // Damage/healing sharing between linked targets
-    spirit_link: LinkParams,
+    // ========== Chaining ==========
+    chain: *const Behavior, // Trigger another behavior after this one
+};
 
-    // Redirect damage between characters
-    damage_redirect: RedirectParams,
+/// A composable behavior: trigger + response + conditions
+pub const Behavior = struct {
+    /// What event triggers this behavior?
+    trigger: BehaviorTrigger,
 
-    // Catch and return projectiles
-    projectile_return: ProjectileReturnParams,
+    /// What happens when triggered?
+    response: BehaviorResponse,
 
-    // Prevent death and heal (Golden Parachute style)
-    prevent_death: PreventDeathParams,
+    /// Optional condition that must be true for behavior to activate
+    /// Reuses the existing EffectCondition system
+    condition: effects.EffectCondition = .always,
 
-    // Taunt - force target to attack caster
-    taunt: struct {
-        duration_ms: u32 = 5000,
-    },
+    /// Who does this behavior affect/monitor?
+    /// Reuses the existing EffectTarget system
+    target: effects.EffectTarget = .self,
+
+    /// How long does this behavior last? (0 = one-shot/instant)
+    duration_ms: u32 = 0,
+
+    /// Cooldown before behavior can trigger again (0 = no cooldown)
+    cooldown_ms: u32 = 0,
+
+    /// Max times this can activate (0 = unlimited)
+    max_activations: u8 = 0,
+
+    // ========================================================================
+    // PREDEFINED BEHAVIOR INSTANCES
+    // ========================================================================
+
+    /// Taunt: Forces nearby enemies to target self
+    pub fn taunt(duration_ms: u32) Behavior {
+        return .{
+            .trigger = .on_enemy_choose_target,
+            .response = .force_target_self,
+            .target = .foes_in_earshot,
+            .duration_ms = duration_ms,
+        };
+    }
+
+    /// Prevent Death: When you would die, heal to X% instead
+    pub fn preventDeath(heal_to_percent: f32, invuln_effect: ?*const effects.Effect) Behavior {
+        // If we have an invuln effect to grant, chain it
+        if (invuln_effect) |effect| {
+            return .{
+                .trigger = .on_would_die,
+                .response = .{ .chain = &Behavior{
+                    .trigger = .on_would_die,
+                    .response = .{ .grant_effect = effect },
+                    .max_activations = 1,
+                } },
+                .max_activations = 1,
+            };
+        }
+        return .{
+            .trigger = .on_would_die,
+            .response = .{ .heal_percent = .{ .percent = heal_to_percent } },
+            .max_activations = 1,
+        };
+    }
+
+    /// Spirit Link: Share damage among linked allies
+    pub fn spiritLink(duration_ms: u32, share_percent: f32) Behavior {
+        return .{
+            .trigger = .on_ally_take_damage,
+            .response = .{ .split_damage = .{
+                .among = .linked_allies,
+                .split_type = .equal,
+                .share_percent = share_percent,
+            } },
+            .target = .linked_allies,
+            .duration_ms = duration_ms,
+        };
+    }
+
+    /// Guardian Angel: Redirect damage from target ally to self
+    pub fn guardianAngel(duration_ms: u32, redirect_percent: f32) Behavior {
+        _ = redirect_percent; // TODO: Use this in split_damage
+        return .{
+            .trigger = .on_ally_take_damage,
+            .response = .redirect_to_self,
+            .target = .target, // The ally you cast this on
+            .duration_ms = duration_ms,
+        };
+    }
+
+    /// Catch and Return: Block next projectile and send it back
+    pub fn projectileReturn(return_damage: f32) Behavior {
+        return .{
+            .trigger = .on_hit_by_projectile,
+            .response = .{ .deal_damage = .{
+                .amount = return_damage,
+                .to = .source,
+            } },
+            .max_activations = 1,
+        };
+    }
+
+    /// Summon: Create minions
+    pub fn summonCreature(params: SummonParams) Behavior {
+        return .{
+            .trigger = .while_active, // Summons persist while active
+            .response = .{ .summon = params },
+            .duration_ms = params.duration_ms,
+        };
+    }
 };
 
 // An active chill (debuff) on a character
@@ -298,7 +433,8 @@ pub const Skill = struct {
 
     // Complex skill behavior (summons, links, redirects, etc.)
     // A skill can have at most ONE behavior. These need dedicated combat system handling.
-    behavior: SkillBehavior = .none,
+    // null = no special behavior (most skills)
+    behavior: ?*const Behavior = null,
 
     // Special properties
     unblockable: bool = false,

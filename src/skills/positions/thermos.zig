@@ -271,6 +271,13 @@ const SPIRIT_LINK_EFFECT = effects.Effect{
 
 const spirit_link_effects = [_]effects.Effect{SPIRIT_LINK_EFFECT};
 
+// ============================================================================
+// BEHAVIOR DEFINITIONS
+// ============================================================================
+
+// Spirit Link behavior - share damage among linked allies
+const SPIRIT_LINK_BEHAVIOR = types.Behavior.spiritLink(15000, 1.0);
+
 pub const skills = [_]Skill{
     // 1. Single target heal - primary healing tool
     .{
@@ -565,12 +572,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 50000,
         .duration_ms = 15000,
         .is_ap = true,
-        .behavior = .{ .spirit_link = .{
-            .max_targets = 5,
-            .damage_share_percent = 1.0,
-            .healing_share_percent = 0.0,
-            .duration_ms = 15000,
-        } },
+        .behavior = &SPIRIT_LINK_BEHAVIOR,
         .effects = &spirit_link_effects,
     },
 

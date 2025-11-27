@@ -182,6 +182,7 @@ pub const EffectTarget = enum {
     source_of_damage, // Reflect/revenge - whoever just hit you
     pet, // Your animal companion/summon
     all_summons, // All your summoned creatures
+    linked_allies, // Allies connected by a spirit link/bond
 
     pub fn isAoE(self: EffectTarget) bool {
         return switch (self) {

@@ -275,6 +275,17 @@ const CATCH_AND_RETURN_EFFECT = effects.Effect{
 
 const catch_and_return_effects = [_]effects.Effect{CATCH_AND_RETURN_EFFECT};
 
+// Behavior: Block projectile and return it for 20 damage
+const CATCH_AND_RETURN_BEHAVIOR = types.Behavior{
+    .trigger = .on_hit_by_projectile,
+    .response = .{ .deal_damage = .{
+        .amount = 20.0,
+        .to = .source_of_damage,
+    } },
+    .max_activations = 1,
+    .duration_ms = 5000,
+};
+
 // Grand Slam - +10 damage per foe hit
 const grand_slam_mods = [_]effects.Modifier{
     .{
@@ -484,11 +495,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 15000,
         .duration_ms = 5000,
-        .behavior = .{ .projectile_return = .{
-            .return_damage = 20.0,
-            .block_count = 1,
-            .duration_ms = 5000,
-        } },
+        .behavior = &CATCH_AND_RETURN_BEHAVIOR,
         .effects = &catch_and_return_effects,
     },
 
