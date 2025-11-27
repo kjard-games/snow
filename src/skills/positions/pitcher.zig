@@ -545,4 +545,92 @@ pub const skills = [_]Skill{
         .is_ap = true,
         .effects = &snipers_eye_effects,
     },
+
+    // ========================================================================
+    // PITCHER MESMER-ANALOG SKILLS - Domination/Punishment Focus
+    // ========================================================================
+    // These skills punish enemies for casting and reward interrupt timing.
+    // Pairs well with Waldorf for a "Domination Sniper" playstyle.
+
+    // 17. Punishing Shot analog - bonus damage + energy loss on interrupt
+    .{
+        .name = "Punishing Throw",
+        .description = "Throw. Deals 14 damage. Interrupts. If this interrupts, target loses 8 energy.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 8,
+        .damage = 14.0,
+        .cast_range = 260.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 10000,
+        .interrupts = true,
+        // TODO: Target loses 8 energy on successful interrupt
+    },
+
+    // 18. Distracting Shot analog - disables skill on interrupt
+    .{
+        .name = "Distracting Throw",
+        .description = "Throw. Deals 10 damage. Interrupts. If this interrupts, target's interrupted skill is disabled for 15 seconds.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 10,
+        .damage = 10.0,
+        .cast_range = 280.0,
+        .activation_time_ms = 250,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 15000,
+        .interrupts = true,
+        // TODO: Disable interrupted skill for 15s
+    },
+
+    // 19. Savage Shot analog - bonus damage if target moving
+    .{
+        .name = "Tracking Shot",
+        .description = "Throw. Deals 16 damage. Deals +12 damage if target is moving. Cannot be blocked.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 7,
+        .damage = 16.0,
+        .cast_range = 270.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 8000,
+        .unblockable = true,
+        // TODO: +12 damage if target moving (needs runtime check)
+    },
+
+    // 20. Concussion Shot analog - daze on interrupt
+    .{
+        .name = "Concussion Throw",
+        .description = "Throw. Deals 12 damage. Interrupts. If this interrupts, target is Dazed for 5 seconds.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 9,
+        .damage = 12.0,
+        .cast_range = 250.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000,
+        .interrupts = true,
+        // TODO: Apply Dazed on successful interrupt
+    },
+
+    // AP 5: Broad Head Arrow analog - daze on any hit while casting
+    .{
+        .name = "Silencing Strike",
+        .description = "[AP] Throw. Deals 20 damage. If target is casting, they are interrupted and Dazed for 8 seconds. Unblockable.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 15,
+        .damage = 20.0,
+        .cast_range = 280.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .interrupts = true,
+        .unblockable = true,
+        .is_ap = true,
+        // TODO: Apply 8s Dazed if target was casting
+    },
 };

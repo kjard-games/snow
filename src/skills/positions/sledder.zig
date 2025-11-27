@@ -197,6 +197,159 @@ const SLED_CRASH_SELF_EFFECT = effects.Effect{
 
 const sled_crash_effects = [_]effects.Effect{ SLED_CRASH_TARGET_EFFECT, SLED_CRASH_SELF_EFFECT };
 
+// ============================================================================
+// SLEDDER SKILLS 17-20 + AP 5 EFFECT DEFINITIONS
+// ============================================================================
+
+// Slipstream Strike - teleport behind target (marker effect, actual teleport in combat)
+const slipstream_strike_mods = [_]effects.Modifier{.{
+    .effect_type = .ignore_cover, // Teleport ignores cover/walls
+    .value = .{ .int = 1 },
+}};
+
+const SLIPSTREAM_STRIKE_EFFECT = effects.Effect{
+    .name = "Slipstream",
+    .description = "Teleport behind target before attacking",
+    .modifiers = &slipstream_strike_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const slipstream_strike_effects = [_]effects.Effect{SLIPSTREAM_STRIKE_EFFECT};
+
+// Cold Snap - remove cozy + conditional bonus damage
+const cold_snap_remove_mods = [_]effects.Modifier{.{
+    .effect_type = .remove_random_cozy,
+    .value = .{ .int = 1 },
+}};
+
+const COLD_SNAP_REMOVE_EFFECT = effects.Effect{
+    .name = "Cold Snap Strip",
+    .description = "Remove one Cozy from target",
+    .modifiers = &cold_snap_remove_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const cold_snap_bonus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 8.0 },
+}};
+
+const COLD_SNAP_BONUS_EFFECT = effects.Effect{
+    .name = "Cold Snap Bonus",
+    .description = "+8 damage if target had a Cozy",
+    .modifiers = &cold_snap_bonus_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_has_any_cozy, // Bonus if they had a cozy
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const cold_snap_effects = [_]effects.Effect{ COLD_SNAP_REMOVE_EFFECT, COLD_SNAP_BONUS_EFFECT };
+
+// Powder Dash - line dash damage + speed after
+const powder_dash_speed_mods = [_]effects.Modifier{.{
+    .effect_type = .move_speed_multiplier,
+    .value = .{ .float = 1.50 },
+}};
+
+const POWDER_DASH_SPEED_EFFECT = effects.Effect{
+    .name = "Powder Dash Speed",
+    .description = "+50% movement speed after dash",
+    .modifiers = &powder_dash_speed_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 3000,
+    .is_buff = true,
+};
+
+const powder_dash_hit_mods = [_]effects.Modifier{.{
+    .effect_type = .piercing,
+    .value = .{ .int = 1 }, // Hit all in line
+}};
+
+const POWDER_DASH_HIT_EFFECT = effects.Effect{
+    .name = "Powder Dash",
+    .description = "Hit all foes in dash path",
+    .modifiers = &powder_dash_hit_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const powder_dash_effects = [_]effects.Effect{ POWDER_DASH_HIT_EFFECT, POWDER_DASH_SPEED_EFFECT };
+
+// Knockback Kick - knockback + conditional knockdown if target has cozy
+const knockback_kick_kd_mods = [_]effects.Modifier{.{
+    .effect_type = .knockdown,
+    .value = .{ .int = 1 },
+}};
+
+const KNOCKBACK_KICK_KD_EFFECT = effects.Effect{
+    .name = "Knockback Kick Knockdown",
+    .description = "Knocked down for 2 seconds (if target had Cozy)",
+    .modifiers = &knockback_kick_kd_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_has_any_cozy, // Only KD if they have a cozy
+    .duration_ms = 2000,
+    .is_buff = false,
+};
+
+const knockback_kick_effects = [_]effects.Effect{KNOCKBACK_KICK_KD_EFFECT};
+
+// Whiteout Form - ultimate mobility + cozy strip on attack
+const whiteout_form_speed_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.50 },
+    },
+    .{
+        .effect_type = .immune_to_slow,
+        .value = .{ .int = 1 },
+    },
+};
+
+const WHITEOUT_FORM_SPEED_EFFECT = effects.Effect{
+    .name = "Whiteout Form",
+    .description = "+50% movement speed, immune to Slippery",
+    .modifiers = &whiteout_form_speed_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const whiteout_form_strip_mods = [_]effects.Modifier{.{
+    .effect_type = .remove_random_cozy,
+    .value = .{ .int = 1 },
+}};
+
+const WHITEOUT_FORM_STRIP_EFFECT = effects.Effect{
+    .name = "Whiteout Strip",
+    .description = "Remove 1 Cozy on hit",
+    .modifiers = &whiteout_form_strip_mods,
+    .timing = .on_deal_damage, // Triggers when caster deals damage
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 15000, // Lasts duration of form
+    .is_buff = false,
+};
+
+const whiteout_form_effects = [_]effects.Effect{ WHITEOUT_FORM_SPEED_EFFECT, WHITEOUT_FORM_STRIP_EFFECT };
+
 // Second Strike - bonus damage if target was recently hit
 const second_strike_mods = [_]effects.Modifier{.{
     .effect_type = .damage_add,
@@ -568,5 +721,88 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 30000,
         .is_ap = true,
         .effects = &sled_crash_effects,
+    },
+
+    // ========================================================================
+    // SLEDDER SKILLS 17-20 + AP 5 (Dervish Wind analog - Teleport attacks, enchantment strip)
+    // ========================================================================
+    // Theme: Wind-powered movement, teleport strikes, stripping enemy buffs
+
+    // 17. Slipstream Strike - teleport behind target (like Heart of Holy Flame)
+    .{
+        .name = "Slipstream Strike",
+        .description = "Throw. Deals 18 damage. Teleport behind target before attacking.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 8,
+        .damage = 18.0,
+        .cast_range = 150.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000,
+        .effects = &slipstream_strike_effects,
+    },
+
+    // 18. Cold Snap - remove enemy buff (like Rending Sweep)
+    .{
+        .name = "Cold Snap",
+        .description = "Throw. Deals 14 damage. Remove one Cozy from target. +8 damage if a Cozy was removed.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 6,
+        .damage = 14.0,
+        .cast_range = 120.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 8000,
+        .effects = &cold_snap_effects,
+    },
+
+    // 19. Powder Dash - AoE dash attack (like Whirling Charge)
+    .{
+        .name = "Powder Dash",
+        .description = "Trick. Dash forward, dealing 12 damage to all foes you pass through. Move 50% faster for 3 seconds after.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 8,
+        .damage = 12.0,
+        .cast_range = 150.0,
+        .aoe_type = .area,
+        .aoe_radius = 50.0,
+        .activation_time_ms = 250,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 15000,
+        .effects = &powder_dash_effects,
+    },
+
+    // 20. Knockback Kick - knockback attack (like Banishing Strike)
+    .{
+        .name = "Knockback Kick",
+        .description = "Throw. Deals 16 damage. Knock target back. If target has a Cozy, knock them down for 2 seconds.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 7,
+        .damage = 16.0,
+        .cast_range = 100.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 10000,
+        .effects = &knockback_kick_effects,
+    },
+
+    // AP 5: Whiteout Form - ultimate mobility form (like Avatar of Grenth)
+    .{
+        .name = "Whiteout Form",
+        .description = "[AP] Stance. (15 seconds.) +50% movement speed. Your attacks remove 1 Cozy from target. Immune to Slippery.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 15,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 60000,
+        .duration_ms = 15000,
+        .is_ap = true,
+        .effects = &whiteout_form_effects,
     },
 };

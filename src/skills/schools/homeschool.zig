@@ -582,4 +582,100 @@ pub const skills = [_]Skill{
         .is_ap = true,
         .effects = &lone_wolf_effects, // +60% damage, +40% armor, +50% energy regen when isolated
     },
+
+    // ========================================================================
+    // HOMESCHOOL MESMER-ANALOG SKILLS - Energy Denial/Inspiration Focus
+    // ========================================================================
+    // These skills drain, burn, and punish low energy states.
+    // Pairs well with Animator for a "Energy Denial Curser" playstyle.
+
+    // 17. Energy Burn - pure energy destruction
+    .{
+        .name = "Mind Numbing",
+        .description = "Trick. Sacrifice 8% Warmth. Target loses 15 energy (not stolen, just lost).",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 5,
+        .warmth_cost_percent = 0.08,
+        .min_warmth_percent = 0.12,
+        .damage = 5.0,
+        .cast_range = 200.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 15000,
+        // TODO: Target loses 15 energy (energy burn, not steal)
+    },
+
+    // 18. Punishment for low energy - bonus damage
+    .{
+        .name = "Empty Thoughts",
+        .description = "Trick. Sacrifice 5% Warmth. Deals 12 damage. Deals +20 damage if target is below 25% energy.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 6,
+        .warmth_cost_percent = 0.05,
+        .min_warmth_percent = 0.08,
+        .damage = 12.0,
+        .cast_range = 200.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000,
+        // TODO: +20 damage if target below 25% energy
+    },
+
+    // 19. Energy drain aura - nearby foes lose energy over time
+    .{
+        .name = "Aura of Exhaustion",
+        .description = "Stance. Sacrifice 15% Warmth. (15 seconds.) Nearby foes lose 2 energy per second.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 8,
+        .warmth_cost_percent = 0.15,
+        .min_warmth_percent = 0.20,
+        .target_type = .self,
+        .aoe_type = .area,
+        .aoe_radius = 150.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 30000,
+        .duration_ms = 15000,
+        // TODO: Nearby foes lose 2 energy/sec
+    },
+
+    // 20. Energy steal + skill disable combo
+    .{
+        .name = "Intellectual Theft",
+        .description = "Trick. Sacrifice 10% Warmth. Steal 12 energy from target. If this brings them below 10 energy, their next skill costs double.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 5,
+        .warmth_cost_percent = 0.10,
+        .min_warmth_percent = 0.15,
+        .damage = 8.0,
+        .cast_range = 200.0,
+        .activation_time_ms = 1500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 18000,
+        .grants_energy_on_hit = 12,
+        // TODO: Next skill costs double if brought below 10 energy
+    },
+
+    // AP 5: Energy Surge analog - AoE energy burn + damage
+    .{
+        .name = "Mental Collapse",
+        .description = "[AP] Trick. Sacrifice 20% Warmth. All foes in area lose 20 energy. Deals damage equal to energy lost.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 10,
+        .warmth_cost_percent = 0.20,
+        .min_warmth_percent = 0.25,
+        .cast_range = 220.0,
+        .aoe_type = .area,
+        .aoe_radius = 180.0,
+        .activation_time_ms = 2000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 40000,
+        .is_ap = true,
+        // TODO: AoE energy burn, damage = energy lost
+    },
 };

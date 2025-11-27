@@ -639,4 +639,96 @@ pub const skills = [_]Skill{
         .is_ap = true,
         .effects = &unstoppable_force_effects,
     },
+
+    // ========================================================================
+    // PUBLIC SCHOOL SKILLS 17-20 + AP 5 - Scrappy teamwork theme
+    // ========================================================================
+    // Theme: Playground tactics, team solidarity, fighting together
+
+    // 17. Pump Up - team damage buff
+    .{
+        .name = "Pump Up",
+        .description = "Call. All allies gain +15% damage for 10 seconds. You gain 3 Grit.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 8,
+        .target_type = .ally,
+        .aoe_type = .area,
+        .aoe_radius = 250.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 20000,
+        .duration_ms = 10000,
+        .cozies = &public_fire,
+        .grants_grit_on_cast = 3,
+    },
+
+    // 18. Bunker Down - defensive stance for team
+    .{
+        .name = "Bunker Down",
+        .description = "Call. Costs 4 Grit. All allies take 20% less damage for 8 seconds.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 6,
+        .grit_cost = 4,
+        .target_type = .ally,
+        .aoe_type = .area,
+        .aoe_radius = 200.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 25000,
+        .duration_ms = 8000,
+        .cozies = &public_bundled,
+    },
+
+    // 19. Team Spirit - grit generation when allies take damage
+    .{
+        .name = "Team Spirit",
+        .description = "Stance. (12 seconds.) Gain 1 Grit whenever any ally takes damage.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 5,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 25000,
+        .duration_ms = 12000,
+        // TODO: Grit on ally damage taken
+    },
+
+    // 20. Suppressing Throw - attack that also protects ally
+    .{
+        .name = "Suppressing Throw",
+        .description = "Throw. Deals 16 damage. Target ally gains +25% armor for 5 seconds.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 7,
+        .damage = 16.0,
+        .cast_range = 180.0,
+        .target_type = .enemy,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 10000,
+        // TODO: Secondary target ally gets armor buff
+    },
+
+    // AP 5: All Together Now - team grit explosion
+    .{
+        .name = "All Together Now",
+        .description = "[AP] Call. Spend all Grit (min 8). All allies gain +5% damage per Grit spent for 15 seconds. Enemies nearby take 3 damage per Grit spent.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 10,
+        .target_type = .ally,
+        .aoe_type = .area,
+        .aoe_radius = 300.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 45000,
+        .duration_ms = 15000,
+        .is_ap = true,
+        .requires_grit_stacks = 8,
+        .consumes_all_grit = true,
+        // TODO: Damage per grit to enemies, buff per grit to allies
+    },
 };

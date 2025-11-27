@@ -590,4 +590,90 @@ pub const skills = [_]Skill{
         .is_ap = true,
         .effects = &death_nova_effects,
     },
+
+    // ========================================================================
+    // ANIMATOR MESMER-ANALOG SKILLS - Illusion/Decoy Focus
+    // ========================================================================
+    // These skills create distractions, decoys, and punish enemies for attacking.
+    // Pairs well with Waldorf for an "Illusion Summoner" playstyle.
+
+    // 17. Simple decoy - absorbs one attack
+    .{
+        .name = "Snow Decoy",
+        .description = "Trick. Create a decoy snowman at target location. It does nothing but absorbs the next attack targeting you. Lasts 10 seconds.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 5,
+        .cast_range = 150.0,
+        .target_type = .ground,
+        .activation_time_ms = 500,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 12000,
+        .duration_ms = 10000,
+        // TODO: Decoy absorbs next attack targeting caster
+    },
+
+    // 18. Phantasm - damages attackers
+    .{
+        .name = "Vengeful Snowman",
+        .description = "Trick. Summon a phantasm snowman. When enemies attack it, they take 10 damage. Lasts 15 seconds or until destroyed.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 8,
+        .damage = 10.0,
+        .cast_range = 180.0,
+        .target_type = .ground,
+        .activation_time_ms = 1500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 18000,
+        .duration_ms = 15000,
+        // TODO: Summon that damages attackers
+    },
+
+    // 19. Mirror Image - split targeting chance
+    .{
+        .name = "Mirror Snowmen",
+        .description = "Trick. Create 2 illusory copies of yourself. For 12 seconds, attacks against you have 33% chance to hit a copy instead.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 10,
+        .target_type = .self,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .duration_ms = 12000,
+        // TODO: 33% chance attacks hit illusion instead
+    },
+
+    // 20. Distortion analog - brief invulnerability
+    .{
+        .name = "Snow Blur",
+        .description = "Stance. (3 seconds.) You cannot be targeted. Your summons take 50% less damage.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 10,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 30000,
+        .duration_ms = 3000,
+        // TODO: Untargetable + summon damage reduction
+    },
+
+    // AP 5: Ineptitude analog - punish attacks with blindness
+    .{
+        .name = "Confusing Swarm",
+        .description = "[AP] Trick. For 15 seconds, whenever target attacks, they are blinded for 3 seconds and take 15 damage. Create a decoy near them.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 15,
+        .damage = 15.0,
+        .cast_range = 200.0,
+        .activation_time_ms = 1500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 35000,
+        .duration_ms = 15000,
+        .is_ap = true,
+        // TODO: On target attack: blind 3s, 15 damage, create decoy
+    },
 };

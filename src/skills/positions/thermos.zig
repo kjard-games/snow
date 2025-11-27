@@ -278,6 +278,143 @@ const spirit_link_effects = [_]effects.Effect{SPIRIT_LINK_EFFECT};
 // Spirit Link behavior - share damage among linked allies
 const SPIRIT_LINK_BEHAVIOR = types.Behavior.spiritLink(15000, 1.0);
 
+// ============================================================================
+// THERMOS SKILLS 17-20 + AP 5 EFFECT DEFINITIONS
+// ============================================================================
+
+// Hot Hands - weapon spell that heals on hit
+const hot_hands_mods = [_]effects.Modifier{.{
+    .effect_type = .warmth_gain_per_second, // Marker - actual heal is on_deal_damage
+    .value = .{ .float = 0.0 },
+}};
+
+const HOT_HANDS_HEAL_EFFECT = effects.Effect{
+    .name = "Hot Hands Heal",
+    .description = "Heal 5 Warmth on hit",
+    .modifiers = &hot_hands_mods,
+    .timing = .on_deal_damage, // Trigger when ally deals damage
+    .affects = .self, // Ally heals self
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const hot_hands_effects = [_]effects.Effect{HOT_HANDS_HEAL_EFFECT};
+
+// Hot Hands behavior - heal ally on their hit
+const HOT_HANDS_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_cast, // When ally attacks
+    .response = .{ .heal_percent = .{ .percent = 0.0 } }, // Heal flat 5 (combat handles)
+    .target = .target, // The ally with hot hands
+    .duration_ms = 15000,
+};
+
+// Warmth Siphon - life steal on damage taken
+const warmth_siphon_steal_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_steal_on_hit, // Marker - actual life steal is in behavior
+    .value = .{ .float = 5.0 },
+}};
+
+const WARMTH_SIPHON_EFFECT = effects.Effect{
+    .name = "Warmth Siphon",
+    .description = "When hit, steal 5 Warmth from attacker",
+    .modifiers = &warmth_siphon_steal_mods,
+    .timing = .on_take_damage,
+    .affects = .source_of_damage, // Damage the attacker
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const warmth_siphon_effects = [_]effects.Effect{WARMTH_SIPHON_EFFECT};
+
+// Warmth Siphon behavior - damage attacker and heal ally when ally takes damage
+const WARMTH_SIPHON_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_take_damage,
+    .response = .{
+        .deal_damage = .{
+            .amount = 5.0, // Damage the attacker
+            .to = .source_of_damage,
+        },
+    },
+    .target = .target, // The ally with siphon
+    .duration_ms = 10000,
+};
+
+// Steam Cloud - AoE HoT
+const steam_cloud_mods = [_]effects.Modifier{.{
+    .effect_type = .warmth_gain_per_second,
+    .value = .{ .float = 4.0 }, // 4 Warmth per second
+}};
+
+const STEAM_CLOUD_EFFECT = effects.Effect{
+    .name = "Steam Cloud",
+    .description = "Heal 4 Warmth per second",
+    .modifiers = &steam_cloud_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const steam_cloud_effects = [_]effects.Effect{STEAM_CLOUD_EFFECT};
+
+// Battery Pack - gain energy when ally takes damage
+const battery_pack_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_on_hit, // Marker - actual energy gain is in behavior
+    .value = .{ .float = 1.0 },
+}};
+
+const BATTERY_PACK_EFFECT = effects.Effect{
+    .name = "Battery Pack",
+    .description = "Gain 1 energy when linked ally takes damage",
+    .modifiers = &battery_pack_mods,
+    .timing = .on_take_damage, // When ally takes damage
+    .affects = .self, // Caster gains energy
+    .condition = .always,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+const battery_pack_effects = [_]effects.Effect{BATTERY_PACK_EFFECT};
+
+// Battery Pack behavior - caster gains energy when ally takes damage
+const BATTERY_PACK_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_take_damage,
+    .response = .{ .grant_effect = &BATTERY_PACK_EFFECT },
+    .target = .target, // The ally being watched
+    .duration_ms = 20000,
+};
+
+// Cocoa Fountain - summon healing spirit
+const cocoa_fountain_heal_mods = [_]effects.Modifier{.{
+    .effect_type = .warmth_gain_per_second,
+    .value = .{ .float = 3.0 }, // 6 every 2 seconds = 3/sec
+}};
+
+const COCOA_FOUNTAIN_EFFECT = effects.Effect{
+    .name = "Cocoa Fountain",
+    .description = "Heal 6 Warmth every 2 seconds",
+    .modifiers = &cocoa_fountain_heal_mods,
+    .timing = .while_active,
+    .affects = .allies_near_target, // Allies near the spirit
+    .condition = .always,
+    .duration_ms = 25000,
+    .is_buff = true,
+};
+
+const cocoa_fountain_effects = [_]effects.Effect{COCOA_FOUNTAIN_EFFECT};
+
+// Cocoa Fountain behavior - summon healing spirit
+const COCOA_FOUNTAIN_BEHAVIOR = types.Behavior.summonCreature(.{
+    .summon_type = .snow_fort, // Use snow_fort as spirit stand-in
+    .count = 1,
+    .level = 1,
+    .duration_ms = 25000,
+    .damage_per_attack = 0.0, // Spirit doesn't attack
+});
+
 pub const skills = [_]Skill{
     // 1. Single target heal - primary healing tool
     .{
@@ -611,5 +748,99 @@ pub const skills = [_]Skill{
         .duration_ms = 15000,
         .is_ap = true,
         .effects = &martyr_effects,
+    },
+
+    // ========================================================================
+    // THERMOS SKILLS 17-20 + AP 5 (Ritualist Restoration analog - Weapon spells, life steal)
+    // ========================================================================
+    // Theme: Weapon enchantments, life stealing redirects, binding spirits
+
+    // 17. Hot Hands - weapon spell that heals on hit (like Weapon of Warding)
+    .{
+        .name = "Hot Hands",
+        .description = "Gesture. Target ally's attacks heal them for 5 Warmth for 15 seconds.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 8,
+        .target_type = .ally,
+        .cast_range = 180.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 20000,
+        .duration_ms = 15000,
+        .behavior = &HOT_HANDS_BEHAVIOR,
+        .effects = &hot_hands_effects,
+    },
+
+    // 18. Warmth Siphon - steal health from attacker (like Vampiric Spirit)
+    .{
+        .name = "Warmth Siphon",
+        .description = "Gesture. For 10 seconds, when target ally takes damage, the attacker loses 5 Warmth and ally heals 5.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 8,
+        .target_type = .ally,
+        .cast_range = 180.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 18000,
+        .duration_ms = 10000,
+        .behavior = &WARMTH_SIPHON_BEHAVIOR,
+        .effects = &warmth_siphon_effects,
+    },
+
+    // 19. Steam Cloud - AoE HoT (like Recovery)
+    .{
+        .name = "Steam Cloud",
+        .description = "Call. All allies heal 4 Warmth per second for 8 seconds.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 10,
+        .target_type = .ally,
+        .aoe_type = .area,
+        .aoe_radius = 250.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 25000,
+        .duration_ms = 8000,
+        .effects = &steam_cloud_effects,
+    },
+
+    // 20. Battery Pack - gain energy when ally takes damage (like Essence Bond)
+    .{
+        .name = "Battery Pack",
+        .description = "Gesture. For 20 seconds, gain 1 energy whenever target ally takes damage.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 5,
+        .target_type = .ally,
+        .cast_range = 200.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .duration_ms = 20000,
+        .behavior = &BATTERY_PACK_BEHAVIOR,
+        .effects = &battery_pack_effects,
+    },
+
+    // AP 5: Cocoa Fountain - summon healing spirit (like Ritual Lord + Recovery)
+    .{
+        .name = "Cocoa Fountain",
+        .description = "[AP] Trick. Create a Cocoa Spirit at target location for 25 seconds. Spirit heals all allies within 150 range for 6 Warmth every 2 seconds.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 18,
+        .target_type = .ground,
+        .cast_range = 200.0,
+        .aoe_type = .area,
+        .aoe_radius = 150.0,
+        .activation_time_ms = 2000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 60000,
+        .duration_ms = 25000,
+        .terrain_effect = types.TerrainEffect.healingSlush(.circle),
+        .is_ap = true,
+        .behavior = &COCOA_FOUNTAIN_BEHAVIOR,
+        .effects = &cocoa_fountain_effects,
     },
 };

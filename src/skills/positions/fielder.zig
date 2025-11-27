@@ -311,6 +311,129 @@ const GRAND_SLAM_EFFECT = effects.Effect{
 
 const grand_slam_effects = [_]effects.Effect{GRAND_SLAM_EFFECT};
 
+// ============================================================================
+// FIELDER SKILLS 17-20 + AP 5 EFFECT DEFINITIONS
+// ============================================================================
+
+// First Throw - self next attack bonus, then ally bonus if it hits
+const first_throw_self_mods = [_]effects.Modifier{.{
+    .effect_type = .next_attack_damage_add,
+    .value = .{ .float = 15.0 },
+}};
+
+const FIRST_THROW_SELF_EFFECT = effects.Effect{
+    .name = "First Throw",
+    .description = "Your next attack deals +15 damage",
+    .modifiers = &first_throw_self_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 8000, // 8 seconds to use it
+    .is_buff = true,
+};
+
+const first_throw_ally_mods = [_]effects.Modifier{.{
+    .effect_type = .next_attack_damage_add,
+    .value = .{ .float = 10.0 },
+}};
+
+const FIRST_THROW_ALLY_EFFECT = effects.Effect{
+    .name = "First Throw Boost",
+    .description = "Your next attack deals +10 damage",
+    .modifiers = &first_throw_ally_mods,
+    .timing = .on_hit, // Triggered when First Throw hits
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const first_throw_effects = [_]effects.Effect{ FIRST_THROW_SELF_EFFECT, FIRST_THROW_ALLY_EFFECT };
+
+// Tag Team - ally follow-up attack trigger
+// This uses a behavior to trigger ally attack
+const TAG_TEAM_BEHAVIOR = types.Behavior{
+    .trigger = .on_hit_by_projectile, // Piggyback on hit detection
+    .response = .{
+        .deal_damage = .{
+            .amount = 10.0,
+            .to = .target, // Same target as caster
+        },
+    },
+    .target = .allies_near_target, // Nearby ally attacks
+    .duration_ms = 0, // Instant
+    .max_activations = 1,
+};
+
+// Huddle Up - aura buff for allies
+const huddle_up_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.10 }, // +10% damage
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.10 }, // +10% speed
+    },
+};
+
+const HUDDLE_UP_EFFECT = effects.Effect{
+    .name = "Huddle Up",
+    .description = "Allies deal +10% damage and move 10% faster",
+    .modifiers = &huddle_up_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const huddle_up_effects = [_]effects.Effect{HUDDLE_UP_EFFECT};
+
+// Got Your Back - bonus damage + interrupt if target attacking ally
+const got_your_back_bonus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 8.0 },
+}};
+
+const GOT_YOUR_BACK_BONUS_EFFECT = effects.Effect{
+    .name = "Got Your Back",
+    .description = "+8 damage if target is attacking an ally",
+    .modifiers = &got_your_back_bonus_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_attacking, // Attacking (presumably an ally)
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const got_your_back_effects = [_]effects.Effect{GOT_YOUR_BACK_BONUS_EFFECT};
+
+// Final Huddle - ultimate party buff
+const final_huddle_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.25 }, // +25% damage
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.25 }, // +25% speed
+    },
+};
+
+const FINAL_HUDDLE_EFFECT = effects.Effect{
+    .name = "Final Huddle",
+    .description = "+25% damage and +25% speed",
+    .modifiers = &final_huddle_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const final_huddle_effects = [_]effects.Effect{FINAL_HUDDLE_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Versatile throw - good at everything
     .{
@@ -630,5 +753,94 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 40000,
         .is_ap = true,
         .effects = &grand_slam_effects,
+    },
+
+    // ========================================================================
+    // FIELDER SKILLS 17-20 + AP 5 (Paragon Leadership analog - Commands, Echoes)
+    // ========================================================================
+    // Theme: Leadership, coordination, command skills, team synergy
+
+    // 17. First Throw - bonus when leading attack (like "Go for the Eyes!")
+    .{
+        .name = "First Throw",
+        .description = "Call. Your next attack deals +15 damage. If it hits, nearby allies' next attacks deal +10 damage.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 6,
+        .target_type = .self,
+        .aoe_type = .area,
+        .aoe_radius = 200.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 12000,
+        .duration_ms = 8000,
+        .effects = &first_throw_effects,
+    },
+
+    // 18. Tag Team - attack that buffs ally attack (like "Anthem of Flame")
+    .{
+        .name = "Tag Team",
+        .description = "Throw. Deals 14 damage. Target ally within 150 range attacks the same target for 10 damage.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 8,
+        .damage = 14.0,
+        .cast_range = 180.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 10000,
+        .behavior = &TAG_TEAM_BEHAVIOR,
+    },
+
+    // 19. Huddle Up - passive aura buff (like "Aggressive Refrain")
+    .{
+        .name = "Huddle Up",
+        .description = "Stance. (15 seconds.) Allies within range deal +10% damage and move 10% faster.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 8,
+        .target_type = .self,
+        .aoe_type = .area,
+        .aoe_radius = 200.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 25000,
+        .duration_ms = 15000,
+        .effects = &huddle_up_effects,
+    },
+
+    // 20. Got Your Back - help ally with fast attack (like "Soldier's Fury")
+    .{
+        .name = "Got Your Back",
+        .description = "Throw. Deals 12 damage. If target is attacking an ally, deal +8 damage and interrupt.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 5,
+        .damage = 12.0,
+        .cast_range = 180.0,
+        .activation_time_ms = 250,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 6000,
+        .interrupts = true,
+        .effects = &got_your_back_effects,
+    },
+
+    // AP 5: Final Huddle - ultimate leadership buff (like "Incoming!")
+    .{
+        .name = "Final Huddle",
+        .description = "[AP] Call. All allies heal 25 Warmth, gain +25% damage, and move 25% faster for 12 seconds.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 15,
+        .healing = 25.0,
+        .target_type = .ally,
+        .aoe_type = .area,
+        .aoe_radius = 300.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 50000,
+        .duration_ms = 12000,
+        .is_ap = true,
+        .effects = &final_huddle_effects,
     },
 };

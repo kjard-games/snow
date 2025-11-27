@@ -14,8 +14,8 @@
     {
       "entity_id": 14,
       "name": "Character",
-      "school": "private_school",
-      "position": "fielder",
+      "school": "montessori",
+      "position": "animator",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -55,7 +55,7 @@
     {
       "entity_id": 15,
       "name": "Character",
-      "school": "montessori",
+      "school": "private_school",
       "position": "pitcher",
       "team": 0,
       "damage_dealt": 0,
@@ -96,8 +96,8 @@
     {
       "entity_id": 16,
       "name": "Character",
-      "school": "homeschool",
-      "position": "sledder",
+      "school": "private_school",
+      "position": "shoveler",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -137,8 +137,8 @@
     {
       "entity_id": 17,
       "name": "Character",
-      "school": "montessori",
-      "position": "animator",
+      "school": "public_school",
+      "position": "pitcher",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -178,8 +178,8 @@
     {
       "entity_id": 18,
       "name": "Character",
-      "school": "homeschool",
-      "position": "pitcher",
+      "school": "waldorf",
+      "position": "fielder",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -219,7 +219,7 @@
     {
       "entity_id": 19,
       "name": "Character",
-      "school": "private_school",
+      "school": "montessori",
       "position": "shoveler",
       "team": 1,
       "damage_dealt": 0,
@@ -260,7 +260,7 @@
     {
       "entity_id": 20,
       "name": "Character",
-      "school": "waldorf",
+      "school": "homeschool",
       "position": "pitcher",
       "team": 1,
       "damage_dealt": 0,
@@ -301,8 +301,8 @@
     {
       "entity_id": 21,
       "name": "Character",
-      "school": "homeschool",
-      "position": "sledder",
+      "school": "public_school",
+      "position": "pitcher",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,

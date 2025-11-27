@@ -667,4 +667,85 @@ pub const skills = [_]Skill{
         .behavior = &GOLDEN_PARACHUTE_BEHAVIOR,
         .effects = &golden_parachute_effects,
     },
+
+    // ========================================================================
+    // PRIVATE SCHOOL SKILLS 17-20 + AP 5 - Privilege/Sneaky theme
+    // ========================================================================
+    // Theme: Surprise attacks, backdoor deals, exploiting advantages
+
+    // 17. Back Door Deal - teleport attack
+    .{
+        .name = "Back Door Deal",
+        .description = "Trick. Teleport to target foe. Your next attack within 3 seconds deals +15 damage.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 8,
+        .cast_range = 200.0,
+        .activation_time_ms = 250,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 20000,
+        // TODO: Teleport to target + next attack bonus
+    },
+
+    // 18. Backstab Bonus - attack from behind
+    .{
+        .name = "Backstab Bonus",
+        .description = "Throw. Deals 18 damage. If you are behind target, deals +12 damage and steals 5 energy.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 7,
+        .damage = 18.0,
+        .cast_range = 150.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 10000,
+        // TODO: Behind-target conditional bonus
+    },
+
+    // 19. Short Sell - debuff that increases damage taken
+    .{
+        .name = "Short Sell",
+        .description = "Trick. Target takes +20% damage from all sources for 8 seconds.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 8,
+        .cast_range = 200.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .duration_ms = 8000,
+        // TODO: Vulnerability debuff on target
+    },
+
+    // 20. Lucky Break - fast attack with crit chance
+    .{
+        .name = "Lucky Break",
+        .description = "Throw. Deals 14 damage. 30% chance to deal double damage and refund energy cost.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 5,
+        .damage = 14.0,
+        .cast_range = 180.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 4000,
+        // TODO: Critical chance mechanic
+    },
+
+    // AP 5: Hostile Acquisition - massive burst with reset on kill
+    .{
+        .name = "Hostile Acquisition",
+        .description = "[AP] Trick. Credit: 25 energy. Mark target for 10 seconds. If target dies while marked, reset all skill cooldowns and gain 30 energy.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 15,
+        .credit_cost = 25,
+        .cast_range = 200.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 60000,
+        .duration_ms = 10000,
+        .is_ap = true,
+        // TODO: Mark + reset on kill behavior
+    },
 };

@@ -282,6 +282,142 @@ const GUARDIAN_ANGEL_BEHAVIOR = types.Behavior{
     .duration_ms = 15000,
 };
 
+// ============================================================================
+// SHOVELER SKILLS 17-20 + AP 5 EFFECT DEFINITIONS
+// ============================================================================
+
+// Snow Blanket - damage cap at 20 per hit
+// Uses behavior to intercept damage and cap it
+const SNOW_BLANKET_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_take_damage,
+    .response = .prevent, // Prevent excess damage (combat system checks cap)
+    .target = .target, // The ally you cast on
+    .duration_ms = 10000,
+};
+
+const snow_blanket_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_add, // Marker effect - actual cap is in behavior
+    .value = .{ .float = 0.0 },
+}};
+
+const SNOW_BLANKET_EFFECT = effects.Effect{
+    .name = "Snow Blanket",
+    .description = "Cannot lose more than 20 Warmth per attack",
+    .modifiers = &snow_blanket_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const snow_blanket_effects = [_]effects.Effect{SNOW_BLANKET_EFFECT};
+
+// Frostbite Feedback - heal when taking 15+ damage
+// Uses behavior to trigger heal on big hit
+const FROSTBITE_FEEDBACK_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_take_damage,
+    .response = .{ .heal_percent = .{ .percent = 0.0 } }, // Will heal flat 20 (combat checks threshold)
+    .target = .target,
+    .duration_ms = 10000,
+};
+
+const frostbite_feedback_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_add, // Marker effect - actual heal is in behavior
+    .value = .{ .float = 0.0 },
+}};
+
+const FROSTBITE_FEEDBACK_EFFECT = effects.Effect{
+    .name = "Frostbite Feedback",
+    .description = "Heal 20 Warmth when taking 15+ damage",
+    .modifiers = &frostbite_feedback_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const frostbite_feedback_effects = [_]effects.Effect{FROSTBITE_FEEDBACK_EFFECT};
+
+// Snowback - block next attack and heal for blocked damage
+const SNOWBACK_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_hit_by_projectile,
+    .response = .prevent, // Block the attack
+    .target = .target,
+    .duration_ms = 10000,
+    .max_activations = 1, // Block exactly one attack
+};
+
+const snowback_mods = [_]effects.Modifier{.{
+    .effect_type = .block_next_attack,
+    .value = .{ .float = 1.0 },
+}};
+
+const SNOWBACK_EFFECT = effects.Effect{
+    .name = "Snowback",
+    .description = "Block next attack. Heal for blocked damage.",
+    .modifiers = &snowback_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const snowback_effects = [_]effects.Effect{SNOWBACK_EFFECT};
+
+// Soak Wall - wall with HP that absorbs damage for allies behind
+const soak_wall_ally_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_multiplier,
+    .value = .{ .float = 2.0 }, // 50% less damage = 2x armor
+}};
+
+const SOAK_WALL_EFFECT = effects.Effect{
+    .name = "Behind Soak Wall",
+    .description = "Take 50% less damage while behind the wall",
+    .modifiers = &soak_wall_ally_mods,
+    .timing = .while_active,
+    .affects = .allies_near_target, // Allies near the wall
+    .condition = .if_behind_wall,
+    .duration_ms = 20000, // Wall duration
+    .is_buff = true,
+};
+
+const soak_wall_effects = [_]effects.Effect{SOAK_WALL_EFFECT};
+
+// Igloo Effect - party-wide damage reduction, energy cost per hit
+const igloo_effect_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_multiplier,
+    .value = .{ .float = 1.67 }, // 40% less damage = 1/0.6
+}};
+
+const IGLOO_EFFECT = effects.Effect{
+    .name = "Igloo Effect",
+    .description = "Take 40% less damage. Caster loses 5 energy per hit.",
+    .modifiers = &igloo_effect_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const igloo_effect_effects = [_]effects.Effect{IGLOO_EFFECT};
+
+// Igloo Effect behavior - drain caster energy on ally damage
+const IGLOO_EFFECT_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_take_damage,
+    .response = .{
+        .deal_damage = .{
+            .amount = 0.0, // No damage, but will trigger energy drain
+            .to = .self,
+        },
+    },
+    .target = .allies_in_earshot,
+    .duration_ms = 15000,
+};
+
 pub const skills = [_]Skill{
     // 1. Armor stance - damage reduction
     .{
@@ -615,5 +751,99 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 50000,
         .is_ap = true,
         .effects = &earthquake_effects,
+    },
+
+    // ========================================================================
+    // SHOVELER SKILLS 17-20 + AP 5 (Monk Protection analog - Pre-prot, Spirit Bond)
+    // ========================================================================
+    // Theme: Damage prevention, protective spirits, pre-emptive defense
+
+    // 17. Snow Blanket - damage cap (like Protective Spirit)
+    .{
+        .name = "Snow Blanket",
+        .description = "Gesture. Target ally cannot lose more than 20 Warmth from a single attack for 10 seconds.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 8,
+        .target_type = .ally,
+        .cast_range = 180.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 20000,
+        .duration_ms = 10000,
+        .behavior = &SNOW_BLANKET_BEHAVIOR,
+        .effects = &snow_blanket_effects,
+    },
+
+    // 18. Frostbite Feedback - heal when taking big hit (like Spirit Bond)
+    .{
+        .name = "Frostbite Feedback",
+        .description = "Gesture. For 10 seconds, whenever target ally takes 15+ damage, they heal 20 Warmth.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 7,
+        .target_type = .ally,
+        .cast_range = 180.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 15000,
+        .duration_ms = 10000,
+        .behavior = &FROSTBITE_FEEDBACK_BEHAVIOR,
+        .effects = &frostbite_feedback_effects,
+    },
+
+    // 19. Snowback - heal equal to damage prevented (like RoF)
+    .{
+        .name = "Snowback",
+        .description = "Gesture. Target ally blocks the next attack. Heal them for the damage that would have been dealt.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 6,
+        .target_type = .ally,
+        .cast_range = 180.0,
+        .activation_time_ms = 250,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 4000,
+        .behavior = &SNOWBACK_BEHAVIOR,
+        .effects = &snowback_effects,
+    },
+
+    // 20. Soak Wall - damage reduction bubble (like Shield of Absorption)
+    .{
+        .name = "Soak Wall",
+        .description = "Stance. Build a wall that absorbs 100 damage before breaking. Allies behind take 50% less damage.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 10,
+        .target_type = .ground,
+        .cast_range = 150.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .creates_wall = true,
+        .wall_length = 80.0,
+        .wall_height = 35.0,
+        .wall_thickness = 20.0,
+        .wall_distance_from_caster = 40.0,
+        .effects = &soak_wall_effects,
+    },
+
+    // AP 5: Igloo Effect - party-wide damage prevention (like Shelter)
+    .{
+        .name = "Igloo Effect",
+        .description = "[AP] Call. For 15 seconds, all allies take 40% less damage. Each time an ally would take damage, lose 5 energy instead.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 15,
+        .target_type = .ally,
+        .aoe_type = .area,
+        .aoe_radius = 250.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 60000,
+        .duration_ms = 15000,
+        .is_ap = true,
+        .behavior = &IGLOO_EFFECT_BEHAVIOR,
+        .effects = &igloo_effect_effects,
     },
 };

@@ -642,4 +642,95 @@ pub const skills = [_]Skill{
         .damage_per_rhythm_consumed = 10.0,
         .is_ap = true,
     },
+
+    // ========================================================================
+    // WALDORF MESMER-ANALOG SKILLS - Interrupt/Punishment Focus
+    // ========================================================================
+    // These skills reward timing and punish enemies for casting.
+    // Pairs well with Pitcher for a "Domination Mesmer" playstyle.
+
+    // 17. Punishment on interrupt - deals bonus damage if target was casting
+    .{
+        .name = "Mistimed",
+        .description = "Throw. Deals 12 damage. Deals +18 damage if target was casting.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 6,
+        .damage = 12.0,
+        .cast_range = 200.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 8000,
+        .interrupts = true,
+        .grants_rhythm_on_cast = 1,
+        // TODO: +18 damage if target was casting (needs runtime check)
+    },
+
+    // 18. Cry of Frustration analog - AoE damage when you interrupt
+    .{
+        .name = "Off Beat",
+        .description = "Trick. Interrupts target. If this interrupts a skill, deals 15 damage to target and adjacent foes.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 8,
+        .damage = 15.0,
+        .cast_range = 220.0,
+        .aoe_type = .adjacent,
+        .activation_time_ms = 250,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 12000,
+        .interrupts = true,
+        .grants_rhythm_on_cast = 2,
+    },
+
+    // 19. Mantra-style prepared counter - instant interrupt with charges
+    .{
+        .name = "Ready Response",
+        .description = "Stance. (15 seconds.) Your next 2 Throws are instant and interrupt. Gain 1 Rhythm per interrupt.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 10,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 25000,
+        .duration_ms = 15000,
+        .grants_rhythm_on_cast = 1,
+        // TODO: Next 2 throws instant + interrupt (needs runtime tracking)
+    },
+
+    // 20. Diversion analog - disable skills on interrupt
+    .{
+        .name = "Stage Fright",
+        .description = "Trick. Interrupts target. If this interrupts, target's interrupted skill is disabled for 10 seconds.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 10,
+        .damage = 8.0,
+        .cast_range = 200.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 20000,
+        .interrupts = true,
+        .grants_rhythm_on_cast = 2,
+        // TODO: Disable interrupted skill for 10s (needs runtime implementation)
+    },
+
+    // AP 5: Power Block analog - massive interrupt punishment
+    .{
+        .name = "Dramatic Pause",
+        .description = "[AP] Trick. Interrupts target. If this interrupts, ALL of target's skills of that type are disabled for 8 seconds. Gain 3 Rhythm.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 15,
+        .damage = 10.0,
+        .cast_range = 220.0,
+        .activation_time_ms = 250,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 30000,
+        .interrupts = true,
+        .grants_rhythm_on_cast = 3,
+        .is_ap = true,
+        // TODO: Disable all skills of interrupted type for 8s
+    },
 };

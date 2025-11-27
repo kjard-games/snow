@@ -750,4 +750,89 @@ pub const skills = [_]Skill{
         .is_ap = true,
         .effects = &prepared_environment_effects,
     },
+
+    // ========================================================================
+    // MONTESSORI SKILLS 17-20 + AP 5 - Outdoor/Survival theme
+    // ========================================================================
+    // Theme: Nature walks, terrain adaptation, foraging, outdoor learning
+
+    // 17. Snack Break - terrain-based healing
+    .{
+        .name = "Snack Break",
+        .description = "Gesture. Heal 30 Warmth. If standing on natural terrain, heal 15 more.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 5,
+        .healing = 30.0,
+        .target_type = .self,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000,
+        // TODO: +15 healing bonus on natural terrain
+    },
+
+    // 18. Snow Angel - evasion based on terrain
+    .{
+        .name = "Snow Angel",
+        .description = "Stance. (10 seconds.) Gain 25% evasion. +25% more evasion while in deep snow.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 5,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 15000,
+        .duration_ms = 10000,
+        .cozies = &montessori_sure,
+        // TODO: Terrain-conditional evasion bonus
+    },
+
+    // 19. Nature Walk - energy from environment
+    .{
+        .name = "Nature Walk",
+        .description = "Stance. (15 seconds.) Gain 1 energy every 2 seconds. Gain 1 Variety when using different skill types.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 4,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 20000,
+        .duration_ms = 15000,
+        // TODO: Energy tick + Variety on skill type change
+    },
+
+    // 20. Opportunistic Throw - conditional damage boost
+    .{
+        .name = "Opportunistic Throw",
+        .description = "Throw. Deals 16 damage. If target has a Chill, inflict Soggy (5 seconds).",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 6,
+        .damage = 16.0,
+        .cast_range = 180.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 8000,
+        .chills = &montessori_soggy,
+        // Conditional: only applies soggy if target already chilled
+    },
+
+    // AP 5: Outdoor Classroom - team adaptation buff
+    .{
+        .name = "Outdoor Classroom",
+        .description = "[AP] Call. For 20 seconds, all allies gain +20% damage, +20% armor, and +3 energy per different skill type used.",
+        .skill_type = .call,
+        .mechanic = .shout,
+        .energy_cost = 15,
+        .target_type = .ally,
+        .aoe_type = .area,
+        .aoe_radius = 300.0,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 60000,
+        .duration_ms = 20000,
+        .is_ap = true,
+        // TODO: Team-wide variety bonus + stat buff
+    },
 };
