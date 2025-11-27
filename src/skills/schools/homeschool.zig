@@ -1,4 +1,5 @@
 const types = @import("../types.zig");
+const effects = @import("../../effects.zig");
 const Skill = types.Skill;
 
 // ============================================================================
@@ -37,6 +38,168 @@ const homeschool_numb = [_]types.ChillEffect{.{
     .duration_ms = 8000,
     .stack_intensity = 1,
 }};
+
+// ============================================================================
+// EFFECT DEFINITIONS - Composable effects for complex skill mechanics
+// ============================================================================
+
+// Obsession (skill 6): +50% damage, -1 warmth/sec
+const obsession_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.5 }, // +50% damage
+    },
+    .{
+        .effect_type = .warmth_drain_per_second,
+        .value = .{ .float = 1.0 }, // Lose 1 Warmth per second
+    },
+};
+
+const OBSESSION_EFFECT = effects.Effect{
+    .name = "Obsession",
+    .description = "+50% damage. Lose 1 Warmth per second.",
+    .modifiers = &obsession_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const obsession_effects = [_]effects.Effect{OBSESSION_EFFECT};
+
+// Solitary Strength (skill 12): +40% damage, -20% damage taken when isolated
+const solitary_strength_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.4 }, // +40% damage
+    },
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 1.2 }, // Take 20% less damage (armor boost)
+    },
+};
+
+const SOLITARY_STRENGTH_EFFECT = effects.Effect{
+    .name = "Solitary Strength",
+    .description = "+40% damage, take 20% less when no allies nearby",
+    .modifiers = &solitary_strength_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 20000,
+    .is_buff = true,
+    .condition = .if_caster_isolated,
+};
+
+const solitary_strength_effects = [_]effects.Effect{SOLITARY_STRENGTH_EFFECT};
+
+// Self-Reliance (skill 14): Reduce max warmth by 10% permanently
+// Note: This is a permanent debuff - the max_warmth_multiplier is permanent
+const self_reliance_mods = [_]effects.Modifier{.{
+    .effect_type = .max_warmth_multiplier,
+    .value = .{ .float = 0.9 }, // -10% max warmth (permanent via long duration)
+}};
+
+const SELF_RELIANCE_EFFECT = effects.Effect{
+    .name = "Self-Reliance Cost",
+    .description = "-10% maximum Warmth",
+    .modifiers = &self_reliance_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 600000, // 10 minutes (effectively permanent for a match)
+    .is_buff = false,
+};
+
+const self_reliance_effects = [_]effects.Effect{SELF_RELIANCE_EFFECT};
+
+// Blood Magic (AP 1): No energy cost, +30% damage
+const blood_magic_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .energy_cost_multiplier,
+        .value = .{ .float = 0.0 }, // Skills cost no energy
+    },
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.3 }, // +30% damage
+    },
+    // Note: 5% warmth cost per skill requires runtime implementation
+};
+
+const BLOOD_MAGIC_EFFECT = effects.Effect{
+    .name = "Blood Magic",
+    .description = "Skills cost no energy but 5% Warmth. +30% damage.",
+    .modifiers = &blood_magic_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 30000,
+    .is_buff = true,
+};
+
+const blood_magic_effects = [_]effects.Effect{BLOOD_MAGIC_EFFECT};
+
+// Lone Wolf (AP 4): +60% damage, +40% armor, +50% energy regen when isolated
+const lone_wolf_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.6 }, // +60% damage
+    },
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 1.4 }, // +40% armor (less damage taken)
+    },
+    .{
+        .effect_type = .energy_regen_multiplier,
+        .value = .{ .float = 1.5 }, // +50% energy regen
+    },
+};
+
+const LONE_WOLF_EFFECT = effects.Effect{
+    .name = "Lone Wolf",
+    .description = "+60% damage, +40% armor, +50% energy regen when isolated",
+    .modifiers = &lone_wolf_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 60000,
+    .is_buff = true,
+    .condition = .if_caster_isolated,
+};
+
+const lone_wolf_effects = [_]effects.Effect{LONE_WOLF_EFFECT};
+
+// Dark Knowledge (skill 10): Next attack +50% damage
+const dark_knowledge_mods = [_]effects.Modifier{.{
+    .effect_type = .next_attack_damage_multiplier,
+    .value = .{ .float = 1.5 },
+}};
+
+const DARK_KNOWLEDGE_EFFECT = effects.Effect{
+    .name = "Dark Knowledge",
+    .description = "Next attack deals +50% damage",
+    .modifiers = &dark_knowledge_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .duration_ms = 15000, // Expires if not used
+    .is_buff = true,
+};
+
+const dark_knowledge_effects = [_]effects.Effect{DARK_KNOWLEDGE_EFFECT};
+
+// Martyrdom (skill 16): Allies gain +25% damage
+const martyrdom_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.25 },
+}};
+
+const MARTYRDOM_EFFECT = effects.Effect{
+    .name = "Martyrdom",
+    .description = "+25% damage",
+    .modifiers = &martyrdom_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const martyrdom_effects = [_]effects.Effect{MARTYRDOM_EFFECT};
 
 pub const skills = [_]Skill{
     // 1. Warmth for damage
@@ -137,7 +300,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 40000,
         .duration_ms = 12000,
         .cozies = &homeschool_fire,
-        // TODO: -1 warmth per second while active
+        .effects = &obsession_effects, // +50% damage, -1 warmth/sec
     },
 
     // 7. Life steal - no sacrifice, sustain skill
@@ -211,6 +374,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 20000,
         .grants_energy_on_hit = 10,
         .cozies = &homeschool_fire,
+        .effects = &dark_knowledge_effects, // Next attack +50% damage
     },
 
     // 11. Forbidden Technique - high damage with heavy sacrifice
@@ -242,6 +406,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 30000,
         .duration_ms = 20000,
+        .effects = &solitary_strength_effects, // +40% damage, -20% damage taken when isolated
     },
 
     // 13. Bitter Cold - powerful DoT
@@ -273,7 +438,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 2000,
         .aftercast_ms = 750,
         .recharge_time_ms = 60000,
-        // TODO: Reduce max warmth by 10% permanently
+        .effects = &self_reliance_effects, // -10% max warmth (permanent via long duration)
     },
 
     // 15. Crushing Isolation - debuff spread
@@ -310,6 +475,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 35000,
         .duration_ms = 12000,
+        .effects = &martyrdom_effects, // Allies gain +25% damage
     },
 
     // ========================================================================
@@ -329,6 +495,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 30000,
         .is_ap = true,
+        .effects = &blood_magic_effects, // No energy cost, +30% damage (5% warmth cost handled at runtime)
     },
 
     // AP 2: Soul Bargain - trade warmth for power
@@ -373,5 +540,6 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .duration_ms = 60000,
         .is_ap = true,
+        .effects = &lone_wolf_effects, // +60% damage, +40% armor, +50% energy regen when isolated
     },
 };

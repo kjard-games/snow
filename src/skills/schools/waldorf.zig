@@ -1,4 +1,5 @@
 const types = @import("../types.zig");
+const effects = @import("../../effects.zig");
 const Skill = types.Skill;
 
 // ============================================================================
@@ -38,6 +39,192 @@ const waldorf_bundled = [_]types.CozyEffect{.{
     .stack_intensity = 1,
 }};
 
+// ============================================================================
+// EFFECT DEFINITIONS - Composable effects for complex skill mechanics
+// ============================================================================
+
+// Find Your Rhythm (skill 1): Alternating skill types recharge 50% faster
+const find_your_rhythm_mods = [_]effects.Modifier{.{
+    .effect_type = .cooldown_reduction_percent,
+    .value = .{ .float = 0.5 }, // 50% faster recharge
+}};
+
+const FIND_YOUR_RHYTHM_EFFECT = effects.Effect{
+    .name = "Find Your Rhythm",
+    .description = "Alternating skill types recharge 50% faster",
+    .modifiers = &find_your_rhythm_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 15000,
+    .is_buff = true,
+    .condition = .if_caster_used_different_type, // Only when alternating types
+};
+
+const find_your_rhythm_effects = [_]effects.Effect{FIND_YOUR_RHYTHM_EFFECT};
+
+// Eurythmy (skill 5): Move 25% faster + next skill instant if 3+ rhythm
+const eurythmy_speed_mods = [_]effects.Modifier{.{
+    .effect_type = .move_speed_multiplier,
+    .value = .{ .float = 1.25 }, // 25% faster
+}};
+
+const EURYTHMY_SPEED_EFFECT = effects.Effect{
+    .name = "Eurythmy",
+    .description = "Move 25% faster",
+    .modifiers = &eurythmy_speed_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const eurythmy_instant_mods = [_]effects.Modifier{.{
+    .effect_type = .next_skill_instant_cast,
+    .value = .{ .int = 1 },
+}};
+
+const EURYTHMY_INSTANT_EFFECT = effects.Effect{
+    .name = "Eurythmy Flow",
+    .description = "Next skill activates instantly",
+    .modifiers = &eurythmy_instant_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .duration_ms = 8000, // Expires with stance if not used
+    .is_buff = true,
+    .condition = .if_caster_has_rhythm_3_plus,
+};
+
+const eurythmy_effects = [_]effects.Effect{ EURYTHMY_SPEED_EFFECT, EURYTHMY_INSTANT_EFFECT };
+
+// Tempo Change (skill 10): Allies +25% speed, enemies -15% speed
+const tempo_change_ally_mods = [_]effects.Modifier{.{
+    .effect_type = .move_speed_multiplier,
+    .value = .{ .float = 1.25 }, // 25% faster
+}};
+
+const TEMPO_CHANGE_ALLY_EFFECT = effects.Effect{
+    .name = "Tempo Change",
+    .description = "Move 25% faster",
+    .modifiers = &tempo_change_ally_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const tempo_change_enemy_mods = [_]effects.Modifier{.{
+    .effect_type = .move_speed_multiplier,
+    .value = .{ .float = 0.85 }, // 15% slower
+}};
+
+const TEMPO_CHANGE_ENEMY_EFFECT = effects.Effect{
+    .name = "Tempo Disruption",
+    .description = "Move 15% slower",
+    .modifiers = &tempo_change_enemy_mods,
+    .timing = .while_active,
+    .affects = .foes_in_earshot,
+    .duration_ms = 8000,
+    .is_buff = false,
+};
+
+const tempo_change_effects = [_]effects.Effect{ TEMPO_CHANGE_ALLY_EFFECT, TEMPO_CHANGE_ENEMY_EFFECT };
+
+// Meditative State (skill 12): +2 energy per second
+const meditative_state_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_gain_per_second,
+    .value = .{ .float = 2.0 },
+}};
+
+const MEDITATIVE_STATE_EFFECT = effects.Effect{
+    .name = "Meditative State",
+    .description = "Gain +2 energy per second",
+    .modifiers = &meditative_state_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const meditative_state_effects = [_]effects.Effect{MEDITATIVE_STATE_EFFECT};
+
+// Graceful Recovery (skill 14): Take 25% less damage + gain 1 rhythm when hit
+const graceful_recovery_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 0.75 }, // Take 25% less damage
+    },
+    .{
+        .effect_type = .rhythm_on_take_damage,
+        .value = .{ .float = 1.0 }, // Gain 1 rhythm when hit
+    },
+};
+
+const GRACEFUL_RECOVERY_EFFECT = effects.Effect{
+    .name = "Graceful Recovery",
+    .description = "Take 25% less damage. Gain 1 Rhythm when hit.",
+    .modifiers = &graceful_recovery_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const graceful_recovery_effects = [_]effects.Effect{GRACEFUL_RECOVERY_EFFECT};
+
+// Perfect Form (skill 16): Skills cost no energy + 50% faster recharge
+const perfect_form_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .energy_cost_multiplier,
+        .value = .{ .float = 0.0 }, // Skills cost nothing
+    },
+    .{
+        .effect_type = .cooldown_reduction_percent,
+        .value = .{ .float = 0.5 }, // 50% faster recharge
+    },
+};
+
+const PERFECT_FORM_EFFECT = effects.Effect{
+    .name = "Perfect Form",
+    .description = "Skills cost no energy and recharge 50% faster",
+    .modifiers = &perfect_form_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const perfect_form_effects = [_]effects.Effect{PERFECT_FORM_EFFECT};
+
+// Tempo Mastery (AP 2): Per rhythm +5% damage, +5% speed, +5% CDR
+// Note: This is a baseline effect - actual scaling per rhythm needs runtime
+const tempo_mastery_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.25 }, // Base +25% (assuming 5 rhythm)
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.25 }, // Base +25%
+    },
+    .{
+        .effect_type = .cooldown_reduction_percent,
+        .value = .{ .float = 0.25 }, // Base 25% CDR
+    },
+};
+
+const TEMPO_MASTERY_EFFECT = effects.Effect{
+    .name = "Tempo Mastery",
+    .description = "Per Rhythm: +5% damage, +5% speed, +5% CDR",
+    .modifiers = &tempo_mastery_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 30000,
+    .is_buff = true,
+    // NOTE: Actual per-rhythm scaling requires runtime calculation
+};
+
+const tempo_mastery_effects = [_]effects.Effect{TEMPO_MASTERY_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Rhythm buff - core mechanic
     .{
@@ -52,7 +239,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 20000,
         .duration_ms = 15000,
         .grants_rhythm_on_cast = 1,
-        // TODO: Alternating skill types recharge 50% faster
+        .effects = &find_your_rhythm_effects,
     },
 
     // 2. Team heal - harmony
@@ -120,7 +307,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 15000,
         .duration_ms = 8000,
         .grants_rhythm_on_cast = 1,
-        // TODO: Next skill instant cast if 3+ rhythm
+        .effects = &eurythmy_effects,
     },
 
     // 6. Artistic trick - control
@@ -212,6 +399,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 20000,
         .duration_ms = 8000,
         .grants_rhythm_on_cast = 1,
+        .effects = &tempo_change_effects,
     },
 
     // 11. Syncopation - interrupt and gain rhythm
@@ -244,6 +432,8 @@ pub const skills = [_]Skill{
         .duration_ms = 12000,
         .cozies = &waldorf_insulated,
         .grants_rhythm_on_cast = 1,
+        .effects = &meditative_state_effects,
+        // NOTE: +1 per rhythm requires runtime calculation
     },
 
     // 13. Ensemble Cast - team rhythm sharing
@@ -275,6 +465,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 18000,
         .duration_ms = 10000,
         .cozies = &waldorf_bundled,
+        .effects = &graceful_recovery_effects,
     },
 
     // 15. Harmonic Resonance - AoE damage based on rhythm
@@ -309,6 +500,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 45000,
         .duration_ms = 10000,
+        .effects = &perfect_form_effects,
     },
 
     // ========================================================================
@@ -345,6 +537,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .duration_ms = 30000,
         .is_ap = true,
+        .effects = &tempo_mastery_effects,
     },
 
     // AP 3: Resonant Link - share rhythm benefits with ally

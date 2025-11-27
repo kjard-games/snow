@@ -44,6 +44,64 @@ pub const EffectModifier = enum {
     // Duration modifiers (affects applied conditions/cozies)
     chill_duration_multiplier, // value: f32 (e.g., 1.5 = chills last 50% longer)
     cozy_duration_multiplier, // value: f32 (e.g., 0.5 = cozies last half as long)
+
+    // ========================================================================
+    // PHASE 1 ADDITIONS - Enabling more skills
+    // ========================================================================
+
+    // Knockdown/CC effects
+    knockdown, // value: int (1 = knocked down, can't act)
+
+    // Single-use modifiers (consumed after triggering once)
+    next_attack_damage_add, // value: f32 (bonus damage on next attack, then consumed)
+    next_attack_damage_multiplier, // value: f32 (multiplier on next attack, then consumed)
+    next_skill_instant_cast, // value: int (1 = next skill has 0 activation time)
+    next_skill_no_cost, // value: int (1 = next skill costs no energy)
+    next_skill_cooldown_multiplier, // value: f32 (e.g., 0.5 = 50% faster recharge on next skill)
+
+    // Periodic effects (applied each tick while active)
+    warmth_drain_per_second, // value: f32 (lose X warmth per second)
+    warmth_gain_per_second, // value: f32 (gain X warmth per second - like hot_cocoa but composable)
+    energy_drain_per_second, // value: f32 (lose X energy per second)
+    energy_gain_per_second, // value: f32 (gain X energy per second)
+    grit_gain_per_second, // value: f32 (gain X grit per second - for Underdog, Berserker Rage)
+    rhythm_gain_per_second, // value: f32 (gain X rhythm per second)
+
+    // Max resource modifiers
+    max_warmth_add, // value: f32 (flat +/- max warmth)
+    max_warmth_multiplier, // value: f32 (e.g., 1.5 = 50% more max warmth)
+    max_energy_add, // value: f32 (flat +/- max energy)
+    max_energy_multiplier, // value: f32 (e.g., 2.0 = double max energy)
+
+    // Resource gain on events
+    grit_on_hit, // value: f32 (gain X grit when this effect's skill hits)
+    grit_on_take_damage, // value: f32 (gain X grit when taking damage)
+    rhythm_on_hit, // value: f32 (gain X rhythm when hitting)
+    rhythm_on_take_damage, // value: f32 (gain X rhythm when taking damage)
+    energy_on_hit, // value: f32 (gain X energy when hitting)
+
+    // Cooldown manipulation
+    recharge_on_hit, // value: int (1 = reset this skill's cooldown if it hits)
+    recharge_on_kill, // value: int (1 = reset this skill's cooldown if target dies)
+
+    // Chill/Cozy removal
+    remove_all_chills, // value: int (1 = remove all chills from target)
+    remove_all_cozies, // value: int (1 = remove all cozies from target)
+    remove_random_chill, // value: int (N = remove N random chills)
+    remove_random_cozy, // value: int (N = remove N random cozies)
+
+    // CC Immunity
+    immune_to_knockdown, // value: int (1 = can't be knocked down)
+    immune_to_interrupt, // value: int (1 = can't be interrupted)
+    immune_to_slow, // value: int (1 = can't be slowed below base speed)
+    immune_to_chill, // value: int (1 = can't receive new chills)
+
+    // Damage reflection/thorns
+    reflect_damage_percent, // value: f32 (e.g., 0.5 = reflect 50% of damage taken)
+    reflect_damage_flat, // value: f32 (reflect flat X damage when hit)
+
+    // Energy stealing
+    energy_steal_on_hit, // value: f32 (steal X energy from target on hit)
 };
 
 /// A modifier value can be a float or integer depending on context
@@ -270,6 +328,32 @@ pub const EffectCondition = enum {
     if_last_skill_was_stance,
     if_last_skill_was_call,
     if_last_skill_was_gesture,
+
+    // ========== PHASE 1 ADDITIONS ==========
+
+    // Energy threshold conditions
+    if_caster_below_25_percent_energy,
+    if_caster_below_50_percent_energy,
+    if_caster_above_50_percent_energy,
+    if_caster_above_75_percent_energy,
+
+    // Team composition conditions
+    if_caster_outnumbered, // More nearby foes than allies
+    if_caster_has_numerical_advantage, // More allies than foes nearby
+    if_target_is_ally, // For dual-purpose skills (heal ally OR damage enemy)
+    if_target_is_enemy, // For dual-purpose skills
+
+    // Variety tracking (Montessori)
+    if_last_two_skills_different_types, // Used different types for last 2 skills
+    if_last_three_skills_different_types, // Used 3 different types recently
+    if_used_all_five_skill_types_recently, // Mastery bonus - used all types in window
+
+    // Interrupt conditions
+    if_target_was_interrupted, // Skill just interrupted target
+    if_this_skill_interrupted, // For bonus effects on successful interrupt
+
+    // Kill conditions
+    if_target_died, // Target was killed by this skill
 };
 
 /// Main effect structure - composable modifiers with duration
@@ -485,6 +569,27 @@ pub const ConditionContext = struct {
 
     // Last skill type used
     last_skill_type: ?@import("skills.zig").SkillType = null,
+
+    // ========== PHASE 1 ADDITIONS ==========
+
+    // Energy thresholds (0.0 to 1.0)
+    caster_energy_percent: f32 = 1.0,
+
+    // Team composition
+    nearby_allies_count: u8 = 0,
+    nearby_foes_count: u8 = 0,
+
+    // Target relationship
+    target_is_ally: bool = false,
+    target_is_enemy: bool = true,
+
+    // Variety tracking (Montessori) - tracks last few skill types used
+    skill_type_history: [5]?@import("skills.zig").SkillType = .{ null, null, null, null, null },
+    unique_skill_types_in_window: u8 = 0, // Count of different types used recently
+
+    // Interrupt/kill tracking
+    target_was_interrupted: bool = false,
+    target_died: bool = false,
 };
 
 /// Full condition evaluation with complete context
@@ -598,6 +703,39 @@ pub fn evaluateConditionFull(condition: EffectCondition, ctx: ConditionContext) 
         .if_last_skill_was_stance => ctx.last_skill_type == .stance,
         .if_last_skill_was_call => ctx.last_skill_type == .call,
         .if_last_skill_was_gesture => ctx.last_skill_type == .gesture,
+
+        // ========== PHASE 1 ADDITIONS ==========
+
+        // Energy threshold conditions
+        .if_caster_below_25_percent_energy => ctx.caster_energy_percent < 0.25,
+        .if_caster_below_50_percent_energy => ctx.caster_energy_percent < 0.5,
+        .if_caster_above_50_percent_energy => ctx.caster_energy_percent >= 0.5,
+        .if_caster_above_75_percent_energy => ctx.caster_energy_percent >= 0.75,
+
+        // Team composition conditions
+        .if_caster_outnumbered => ctx.nearby_foes_count > ctx.nearby_allies_count,
+        .if_caster_has_numerical_advantage => ctx.nearby_allies_count > ctx.nearby_foes_count,
+        .if_target_is_ally => ctx.target_is_ally,
+        .if_target_is_enemy => ctx.target_is_enemy,
+
+        // Variety tracking (Montessori)
+        .if_last_two_skills_different_types => blk: {
+            if (ctx.skill_type_history[0] == null or ctx.skill_type_history[1] == null) break :blk false;
+            break :blk ctx.skill_type_history[0] != ctx.skill_type_history[1];
+        },
+        .if_last_three_skills_different_types => blk: {
+            if (ctx.skill_type_history[0] == null or ctx.skill_type_history[1] == null or ctx.skill_type_history[2] == null) break :blk false;
+            const t0 = ctx.skill_type_history[0].?;
+            const t1 = ctx.skill_type_history[1].?;
+            const t2 = ctx.skill_type_history[2].?;
+            break :blk t0 != t1 and t1 != t2 and t0 != t2;
+        },
+        .if_used_all_five_skill_types_recently => ctx.unique_skill_types_in_window >= 5,
+
+        // Interrupt/kill conditions
+        .if_target_was_interrupted => ctx.target_was_interrupted,
+        .if_this_skill_interrupted => ctx.target_was_interrupted,
+        .if_target_died => ctx.target_died,
     };
 }
 
@@ -1501,6 +1639,17 @@ pub const STRIP_COZY_EFFECT = Effect{
 };
 
 // ============================================================================
+// GENERIC REUSABLE MODIFIER ARRAYS
+// ============================================================================
+// These are building blocks that skills can reference directly or use as
+// examples for composing their own modifier arrays.
+
+// Single-modifier arrays for common patterns
+pub const MOD_KNOCKDOWN = [_]Modifier{.{ .effect_type = .knockdown, .value = .{ .int = 1 } }};
+pub const MOD_REMOVE_ALL_CHILLS = [_]Modifier{.{ .effect_type = .remove_all_chills, .value = .{ .int = 1 } }};
+pub const MOD_REMOVE_ALL_COZIES = [_]Modifier{.{ .effect_type = .remove_all_cozies, .value = .{ .int = 1 } }};
+
+// ============================================================================
 // Helper functions to query and apply effects
 // ============================================================================
 
@@ -1617,4 +1766,341 @@ pub fn calculateCooldownReductionPercent(active_effects: []const ?ActiveEffect, 
 
     // Cap at 80% reduction (can't go below 20% of original cooldown)
     return @min(total_reduction, 0.8);
+}
+
+// ============================================================================
+// PHASE 1 HELPER FUNCTIONS - New effect calculations
+// ============================================================================
+
+/// Calculate total warmth drain per second from active effects
+/// Used for skills like Obsession, Unstoppable Force
+pub fn calculateWarmthDrainPerSecond(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_drain: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .warmth_drain_per_second)) |value| {
+                if (value == .float) {
+                    total_drain += value.float;
+                }
+            }
+        }
+    }
+
+    return total_drain;
+}
+
+/// Calculate total warmth gain per second from active effects
+pub fn calculateWarmthGainPerSecond(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_gain: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .warmth_gain_per_second)) |value| {
+                if (value == .float) {
+                    total_gain += value.float;
+                }
+            }
+        }
+    }
+
+    return total_gain;
+}
+
+/// Calculate total energy gain per second from active effects
+pub fn calculateEnergyGainPerSecond(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_gain: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .energy_gain_per_second)) |value| {
+                if (value == .float) {
+                    total_gain += value.float;
+                }
+            }
+        }
+    }
+
+    return total_gain;
+}
+
+/// Calculate total grit gain per second from active effects (Public School)
+pub fn calculateGritGainPerSecond(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_gain: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .grit_gain_per_second)) |value| {
+                if (value == .float) {
+                    total_gain += value.float;
+                }
+            }
+        }
+    }
+
+    return total_gain;
+}
+
+/// Calculate total rhythm gain per second from active effects (Waldorf)
+pub fn calculateRhythmGainPerSecond(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_gain: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .rhythm_gain_per_second)) |value| {
+                if (value == .float) {
+                    total_gain += value.float;
+                }
+            }
+        }
+    }
+
+    return total_gain;
+}
+
+/// Calculate max warmth modifier (additive) from active effects
+pub fn calculateMaxWarmthAdd(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_add: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .max_warmth_add)) |value| {
+                if (value == .float) {
+                    total_add += value.float;
+                }
+            }
+        }
+    }
+
+    return total_add;
+}
+
+/// Calculate max warmth multiplier from active effects
+pub fn calculateMaxWarmthMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .max_warmth_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
+}
+
+/// Calculate max energy modifier (additive) from active effects
+pub fn calculateMaxEnergyAdd(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_add: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .max_energy_add)) |value| {
+                if (value == .float) {
+                    total_add += value.float;
+                }
+            }
+        }
+    }
+
+    return total_add;
+}
+
+/// Calculate max energy multiplier from active effects (Private School: Trust Fund Baby)
+pub fn calculateMaxEnergyMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .max_energy_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
+}
+
+/// Check if character is knocked down from active effects
+pub fn isKnockedDown(active_effects: []const ?ActiveEffect, effect_count: u8) bool {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .knockdown)) |value| {
+                if (value == .int and value.int == 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// Check if character is immune to knockdown
+pub fn isImmuneToKnockdown(active_effects: []const ?ActiveEffect, effect_count: u8) bool {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .immune_to_knockdown)) |value| {
+                if (value == .int and value.int == 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// Check if character is immune to interrupts
+pub fn isImmuneToInterrupt(active_effects: []const ?ActiveEffect, effect_count: u8) bool {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .immune_to_interrupt)) |value| {
+                if (value == .int and value.int == 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// Check if character is immune to slows
+pub fn isImmuneToSlow(active_effects: []const ?ActiveEffect, effect_count: u8) bool {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .immune_to_slow)) |value| {
+                if (value == .int and value.int == 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// Check if character is immune to new chills
+pub fn isImmuneToChill(active_effects: []const ?ActiveEffect, effect_count: u8) bool {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .immune_to_chill)) |value| {
+                if (value == .int and value.int == 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// Get "next attack" damage bonus (single-use, should be consumed after use)
+/// Returns the bonus and the index of the effect to remove
+pub fn getNextAttackDamageBonus(active_effects: []const ?ActiveEffect, effect_count: u8) struct { add: f32, multiplier: f32, effect_indices: [2]?usize } {
+    var result = .{ .add = 0.0, .multiplier = 1.0, .effect_indices = .{ null, null } };
+
+    for (active_effects[0..effect_count], 0..) |maybe_effect, i| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .next_attack_damage_add)) |value| {
+                if (value == .float) {
+                    result.add += value.float;
+                    result.effect_indices[0] = i;
+                }
+            }
+            if (getModifier(active.effect, .next_attack_damage_multiplier)) |value| {
+                if (value == .float) {
+                    result.multiplier *= value.float;
+                    result.effect_indices[1] = i;
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+/// Calculate total damage reflection (flat + percent)
+pub fn calculateDamageReflection(active_effects: []const ?ActiveEffect, effect_count: u8, damage_taken: f32) f32 {
+    var total_reflect: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .reflect_damage_flat)) |value| {
+                if (value == .float) {
+                    total_reflect += value.float;
+                }
+            }
+            if (getModifier(active.effect, .reflect_damage_percent)) |value| {
+                if (value == .float) {
+                    total_reflect += damage_taken * value.float;
+                }
+            }
+        }
+    }
+
+    return total_reflect;
+}
+
+/// Check if any effect wants to remove all chills
+pub fn shouldRemoveAllChills(active_effects: []const ?ActiveEffect, effect_count: u8) bool {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .remove_all_chills)) |value| {
+                if (value == .int and value.int == 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// Check if any effect wants to remove all cozies
+pub fn shouldRemoveAllCozies(active_effects: []const ?ActiveEffect, effect_count: u8) bool {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .remove_all_cozies)) |value| {
+                if (value == .int and value.int == 1) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/// Calculate aggregate attack speed multiplier from active effects
+pub fn calculateAttackSpeedMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .attack_speed_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
+}
+
+/// Calculate aggregate cast speed multiplier from active effects
+pub fn calculateCastSpeedMultiplier(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var multiplier: f32 = 1.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .cast_speed_multiplier)) |value| {
+                if (value == .float) {
+                    multiplier *= value.float;
+                }
+            }
+        }
+    }
+
+    return multiplier;
 }

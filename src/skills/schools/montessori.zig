@@ -1,4 +1,5 @@
 const types = @import("../types.zig");
+const effects = @import("../../effects.zig");
 const Skill = types.Skill;
 
 // ============================================================================
@@ -38,6 +39,207 @@ const montessori_soggy = [_]types.ChillEffect{.{
     .stack_intensity = 1,
 }};
 
+// ============================================================================
+// EFFECT DEFINITIONS - Composable effects for complex skill mechanics
+// ============================================================================
+
+// Self Directed (skill 1): +10% damage when using different skill types
+const self_directed_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.1 }, // +10% damage
+    },
+    .{
+        .effect_type = .energy_on_hit,
+        .value = .{ .float = 1.0 }, // +1 energy on hit
+    },
+};
+
+const SELF_DIRECTED_EFFECT = effects.Effect{
+    .name = "Self Directed",
+    .description = "+10% damage and +1 energy when using different skill types",
+    .modifiers = &self_directed_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 20000,
+    .is_buff = true,
+    .condition = .if_caster_used_different_type,
+};
+
+const self_directed_effects = [_]effects.Effect{SELF_DIRECTED_EFFECT};
+
+// Versatile Throw (skill 2): +2 energy if last skill was different type
+const versatile_throw_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_on_hit,
+    .value = .{ .float = 2.0 },
+}};
+
+const VERSATILE_THROW_EFFECT = effects.Effect{
+    .name = "Versatility Bonus",
+    .description = "+2 energy when used after different skill type",
+    .modifiers = &versatile_throw_mods,
+    .timing = .on_hit,
+    .affects = .self,
+    .duration_ms = 0, // Instant
+    .is_buff = true,
+    .condition = .if_caster_used_different_type,
+};
+
+const versatile_throw_effects = [_]effects.Effect{VERSATILE_THROW_EFFECT};
+
+// Explore (skill 4): Move 33% faster
+const explore_mods = [_]effects.Modifier{.{
+    .effect_type = .move_speed_multiplier,
+    .value = .{ .float = 1.33 },
+}};
+
+const EXPLORE_EFFECT = effects.Effect{
+    .name = "Explore",
+    .description = "Move 33% faster",
+    .modifiers = &explore_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const explore_effects = [_]effects.Effect{EXPLORE_EFFECT};
+
+// Growth Mindset (skill 5): 20% cooldown reduction
+const growth_mindset_mods = [_]effects.Modifier{.{
+    .effect_type = .cooldown_reduction_percent,
+    .value = .{ .float = 0.2 },
+}};
+
+const GROWTH_MINDSET_EFFECT = effects.Effect{
+    .name = "Growth Mindset",
+    .description = "Skills recharge 20% faster",
+    .modifiers = &growth_mindset_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const growth_mindset_effects = [_]effects.Effect{GROWTH_MINDSET_EFFECT};
+
+// Hands-On Learning (skill 13): +10 damage if different skill type last
+const hands_on_learning_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 10.0 },
+}};
+
+const HANDS_ON_LEARNING_EFFECT = effects.Effect{
+    .name = "Hands-On Learning",
+    .description = "+10 damage when used after different skill type",
+    .modifiers = &hands_on_learning_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 0, // Instant
+    .is_buff = false,
+    .condition = .if_caster_used_different_type,
+};
+
+const hands_on_learning_effects = [_]effects.Effect{HANDS_ON_LEARNING_EFFECT};
+
+// Field Trip (skill 16): Move 40% faster
+const field_trip_mods = [_]effects.Modifier{.{
+    .effect_type = .move_speed_multiplier,
+    .value = .{ .float = 1.4 },
+}};
+
+const FIELD_TRIP_EFFECT = effects.Effect{
+    .name = "Field Trip",
+    .description = "Move 40% faster",
+    .modifiers = &field_trip_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const field_trip_effects = [_]effects.Effect{FIELD_TRIP_EFFECT};
+
+// Emergent Curriculum (AP 3): +30% damage to target, -20% damage from target
+const emergent_curriculum_offense_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.3 }, // Deal +30% damage to target
+}};
+
+const EMERGENT_CURRICULUM_OFFENSE_EFFECT = effects.Effect{
+    .name = "Analyzed: Offense",
+    .description = "Deal +30% damage to this target",
+    .modifiers = &emergent_curriculum_offense_mods,
+    .timing = .while_active,
+    .affects = .self, // Applies to caster's damage against target
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const emergent_curriculum_defense_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 0.8 }, // Take 20% less damage from target
+}};
+
+const EMERGENT_CURRICULUM_DEFENSE_EFFECT = effects.Effect{
+    .name = "Analyzed: Defense",
+    .description = "Take 20% less damage from this target",
+    .modifiers = &emergent_curriculum_defense_mods,
+    .timing = .while_active,
+    .affects = .self, // Reduces damage taken from analyzed target
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const emergent_curriculum_effects = [_]effects.Effect{ EMERGENT_CURRICULUM_OFFENSE_EFFECT, EMERGENT_CURRICULUM_DEFENSE_EFFECT };
+
+// Quick Learner (skill 10): Next skill recharges 50% faster if different type
+const quick_learner_mods = [_]effects.Modifier{.{
+    .effect_type = .next_skill_cooldown_multiplier,
+    .value = .{ .float = 0.5 },
+}};
+
+const QUICK_LEARNER_EFFECT = effects.Effect{
+    .name = "Quick Learner",
+    .description = "Next skill recharges 50% faster if different type",
+    .modifiers = &quick_learner_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .duration_ms = 10000, // Expires if not used
+    .is_buff = true,
+    .condition = .if_caster_used_different_type,
+};
+
+const quick_learner_effects = [_]effects.Effect{QUICK_LEARNER_EFFECT};
+
+// Peer Teaching (skill 15): +15% damage to both caster and ally
+const peer_teaching_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.15 },
+}};
+
+const PEER_TEACHING_SELF_EFFECT = effects.Effect{
+    .name = "Peer Teaching",
+    .description = "+15% damage",
+    .modifiers = &peer_teaching_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const PEER_TEACHING_ALLY_EFFECT = effects.Effect{
+    .name = "Peer Teaching",
+    .description = "+15% damage",
+    .modifiers = &peer_teaching_mods,
+    .timing = .while_active,
+    .affects = .target, // Target ally
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const peer_teaching_effects = [_]effects.Effect{ PEER_TEACHING_SELF_EFFECT, PEER_TEACHING_ALLY_EFFECT };
+
 pub const skills = [_]Skill{
     // 1. Variety buff - core mechanic
     .{
@@ -51,7 +253,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 15000,
         .duration_ms = 20000,
-        // TODO: Track variety, grant bonuses
+        .effects = &self_directed_effects,
     },
 
     // 2. Swiss army knife - does many things
@@ -67,7 +269,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
         .chills = &montessori_multi_chill,
-        // TODO: +2 energy if variety
+        .effects = &versatile_throw_effects,
     },
 
     // 3. Adapts to situation
@@ -98,6 +300,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 10000,
         .duration_ms = 8000,
         .cozies = &montessori_sure,
+        .effects = &explore_effects,
     },
 
     // 5. Learns from experience
@@ -112,7 +315,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
         .duration_ms = 15000,
-        // TODO: Cooldowns reduced by 20%
+        .effects = &growth_mindset_effects,
     },
 
     // 6. Does everything okay
@@ -190,6 +393,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 500,
         .recharge_time_ms = 8000,
+        .effects = &quick_learner_effects,
     },
 
     // 11. Balanced Approach - damage and healing in one
@@ -234,6 +438,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
+        .effects = &hands_on_learning_effects,
     },
 
     // 14. Natural Consequence - DoT that rewards variety
@@ -265,6 +470,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 18000,
         .duration_ms = 10000,
         .cozies = &montessori_fire,
+        .effects = &peer_teaching_effects,
     },
 
     // 16. Field Trip - movement and exploration
@@ -280,6 +486,8 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 20000,
         .duration_ms = 12000,
         .cozies = &montessori_sure,
+        .effects = &field_trip_effects,
+        // NOTE: +2 energy on terrain change requires runtime tracking
     },
 
     // ========================================================================
@@ -329,6 +537,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 30000,
         .duration_ms = 15000,
         .is_ap = true,
+        .effects = &emergent_curriculum_effects,
     },
 
     // AP 4: Prepared Environment - create optimal zone

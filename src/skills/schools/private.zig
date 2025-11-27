@@ -1,4 +1,5 @@
 const types = @import("../types.zig");
+const effects = @import("../../effects.zig");
 const Skill = types.Skill;
 
 // ============================================================================
@@ -54,6 +55,205 @@ const private_brain_freeze = [_]types.ChillEffect{.{
     .duration_ms = 8000,
     .stack_intensity = 1,
 }};
+
+// ============================================================================
+// EFFECT DEFINITIONS - Composable effects for complex skill mechanics
+// ============================================================================
+
+// Desperate Spending (skill 4): +15 damage if in debt
+const desperate_spending_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 15.0 },
+}};
+
+const DESPERATE_SPENDING_EFFECT = effects.Effect{
+    .name = "Desperate Spending",
+    .description = "+15 damage while in debt",
+    .modifiers = &desperate_spending_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 0, // Instant
+    .is_buff = false,
+    .condition = .if_caster_in_debt,
+};
+
+const desperate_spending_effects = [_]effects.Effect{DESPERATE_SPENDING_EFFECT};
+
+// Golden Shield (skill 5): 75% block chance for 15 seconds
+const golden_shield_mods = [_]effects.Modifier{.{
+    .effect_type = .block_chance,
+    .value = .{ .float = 0.75 }, // 75% block chance
+}};
+
+const GOLDEN_SHIELD_EFFECT = effects.Effect{
+    .name = "Golden Shield",
+    .description = "75% chance to block incoming attacks",
+    .modifiers = &golden_shield_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const golden_shield_effects = [_]effects.Effect{GOLDEN_SHIELD_EFFECT};
+
+// Call Mom (skill 8): Remove all chills
+const call_mom_mods = [_]effects.Modifier{.{
+    .effect_type = .remove_all_chills,
+    .value = .{ .int = 1 },
+}};
+
+const CALL_MOM_EFFECT = effects.Effect{
+    .name = "Call Mom",
+    .description = "Remove all Chills",
+    .modifiers = &call_mom_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .duration_ms = 0, // Instant
+    .is_buff = true,
+};
+
+const call_mom_effects = [_]effects.Effect{CALL_MOM_EFFECT};
+
+// Bail Out (skill 11): Move 50% faster + block next attack
+const bail_out_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.5 }, // 50% faster
+    },
+    .{
+        .effect_type = .block_next_attack,
+        .value = .{ .float = 1.0 }, // Block 1 attack
+    },
+};
+
+const BAIL_OUT_EFFECT = effects.Effect{
+    .name = "Bail Out",
+    .description = "Move 50% faster. Block the next attack.",
+    .modifiers = &bail_out_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 5000,
+    .is_buff = true,
+};
+
+const bail_out_effects = [_]effects.Effect{BAIL_OUT_EFFECT};
+
+// Severance Package (skill 16): +30 damage if below 25% energy
+const severance_package_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 30.0 },
+}};
+
+const SEVERANCE_PACKAGE_EFFECT = effects.Effect{
+    .name = "Severance Package",
+    .description = "+30 damage when below 25% energy",
+    .modifiers = &severance_package_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 0, // Instant
+    .is_buff = false,
+    .condition = .if_caster_below_25_percent_energy,
+};
+
+const severance_package_effects = [_]effects.Effect{SEVERANCE_PACKAGE_EFFECT};
+
+// Trust Fund Baby (AP 2): Double max energy, +100% regen, +50% skill cost
+const trust_fund_baby_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .max_energy_multiplier,
+        .value = .{ .float = 2.0 }, // Double max energy
+    },
+    .{
+        .effect_type = .energy_regen_multiplier,
+        .value = .{ .float = 2.0 }, // +100% energy regen
+    },
+    .{
+        .effect_type = .energy_cost_multiplier,
+        .value = .{ .float = 1.5 }, // Skills cost 50% more
+    },
+};
+
+const TRUST_FUND_BABY_EFFECT = effects.Effect{
+    .name = "Trust Fund Baby",
+    .description = "Max energy doubled. Energy regen +100%. Skills cost +50%.",
+    .modifiers = &trust_fund_baby_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 30000,
+    .is_buff = true,
+};
+
+const trust_fund_baby_effects = [_]effects.Effect{TRUST_FUND_BABY_EFFECT};
+
+// Inherited Wealth (AP 3): Allies gain +1 energy per second
+const inherited_wealth_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_gain_per_second,
+    .value = .{ .float = 1.0 },
+}};
+
+const INHERITED_WEALTH_EFFECT = effects.Effect{
+    .name = "Inherited Wealth",
+    .description = "Gain +1 energy per second",
+    .modifiers = &inherited_wealth_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const inherited_wealth_effects = [_]effects.Effect{INHERITED_WEALTH_EFFECT};
+
+// Hostile Takeover (AP 1): Target skills cost +3 energy (via energy cost multiplier debuff)
+const hostile_takeover_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_cost_multiplier,
+    .value = .{ .float = 1.3 }, // Approximate +3 on a 10-cost skill
+}};
+
+const HOSTILE_TAKEOVER_EFFECT = effects.Effect{
+    .name = "Hostile Takeover",
+    .description = "Skills cost more energy",
+    .modifiers = &hostile_takeover_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .duration_ms = 10000,
+    .is_buff = false,
+};
+
+const hostile_takeover_effects = [_]effects.Effect{HOSTILE_TAKEOVER_EFFECT};
+
+// Hedge Fund (skill 15): Self takes 25% less damage, allies take 10% less
+const hedge_fund_self_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 0.75 }, // Take 25% less damage
+}};
+
+const HEDGE_FUND_SELF_EFFECT = effects.Effect{
+    .name = "Hedge Fund",
+    .description = "Take 25% less damage",
+    .modifiers = &hedge_fund_self_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const hedge_fund_ally_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 0.9 }, // Take 10% less damage
+}};
+
+const HEDGE_FUND_ALLY_EFFECT = effects.Effect{
+    .name = "Hedge Fund Aura",
+    .description = "Take 10% less damage",
+    .modifiers = &hedge_fund_ally_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const hedge_fund_effects = [_]effects.Effect{ HEDGE_FUND_SELF_EFFECT, HEDGE_FUND_ALLY_EFFECT };
 
 pub const skills = [_]Skill{
     // 1. Energy management - instant energy
@@ -114,13 +314,14 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
-        .bonus_if_in_debt = true, // TODO: Add +15 damage if credit_debt > 0
+        .bonus_if_in_debt = true,
+        .effects = &desperate_spending_effects,
     },
 
     // 5. Defensive credit skill
     .{
         .name = "Golden Shield",
-        .description = "Stance. (15 seconds.) You block the next 3 attacks. Credit: 8 energy.",
+        .description = "Stance. (15 seconds.) 75% chance to block attacks. Credit: 8 energy.",
         .skill_type = .stance,
         .mechanic = .shift,
         .energy_cost = 8,
@@ -131,7 +332,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 30000,
         .duration_ms = 15000,
         .cozies = &private_shield,
-        // TODO: Block next 3 attacks
+        .effects = &golden_shield_effects,
     },
 
     // 6. Healing without credit (can't afford to debt support)
@@ -177,7 +378,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 20000,
-        // TODO: Remove all chills from self
+        .effects = &call_mom_effects,
     },
 
     // 9. WALL: Security Fence - expensive but sturdy wall
@@ -229,6 +430,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 25000,
         .duration_ms = 5000,
         .cozies = &private_shield,
+        .effects = &bail_out_effects,
     },
 
     // 12. Compound Interest - damage scales with energy
@@ -243,7 +445,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
-        // TODO: +1 damage per current energy
+        // NOTE: +1 damage per current energy requires runtime calculation
     },
 
     // 13. Tax Return - energy drain
@@ -291,6 +493,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 35000,
         .duration_ms = 15000,
         .cozies = &private_bundled_up,
+        .effects = &hedge_fund_effects,
     },
 
     // 16. Severance Package - strong finisher when resources depleted
@@ -305,7 +508,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        // TODO: +30 damage if below 25% energy
+        .effects = &severance_package_effects,
     },
 
     // ========================================================================
@@ -315,7 +518,7 @@ pub const skills = [_]Skill{
     // AP 1: Hostile Takeover - massive credit nuke
     .{
         .name = "Hostile Takeover",
-        .description = "[AP] Trick. Credit: 20 energy. Deals 50 damage. Steals 15 energy. Target's skills cost +3 energy for 10 seconds.",
+        .description = "[AP] Trick. Credit: 20 energy. Deals 50 damage. Steals 15 energy. Target's skills cost +30% energy for 10 seconds.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 15,
@@ -327,6 +530,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .grants_energy_on_hit = 15,
         .is_ap = true,
+        .effects = &hostile_takeover_effects,
     },
 
     // AP 2: Trust Fund Baby - massive energy pool manipulation
@@ -342,6 +546,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 30000,
         .is_ap = true,
+        .effects = &trust_fund_baby_effects,
     },
 
     // AP 3: Inherited Wealth - team energy support
@@ -360,6 +565,7 @@ pub const skills = [_]Skill{
         .duration_ms = 15000,
         .cozies = &private_hot_cocoa,
         .is_ap = true,
+        .effects = &inherited_wealth_effects,
     },
 
     // AP 4: Golden Parachute - invulnerability when "fired" (low HP)

@@ -1,4 +1,5 @@
 const types = @import("../types.zig");
+const effects = @import("../../effects.zig");
 const Skill = types.Skill;
 
 // ============================================================================
@@ -43,6 +44,230 @@ const public_bundled = [_]types.CozyEffect{.{
     .duration_ms = 6000,
     .stack_intensity = 1,
 }};
+
+// ============================================================================
+// EFFECT DEFINITIONS - Composable effects for complex skill mechanics
+// ============================================================================
+
+// Tackle (skill 6): Knockdown effect for 4 seconds
+const tackle_knockdown_mods = [_]effects.Modifier{.{
+    .effect_type = .knockdown,
+    .value = .{ .int = 1 },
+}};
+
+const TACKLE_KNOCKDOWN_EFFECT = effects.Effect{
+    .name = "Knocked Down",
+    .description = "Tackled to the ground - can't act",
+    .modifiers = &tackle_knockdown_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 4000,
+    .is_buff = false,
+};
+
+const tackle_effects = [_]effects.Effect{TACKLE_KNOCKDOWN_EFFECT};
+
+// All Out (skill 8): Take double damage for 5 seconds (self-debuff)
+const all_out_vulnerability_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 2.0 }, // Take 2x damage
+}};
+
+const ALL_OUT_VULNERABILITY_EFFECT = effects.Effect{
+    .name = "All Out",
+    .description = "Overextended - take double damage",
+    .modifiers = &all_out_vulnerability_mods,
+    .timing = .on_cast, // Applied when skill is cast
+    .affects = .self,
+    .duration_ms = 5000,
+    .is_buff = false,
+};
+
+const all_out_effects = [_]effects.Effect{ALL_OUT_VULNERABILITY_EFFECT};
+
+// Second Wind (skill 14): Next attack +10 damage
+const second_wind_mods = [_]effects.Modifier{.{
+    .effect_type = .next_attack_damage_add,
+    .value = .{ .float = 10.0 },
+}};
+
+const SECOND_WIND_BUFF_EFFECT = effects.Effect{
+    .name = "Second Wind",
+    .description = "Next attack deals +10 damage",
+    .modifiers = &second_wind_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .duration_ms = 15000, // Expires after 15s if not used
+    .is_buff = true,
+};
+
+const second_wind_effects = [_]effects.Effect{SECOND_WIND_BUFF_EFFECT};
+
+// Brawler's Stance (skill 15): Take 20% less damage, gain 1 Grit when hit
+const brawlers_stance_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 0.8 }, // Take 20% less damage (0.8x)
+    },
+    .{
+        .effect_type = .grit_on_take_damage,
+        .value = .{ .float = 1.0 }, // Gain 1 Grit when hit
+    },
+};
+
+const BRAWLERS_STANCE_EFFECT = effects.Effect{
+    .name = "Brawler's Stance",
+    .description = "Take 20% less damage. Gain 1 Grit when hit.",
+    .modifiers = &brawlers_stance_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const brawlers_stance_effects = [_]effects.Effect{BRAWLERS_STANCE_EFFECT};
+
+// Never Give Up (skill 16): Remove all chills from self
+const never_give_up_mods = [_]effects.Modifier{.{
+    .effect_type = .remove_all_chills,
+    .value = .{ .int = 1 },
+}};
+
+const NEVER_GIVE_UP_EFFECT = effects.Effect{
+    .name = "Never Give Up",
+    .description = "Remove all Chills",
+    .modifiers = &never_give_up_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .duration_ms = 0, // Instant
+    .is_buff = true,
+};
+
+const never_give_up_effects = [_]effects.Effect{NEVER_GIVE_UP_EFFECT};
+
+// Berserker Rage (AP 1): +75% damage, +50% attack speed, +25% damage taken, +2 grit/sec
+const berserker_rage_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.75 }, // Deal 75% more damage
+    },
+    .{
+        .effect_type = .attack_speed_multiplier,
+        .value = .{ .float = 1.5 }, // Attack 50% faster
+    },
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 0.75 }, // Take 25% more damage (armor reduced)
+    },
+    .{
+        .effect_type = .grit_gain_per_second,
+        .value = .{ .float = 2.0 }, // Gain 2 Grit per second
+    },
+};
+
+const BERSERKER_RAGE_EFFECT = effects.Effect{
+    .name = "Berserker Rage",
+    .description = "+75% damage, +50% attack speed, take 25% more damage, gain 2 Grit/sec",
+    .modifiers = &berserker_rage_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const berserker_rage_effects = [_]effects.Effect{BERSERKER_RAGE_EFFECT};
+
+// Unstoppable Force (AP 4): Immune to CC, +25% damage, -2 warmth/sec
+const unstoppable_force_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .immune_to_interrupt,
+        .value = .{ .int = 1 },
+    },
+    .{
+        .effect_type = .immune_to_knockdown,
+        .value = .{ .int = 1 },
+    },
+    .{
+        .effect_type = .immune_to_slow,
+        .value = .{ .int = 1 },
+    },
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.25 }, // Deal 25% more damage
+    },
+    .{
+        .effect_type = .warmth_drain_per_second,
+        .value = .{ .float = 2.0 }, // Lose 2 Warmth per second
+    },
+};
+
+const UNSTOPPABLE_FORCE_EFFECT = effects.Effect{
+    .name = "Unstoppable Force",
+    .description = "Cannot be interrupted, knocked down, or slowed. +25% damage. Lose 2 Warmth/sec.",
+    .modifiers = &unstoppable_force_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+const unstoppable_force_effects = [_]effects.Effect{UNSTOPPABLE_FORCE_EFFECT};
+
+// Underdog (skill 12): +3 Grit per second while outnumbered
+const underdog_mods = [_]effects.Modifier{.{
+    .effect_type = .grit_gain_per_second,
+    .value = .{ .float = 3.0 },
+}};
+
+const UNDERDOG_EFFECT = effects.Effect{
+    .name = "Underdog",
+    .description = "Gain 3 Grit per second while outnumbered",
+    .modifiers = &underdog_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 12000,
+    .is_buff = true,
+    .condition = .if_caster_outnumbered,
+};
+
+const underdog_effects = [_]effects.Effect{UNDERDOG_EFFECT};
+
+// Pile On (skill 5): +10 damage if target has a chill
+const pile_on_bonus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 10.0 },
+}};
+
+const PILE_ON_BONUS_EFFECT = effects.Effect{
+    .name = "Pile On",
+    .description = "+10 damage if target has a Chill",
+    .modifiers = &pile_on_bonus_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 0, // Instant
+    .is_buff = false,
+    .condition = .if_target_has_any_chill,
+};
+
+const pile_on_effects = [_]effects.Effect{PILE_ON_BONUS_EFFECT};
+
+// Relentless (skill 4): Recharges instantly if it hits
+const relentless_mods = [_]effects.Modifier{.{
+    .effect_type = .recharge_on_hit,
+    .value = .{ .int = 1 },
+}};
+
+const RELENTLESS_EFFECT = effects.Effect{
+    .name = "Relentless",
+    .description = "Recharges instantly if it hits",
+    .modifiers = &relentless_mods,
+    .timing = .on_hit,
+    .affects = .self,
+    .duration_ms = 0, // Instant
+    .is_buff = true,
+};
+
+const relentless_effects = [_]effects.Effect{RELENTLESS_EFFECT};
 
 pub const skills = [_]Skill{
     // 1. Grit builder - spam attack
@@ -103,6 +328,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 3000,
+        .effects = &relentless_effects,
     },
 
     // 5. Bonus damage if target damaged recently - Grit spender
@@ -118,7 +344,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 6000,
-        // TODO: +10 damage if target has a chill
+        .effects = &pile_on_effects,
     },
 
     // 6. Knockdown effect
@@ -135,7 +361,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
         .chills = &public_slippery,
-        // TODO: Knockdown effect
+        .effects = &tackle_effects,
     },
 
     // 7. Burn through - damage over time
@@ -166,7 +392,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
-        // TODO: You take double damage for 5s
+        .effects = &all_out_effects,
     },
 
     // 9. WALL: Scrappy Barricade - fast, aggressive wall
@@ -234,6 +460,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 25000,
         .duration_ms = 12000,
         .cozies = &public_fire,
+        .effects = &underdog_effects,
     },
 
     // 13. Haymaker - high damage grit spender
@@ -265,6 +492,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
+        .effects = &second_wind_effects,
     },
 
     // 15. Brawler's Stance - defensive with counterattack
@@ -280,6 +508,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 18000,
         .duration_ms = 8000,
         .cozies = &public_bundled,
+        .effects = &brawlers_stance_effects,
     },
 
     // 16. Never Give Up - resistance to conditions
@@ -294,7 +523,8 @@ pub const skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
-        // TODO: Remove all chills, gain 2 energy per chill
+        .effects = &never_give_up_effects,
+        // TODO: Gain 2 energy per chill removed (requires runtime counting)
     },
 
     // ========================================================================
@@ -314,6 +544,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .duration_ms = 15000,
         .is_ap = true,
+        .effects = &berserker_rage_effects,
     },
 
     // AP 2: Final Push - execute with massive grit dump
@@ -361,5 +592,6 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 20000,
         .is_ap = true,
+        .effects = &unstoppable_force_effects,
     },
 };
