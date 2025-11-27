@@ -1143,6 +1143,251 @@ But honestly, Zig compiles so fast that full rebuilds are fine for most iteratio
 
 ---
 
+## Content Updates During Active Campaigns
+
+What happens when you ship a balance patch and players are mid-campaign?
+
+### The Problem
+
+```
+Timeline:
+─────────────────────────────────────────────────────────────────
+Day 1: Players start campaign on core@1.2.0
+Day 3: You release core@1.3.0 (nerfed Ice Barrage, buffed Quick Toss)
+Day 3: Players are mid-session, Ice Barrage is their main skill
+─────────────────────────────────────────────────────────────────
+
+What should happen?
+```
+
+### The Answer: Sessions Pin Content Versions
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      CAMPAIGN/SESSION                        │
+│                                                              │
+│   Created: 2024-01-15                                       │
+│   Content Version: core@1.2.0 (pinned at creation)          │
+│   Players: Alice, Bob, Carol                                │
+│                                                              │
+│   This campaign ALWAYS uses 1.2.0 until players choose      │
+│   to upgrade.                                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+When a campaign/session starts, it locks to specific content versions. Updates don't affect in-progress games.
+
+### Player Experience
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SNOW - Main Menu                                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Continue Campaign: "Winter War"                             │
+│    Content: core@1.2.0                                       │
+│    ⚠️ Update available: core@1.3.0                           │
+│    [Continue on 1.2.0]  [View Changes]  [Upgrade Campaign]  │
+│                                                              │
+│  ─────────────────────────────────────────────────────────  │
+│                                                              │
+│  New Game                                                    │
+│    Will use: core@1.3.0 (latest)                            │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Upgrade Options
+
+**Option 1: Stay on old version (default)**
+- Campaign continues exactly as before
+- No surprises mid-playthrough
+- Players can finish their campaign in peace
+
+**Option 2: View changes first**
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Changes in core@1.3.0                                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Skills changed:                                             │
+│    Ice Barrage: damage 45 → 35 (⚠️ You use this!)           │
+│    Quick Toss: aftercast 750ms → 600ms                      │
+│    Power Throw: energy cost 8 → 7                           │
+│                                                              │
+│  Your builds affected:                                       │
+│    Alice (Pitcher): Ice Barrage nerfed                      │
+│    Bob (Shoveler): No changes                               │
+│    Carol (Thermos): No changes                              │
+│                                                              │
+│  [Stay on 1.2.0]  [Upgrade to 1.3.0]                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Option 3: Upgrade campaign**
+- All players must agree (or host decides)
+- Builds are re-validated against new content
+- If a skill was removed, player must replace it before continuing
+
+### Data Model
+
+```sql
+-- Campaigns/sessions track their content version
+CREATE TABLE campaigns (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    host_player_id INTEGER,
+    
+    -- Pinned content versions (set at creation, updated manually)
+    content_manifest TEXT NOT NULL,  -- JSON of pack@version pairs
+    
+    -- Update preferences
+    auto_update BOOLEAN DEFAULT FALSE,  -- TRUE = always use latest
+    update_policy TEXT DEFAULT 'ask',   -- 'ask', 'never', 'auto'
+);
+
+-- Example content_manifest:
+-- {
+--   "core": "1.2.0",
+--   "winter_expansion": "1.0.0",
+--   "competitive": null  // not using this pack
+-- }
+
+-- Track available updates
+CREATE TABLE campaign_updates (
+    id INTEGER PRIMARY KEY,
+    campaign_id INTEGER REFERENCES campaigns(id),
+    pack_name TEXT NOT NULL,
+    current_version TEXT NOT NULL,
+    available_version TEXT NOT NULL,
+    changes_summary TEXT,  -- JSON diff of what changed
+    notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    decision TEXT,  -- 'pending', 'accepted', 'declined'
+    decided_at TIMESTAMP
+);
+```
+
+### Server Behavior
+
+```zig
+pub fn handleClientConnect(client: *Client, campaign_id: u64) !void {
+    const campaign = try db.getCampaign(campaign_id);
+    const manifest = campaign.content_manifest;
+    
+    // Server loads the PINNED versions, not latest
+    const registry = try ContentRegistry.loadManifest(manifest);
+    
+    // Check if client has these versions
+    const client_manifest = client.getContentManifest();
+    const missing = manifest.diffWith(client_manifest);
+    
+    if (missing.len > 0) {
+        // Client needs to download old versions
+        try client.send(.content_needed, missing);
+    } else {
+        // Good to go
+        try client.send(.join_accepted, {});
+    }
+}
+```
+
+### Keeping Old Versions Available
+
+The content system must keep old versions downloadable:
+
+```sql
+-- Content storage keeps ALL versions, not just latest
+CREATE TABLE content_versions (
+    id INTEGER PRIMARY KEY,
+    pack_name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    data BLOB NOT NULL,  -- The actual content
+    created_at TIMESTAMP,
+    deprecated BOOLEAN DEFAULT FALSE,  -- Soft-delete, still downloadable
+    
+    UNIQUE(pack_name, version)
+);
+```
+
+```bash
+# Storage requirements
+core@1.0.0: 50KB
+core@1.1.0: 52KB
+core@1.2.0: 55KB
+core@1.3.0: 58KB
+# Total: ~215KB for all versions of core pack (trivial)
+```
+
+### Edge Cases
+
+**Skill was deleted in new version:**
+```
+Your build uses "Mega Throw" which no longer exists in 1.3.0.
+[Stay on 1.2.0]  [Upgrade and Replace Skill]
+```
+
+**Skill was renamed:**
+```
+"Quick Toss" is now called "Snap Throw" in 1.3.0.
+Your build will be automatically updated.
+[OK]
+```
+
+**Effect changed meaning:**
+```
+"Soaked Through" now reduces armor instead of increasing damage taken.
+This affects your "Frost Barrage" skill.
+[Stay on 1.2.0]  [Upgrade Anyway]
+```
+
+### Update Policies
+
+Players can set their preference:
+
+| Policy | Behavior |
+|--------|----------|
+| `ask` (default) | Prompt when update available |
+| `never` | Never upgrade, stay on pinned version forever |
+| `auto` | Always use latest (competitive players who want current meta) |
+| `security_only` | Only accept updates tagged as security fixes |
+
+### Competitive/Ranked Play
+
+Ranked modes can force specific versions:
+
+```toml
+# Ranked queue config
+[ranked_season_5]
+required_content = "core@1.3.0"  # Everyone on same version
+allow_older = false              # Can't queue with old content
+```
+
+Players see:
+```
+Ranked Queue requires core@1.3.0
+Your campaign is on core@1.2.0
+[Upgrade to Play Ranked]  [Stay in Casual]
+```
+
+### Summary
+
+| Scenario | What Happens |
+|----------|--------------|
+| New update released | Players notified, but nothing changes |
+| Continue existing campaign | Uses pinned version |
+| Start new campaign | Uses latest version |
+| Player wants to upgrade | Show diff, require confirmation |
+| Skill deleted in update | Must replace before upgrading |
+| Ranked queue | Forces specific version |
+
+**The rule: Content updates are opt-in for existing campaigns, automatic for new ones.**
+
+---
+
+## Curated Tournaments ("Cubes")
+
 Like MTG Cube drafts, tournament organizers can create custom rulesets by cherry-picking content from multiple packs.
 
 ### The Problem
