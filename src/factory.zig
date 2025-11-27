@@ -318,9 +318,9 @@ pub const CharacterBuilder = struct {
             }
         }
 
-        // Slot 7: Assign a random AP skill if not already set
+        // Slot 7: Assign a random AP skill from character's school+position pools
         if (char.casting.skills[7] == null) {
-            char.casting.skills[7] = skills.getRandomAPSkill(self.rng);
+            char.casting.skills[7] = getRandomAPSkillFromPools(position_skills, school_skills, self.rng);
         }
     }
 
@@ -347,7 +347,7 @@ pub const CharacterBuilder = struct {
                 &position_skills[self.rng.intRangeAtMost(usize, 0, position_skills.len - 1)]
             else
                 null,
-            .any_ap => skills.getRandomAPSkill(self.rng),
+            .any_ap => getRandomAPSkillFromPools(position_skills, school_skills, self.rng),
             .in_slot => null, // Handled separately
         };
     }
@@ -651,5 +651,40 @@ fn findWallBreakerSkill(position_skills: []const Skill) ?*const Skill {
             return skill;
         }
     }
+    return null;
+}
+
+/// Returns a random AP skill from the character's school and position skill pools
+fn getRandomAPSkillFromPools(position_skills: []const Skill, school_skills: []const Skill, rng: *std.Random) ?*const Skill {
+    // Count AP skills in both pools
+    var ap_count: usize = 0;
+    for (position_skills) |skill| {
+        if (skill.is_ap) ap_count += 1;
+    }
+    for (school_skills) |skill| {
+        if (skill.is_ap) ap_count += 1;
+    }
+
+    if (ap_count == 0) return null;
+
+    // Pick a random AP skill
+    var target_idx = rng.intRangeAtMost(usize, 0, ap_count - 1);
+
+    // Find it in position skills first
+    for (position_skills) |*skill| {
+        if (skill.is_ap) {
+            if (target_idx == 0) return skill;
+            target_idx -= 1;
+        }
+    }
+
+    // Then in school skills
+    for (school_skills) |*skill| {
+        if (skill.is_ap) {
+            if (target_idx == 0) return skill;
+            target_idx -= 1;
+        }
+    }
+
     return null;
 }

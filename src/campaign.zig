@@ -39,6 +39,34 @@ const Character = character.Character;
 const Team = entity.Team;
 
 // ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Returns a random AP skill from a specific school's skill pool
+fn getRandomAPSkillFromSchool(s: School, rng: *std.Random) ?*const Skill {
+    const school_skills = s.getSkills();
+
+    // Count AP skills
+    var ap_count: usize = 0;
+    for (school_skills) |skill| {
+        if (skill.is_ap) ap_count += 1;
+    }
+
+    if (ap_count == 0) return null;
+
+    // Pick a random AP skill
+    var target_idx = rng.intRangeAtMost(usize, 0, ap_count - 1);
+    for (school_skills) |*skill| {
+        if (skill.is_ap) {
+            if (target_idx == 0) return skill;
+            target_idx -= 1;
+        }
+    }
+
+    return null;
+}
+
+// ============================================================================
 // CONSTANTS
 // ============================================================================
 
@@ -277,9 +305,11 @@ pub const SkillCaptureChoice = struct {
 
         if (tier == .none) return choice;
 
-        // AP skill option (elite tier only)
+        // AP skill option (elite tier only) - from boss's school
         if (tier.offersApSkill()) {
-            choice.ap_skill = skills.getRandomAPSkill(@constCast(&rng));
+            if (boss_school) |s| {
+                choice.ap_skill = getRandomAPSkillFromSchool(s, @constCast(&rng));
+            }
         }
 
         // Skill bundle option
@@ -669,17 +699,11 @@ pub const SkillPool = struct {
     pub fn addStartingSkills(self: *SkillPool, player_school: School) void {
         // Add 4 skills from player's school
         const school_skills = player_school.getSkills();
-        const to_add = @min(school_skills.len, 4);
+        const to_add = @min(school_skills.len, 6); // Add first 6 skills from school
         for (0..to_add) |i| {
             self.pool[self.count] = &school_skills[i];
             self.count += 1;
         }
-
-        // Add universal starter skills
-        self.pool[self.count] = &skills.QUICK_TOSS;
-        self.count += 1;
-        self.pool[self.count] = &skills.DODGE_ROLL;
-        self.count += 1;
     }
 
     /// Add skills from a specific school (for friend's school contribution)
@@ -1293,8 +1317,9 @@ test "skill pool management" {
     pool.addStartingSkills(.public_school);
     try std.testing.expect(pool.count >= 4);
 
-    // Try adding duplicate
-    const added = pool.addSkill(&skills.QUICK_TOSS);
+    // Try adding duplicate (first school skill should already be in pool)
+    const public_skills = School.public_school.getSkills();
+    const added = pool.addSkill(&public_skills[0]);
     try std.testing.expect(!added); // Should fail - already have it
 }
 
