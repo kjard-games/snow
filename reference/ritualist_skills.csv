@@ -1,0 +1,140 @@
+Name,Description,Sacrifice,Energy,Activation,Recharge,Attribute,Campaign
+Agony,Binding Ritual. Creates a level 1...10...12 spirit (30...78...90 second lifespan). Causes 3...9...10 Health loss each second to foes in earshot. This spirit loses 3...9...10 Health for each foe that loses Health.,0,10,0.75,30,Channeling Magic,Eye of the North
+Agony (PvP),Binding Ritual. Creates a level 1...7...8 spirit (30...78...90 second lifespan). Causes 3...9...10 Health loss each second to foes in earshot. This spirit loses 3...9...10 Health for each foe that loses Health.,0,10,3,30,Channeling Magic,Eye of the North
+Ancestors' Rage,Skill. (1 second.) End Effect: deals 5...89...110 lightning damage to foes adjacent to target ally.,0,5,0.25,10,Channeling Magic,Factions
+Ancestors' Rage (PvP),Skill. (3 seconds.) Deals 1...33...41 lightning damage to foes adjacent to target ally each second.,0,5,1,8,Channeling Magic,Factions
+Anguish,Binding Ritual. Creates a level 1...9...11 spirit (15...39...45 second lifespan). Its attacks deal 5...17...20 damage. Double damage to hexed foes.,0,15,0.75,45,Communing,Nightfall
+Anguish (PvP),Binding Ritual. Creates a level 1...6...7 spirit (15...39...45 second lifespan). Its attacks deal 5...17...20 damage. Double damage to hexed foes.,0,25,3,45,Communing,Nightfall
+Anguished Was Lingwah,Item Spell. (10...50...60 seconds.) Your Ritualist hexes cost 1...4...5 less energy and last 33% longer. Drop effect: all your Ritualist hexes are recharged.,0,5,2,30,Spawning Power,Factions
+Armor of Unfeeling,Skill. (10...30...35 seconds.) Your spirits within earshot take 50% less damage and are immune to critical attacks.,0,5,1,20,Communing,Factions
+Armor of Unfeeling (PvP),Enchantment Spell. (10...30...35 seconds.) You have 10 base damage reduction while casting binding rituals.,0,10,1,20,Communing,Factions
+Attuned Was Songkai,Elite Item Spell. (45 seconds.) Your spells and binding rituals cost -5...41...50% of the base Energy.,0,10,2,60,Spawning Power,Factions
+Blind Was Mingson,Item Spell. (15...51...60 seconds.) Drop effect: inflicts Blindness condition (3...7...8 seconds) on all nearby foes.,0,5,1,20,Restoration Magic,Factions
+Bloodsong,Binding Ritual. Creates a level 1...10...12 spirit (30...126...150 second lifespan). Its attacks steal 5...21...25 Health.,0,5,0.75,30,Channeling Magic,Factions
+Bloodsong (PvP),Binding Ritual. Creates a level 1...7...8 spirit (30...126...150 second lifespan). Its attacks steal 5...21...25 Health.,0,5,3,30,Channeling Magic,Factions
+Boon of Creation,Enchantment Spell. (15...51...60 seconds.) You gain 5...41...50 Health and 1...5...6 Energy whenever you create a creature.,0,10,2,45,Spawning Power,Factions
+Brutal Weapon,Weapon Spell. (10...34...40 seconds.) Attacks deal +5...13...15 damage. No effect while target ally is enchanted.,0,10,1,15,Communing,Factions
+Caretaker's Charge,Elite Spell. Deals 20...64...75 lightning damage. You gain 5 Energy and 5...41...50 Health if you are holding an item.,0,5,1,4,Channeling Magic,Nightfall
+Channeled Strike,Spell. Deals 5...77...95 lightning damage. Deals 5...29...35 additional lightning damage if you are holding an item.,0,10,2,4,Channeling Magic,Factions
+Clamor of Souls,Elite Spell. Deals 10...54...65 lightning damage to target and nearby foes. You gain 10 Energy if you are within earshot of a spirit or holding a bundle item.,0,10,1,8,Channeling Magic,Factions
+Consume Soul,Elite Spell. Steals 5...49...60 Health. Deal 25...105...125 damage to hostile summoned creatures in the area of target foe.,0,5,1,5,Spawning Power,Factions
+Cruel Was Daoshen,Item Spell. (15...51...60 seconds.) Your Ritualist skills have 10% armor penetration. Drop effect: deals 15...71...85 lightning damage to all nearby foes.,0,15,2,30,Channeling Magic,Factions
+Death Pact Signet,Signet. Resurrects target party member with your current Health and 15...83...100% maximum Energy. For 120 seconds, you die the next time this party member dies.,0,3,3,12,Restoration Magic,Nightfall
+Death Pact Signet (PvP),Signet. Resurrects target party member with your current Health and 15...83...100% maximum Energy. For 120 seconds, you die the next time this party member dies.,0,4,3,12,Restoration Magic,Nightfall
+Defiant Was Xinrae,Elite Item Spell. (15...51...60 seconds.) You cannot lose more than 20% of your max Health from a single hit. Drop effect: steal 5...41...50 Health from nearby foes.,0,5,1,20,Restoration Magic,Factions
+Destruction,Binding Ritual. Create a level 1...11...14 Spirit that dies after 30 seconds. When this Spirit dies, all foes in the area take 5...21...25 damage for each second Spirit was alive (maximum 150 damage).,0,10,0.75,20,Channeling Magic,Factions
+Destruction (PvP),Binding Ritual. Creates a level 1...8...10 spirit (30 second lifespan). On death, it deals 1...8...10 damage for each second it was alive to all foes in the area (maximum 150 damage).,0,10,3,20,Channeling Magic,Factions
+Destructive Was Glaive,Elite Item Spell. (30...54...60 seconds.) Your Ritualist skills have 20% armor penetration. Drop effect: deals 15...71...85 lightning damage to all foes in the area.,0,5,0.75,5,Channeling Magic,Factions
+Destructive Was Glaive (PvP),Elite Item Spell. (30...54...60 seconds.) Your Ritualist skills have 10% armor penetration. Drop effect: deals 15...71...85 lightning damage to all foes in the area.,0,10,1,10,Channeling Magic,Factions
+Disenchantment,Binding Ritual. Creates a level 1...10...12 spirit (10...30...35 second lifespan). Its attacks deal 5...17...20 damage and remove one enchantment.,0,15,1,30,Communing,Factions
+Disenchantment (PvP),Binding Ritual. Creates a level 1...7...8 spirit (10...30...35 second lifespan). Its attacks deal 5...17...20 damage and remove one enchantment.,0,25,5,45,Communing,Factions
+Displacement,Binding Ritual. Creates a level 1...11...14 spirit (30...54...60 second lifespan). Non-spirit allies within range have 75% chance to block. Block effect: this spirit takes 60 damage.,0,15,0.75,45,Communing,Factions
+Displacement (PvP),Binding Ritual. Creates a level 1...8...10 spirit (30...54...60 second lifespan). Non-spirit allies within range have 75% chance to block. Block effect: this spirit takes 60 damage.,0,15,3,45,Communing,Factions
+Dissonance,Binding Ritual. Creates a level 1...10...12 spirit (10...22...25 second lifespan). Its attacks deal 5...17...20 damage and interrupt [actions].,0,25,1,45,Communing,Factions
+Dissonance (PvP),Binding Ritual. Creates a level 1...7...8 spirit (10...22...25 second lifespan). Its attacks deal 5...17...20 damage and interrupt [actions].,0,25,5,45,Communing,Factions
+Doom,Spell. Deals 10...34...40 lightning damage (maximum 135) for each of your recharging binding rituals.,0,10,1,8,Spawning Power,Factions
+Draw Spirit,Spell. Teleports target allied spirit to your location.,0,5,0.25,5,,Factions
+Dulled Weapon,Hex Spell. Also hexes foes adjacent to your target (5...13...15 seconds). Removes ability to land a critical hit. Reduces damage by 1...12...15.,0,15,1,20,Communing,Factions
+Earthbind,Binding Ritual. Creates a level 1...11...14 spirit (15...39...45 second lifespan). Any time non-spirit foes within range are knocked down, they are knocked down for at least 3 seconds. Knock-down cost: this spirit loses 50...30...25 Health.,0,15,1,30,Communing,Factions
+Earthbind (PvP),Binding Ritual. Creates a level 1...8...10 spirit (15...39...45 second lifespan). Any time non-spirit foes within range are knocked down, they are knocked down for at least 3 seconds. Knock-down cost: this spirit loses 50...30...25 Health.,0,15,5,60,Communing,Factions
+Empowerment,Binding Ritual. Creates a level 1...11...14 spirit (15...51...60 second lifespan). Allies in range holding an item gain 15...39...45 maximum Health and 10 maximum Energy.,0,5,0.75,30,Spawning Power,Factions
+Empowerment (PvP),Binding Ritual. Creates a level 1...8...10 spirit (15...51...60 second lifespan). Allies in range holding an item gain 15...39...45 maximum Health and 10 maximum Energy.,0,5,3,30,Spawning Power,Factions
+Energetic Was Lee Sa,Item Spell. (5...13...15 seconds.) You have +2 Energy regeneration. Drop effect: you gain +1...8...10 Energy.,0,10,2,20,Spawning Power,Eye of the North
+Essence Strike,Spell. Deals 15...51...60 lightning damage. You gain 1...7...9 Energy if any spirits are within earshot.,0,5,1,8,Channeling Magic,Factions
+Explosive Growth,Enchantment Spell. (15...51...60 seconds.) Deals 20...56...65 lightning damage each time you create a creature to 5 foes near that creature.,0,5,2,45,Spawning Power,Factions
+Feast of Souls,Spell. Heals all party members for 50...90...100 for each nearby allied spirit. All nearby allied spirits are destroyed.,0,10,0.25,10,Spawning Power,Factions
+Flesh of My Flesh,Spell. Resurrects target party member (half your current Health and 5...17...20% Energy). Lose half your Health.,0,5,4,0,Restoration Magic,Factions
+Flesh of My Flesh (PvP),Spell. Resurrects target party member (half your current Health and 5...17...20% Energy). Lose half your Health.,0,5,4,10,Restoration Magic,Factions
+Gaze from Beyond,Spell. Deals 20...56...65 lightning damage. Inflicts Blindness condition for 2...5...6 seconds if you are within earshot of a spirit.,0,5,1,10,Channeling Magic,Factions
+Gaze of Fury,Binding Ritual. Destroys a spirit. Creates a level 1...11...14 spirit (30...54...60 second lifespan). Its attacks deal 5...17...20 damage.,0,10,0.75,20,Channeling Magic,Nightfall
+Gaze of Fury (PvP),Binding Ritual. Destroys an allied spirit. Creates a level 1...8...10 spirit (30...54...60 second lifespan). Its attacks deal 5...17...20 damage.,0,10,2,20,Channeling Magic,Nightfall
+Generous Was Tsungrai,Item Spell. (15...51...60 seconds.) You have +50...122...140 maximum Health. Drop effect: you gain 100...244...280 Health.,10,10,1,15,Restoration Magic,Factions
+Ghostly Haste,Enchantment Spell. (5...17...20 seconds.) Spells you cast recharge 25% faster. No effect unless you are within earshot of a spirit.,0,10,1,20,Spawning Power,Factions
+Ghostly Weapon,Weapon Spell. (5...17...20 seconds.) Target ally's next attack is unblockable. Cannot self-target.,0,5,0.25,1,Communing,Eye of the North
+Ghostmirror Light,Spell. Heals for 15...75...90. You gain 15...75...90 Health if you are within earshot of a spirit. Cannot self-target.,0,5,1,3,Restoration Magic,Nightfall
+Grasping Was Kuurong,Elite Item Spell. (15...51...60 seconds.) Drop effect: deal 15...63...75 damage and knocks-down all nearby foes.,0,15,1,20,Channeling Magic,Factions
+Guided Weapon,Weapon Spell. (4...9...10 seconds.) Attacks are unblockable.,0,15,2,5,Communing,Factions
+Lamentation,Hex Spell. Also hexes foes near your target (5...17...20 seconds). Causes -0...2...3 Health degeneration. Initial effect: Deals 10...42...50 damage to these foes if you are within earshot of a spirit or corpse.,0,10,1,15,Channeling Magic,Factions
+Life,Binding Ritual. Creates a level 1...11...14 spirit (20 second lifespan). Affects non-spirit allies within range. End effect: heals for 1...6...7 for each second this spirit was alive.,0,10,0.75,20,Restoration Magic,Factions
+Life (PvP),Binding Ritual. Creates a level 1...8...10 spirit (20 second lifespan). Affects non-spirit allies within range. End effect: heals for 1...6...7 for each second this spirit was alive.,0,10,3,20,Restoration Magic,Factions
+Lively Was Naomei,Item Spell. (45 seconds.) Drop effect: resurrects party members in the area (15...63...75% Health and zero Energy).,0,15,6,20,Restoration Magic,Factions
+Mend Body and Soul,Spell. Heals for 20...96...115. Removes one condition for each spirit within earshot.,0,5,0.75,3,Restoration Magic,Factions
+Mending Grip,Spell. Heals for 15...63...75. Removes one condition if target ally is under a Weapon [*sic*] spell.,0,5,1,6,Restoration Magic,Eye of the North
+Mighty Was Vorizun,Item Spell. (15...51...60 seconds.) You have +15 armor and +30 maximum Energy.,0,5,2,30,Communing,Factions
+Nightmare Weapon,Weapon Spell. (12 seconds.) Target ally's attacks steal 10...42...50 Health but deal 10...42...50 less damage. Ends after 3 attacks.,0,5,1,10,Channeling Magic,Factions
+Offering of Spirit,Elite Spell. You gain 8...15...17 Energy. You do not sacrifice Health if any spirits are within earshot.,10,10,0.25,15,Channeling Magic,Nightfall
+Pain,Binding Ritual. Creates a level 1...10...12 spirit (30...126...150 second lifespan). Its attacks deal 5...25...30 damage.,0,5,0.75,30,Communing,Factions
+Pain (PvP),Binding Ritual. Creates a level 1...7...8 spirit (30...126...150 second lifespan). Its attacks deal 5...25...30 damage.,0,5,3,30,Communing,Factions
+Painful Bond,Hex Spell. Also hexes foes near your target (10...18...20 seconds). Spirits do 8...18...20 more damage against these foes.,0,15,1,12,Channeling Magic,Factions
+Preservation,Elite Binding Ritual. Creates a level 1...11...14 spirit (90 second lifespan). Every 4 seconds this spirit heals one non-spirit ally for 10...94...115.,0,5,0.75,20,Restoration Magic,Factions
+Preservation (PvP),Elite Binding Ritual. Creates a level 1...8...10 spirit (90 second lifespan). Every 4 seconds this spirit heals one non-spirit ally for 10...94...115.,0,5,3,20,Restoration Magic,Factions
+Protective Was Kaolai,Item Spell. (15...51...60 seconds.) You have +10 armor. Drop effect: all party members are healed for 10...70...85.,0,10,1,25,Restoration Magic,Factions
+Pure Was Li Ming,Item Spell. (5...17...20 seconds.) Conditions on you expire 10...42...50% faster. Drop effect: removes 1...3...4 condition[s] from allies in earshot.,0,10,1,20,Restoration Magic,Eye of the North
+Reclaim Essence,Elite Spell. All of your Spirits die. If a Spirit dies in this way, you gain 5...17...20 Energy and all of your Binding Rituals are recharged.,0,5,1,30,Spawning Power,Nightfall
+Recovery,Binding Ritual. Creates a level 1...11...14 spirit (30...54...60 second lifespan). Conditions on allies in range expire 20...44...50% faster.,0,15,0.75,30,Restoration Magic,Factions
+Recovery (PvP),Binding Ritual. Creates a level 1...8...10 spirit (30...54...60 second lifespan). Conditions on allies in range expire 20...44...50% faster.,0,15,3,30,Restoration Magic,Factions
+Recuperation,Binding Ritual. Creates a level 1...11...14 spirit (15...39...45 second lifespan). Non-spirit allies within range have +1...3...3 Health regeneration.,0,25,0.75,45,Communing,Factions
+Recuperation (PvP),Binding Ritual. Creates a level 1...8...10 spirit (15...39...45 second lifespan). Non-spirit allies within range have +1...3...3 Health regeneration.,0,5,3,45,Communing,Factions
+Renewing Memories,Enchantment Spell. (5...17...20 seconds.) Your weapon and item spells cost 5...29...35% less Energy. No effect unless holding an item.,0,5,1,20,Spawning Power,Factions
+Renewing Surge,Hex Spell. (8 seconds.) Deals 2...10...12 damage each second. End effect: You gain 1...7...8 energy.,0,5,1,15,Channeling Magic,Nightfall
+Resilient Was Xiko,Item Spell. (5...17...20 seconds.) You have +3 Health regeneration for each hex or condition on you. Drop effect: you lose 1...3...4 condition[s].,0,5,1,10,Restoration Magic,Factions
+Resilient Weapon,Weapon Spell. (3...10...12 seconds.) +1...5...6 Health regeneration and +24 armor. No effect unless target ally is hexed or has a condition.,0,10,1,6,Restoration Magic,Factions
+Resilient Weapon (PvP),Weapon Spell. (3...10...12 seconds.) +1...5...6 Health regeneration and +24 armor. No effect unless target ally is hexed or has a condition.,0,10,3,6,Restoration Magic,Factions
+Ritual Lord,Elite Skill. (5...29...35 seconds.) You have +2...4...4 to all Ritualist attributes for your next skill. If that skill is a Binding Ritual, it recharges 10...50...60% faster and Ritual Lord recharges instantly.,2,0,0.75,45,Spawning Power,Factions
+Rupture Soul,Spell. Destroys target allied spirit. Deals 50...122...140 lightning damage and inflicts Blindness condition (3...10...12 seconds) to nearby foes.,0,10,0.75,5,Spawning Power,Factions
+Shadowsong,Binding Ritual. Creates a level 1...8...10 spirit (30-second lifespan). Its attacks deal 5...17...20 damage and inflict Blindness condition (1...5...6 seconds).,0,15,1,30,Communing,Factions
+Shadowsong (PvP),Binding Ritual. Creates a level 1...5...6 spirit (30-second lifespan). Its attacks deal 5...17...20 damage and inflict Blindness condition (1...5...6 seconds).,0,15,5,45,Communing,Factions
+Shelter,Binding Ritual. Creates a level 1...10...12 spirit (30...54...60 second lifespan). Non-spirit allies within range cannot lose more than 10% maximum Health from a single attack. Damage prevention cost: this spirit loses 75...51...45 Health.,0,25,1,45,Communing,Factions
+Shelter (PvP),Binding Ritual. Creates a level 1...7...8 spirit (30...54...60 second lifespan). Non-spirit allies within range cannot lose more than 10% maximum Health from a single attack. Damage prevention cost: this spirit loses 75...51...45 Health.,0,15,5,60,Communing,Factions
+Signet of Binding,Signet. You lose 200...80...50 Health. Gain control of target enemy-controlled spirit. 50% failure chance unless Spawning Power 5 or more.,0,0,2,15,Spawning Power,Factions
+Signet of Creation,Signet. Gain 4 Energy (maximum 3...10...12 Energy) for each summoned creature you control within earshot.,0,0,1,20,Spawning Power,Factions
+Signet of Ghostly Might,Elite Signet. (5...17...20 seconds.) All spirits you control within earshot attack 33% faster and deal +5...9...10 damage.,0,0,1,15,Communing,Factions
+Signet of Ghostly Might (PvP),Elite Signet. Target allied summoned creature deals +5...29...35 damage. That creature is destroyed after 10 seconds.,0,0,1,5,Communing,Factions
+Signet of Spirits,Elite Signet. Creates 3 level 1...10...12 spirits (60 second lifespan). These spirits deal 5...17...20 damage with attacks.,0,0,1,30,Channeling Magic,Factions
+Signet of Spirits (PvP),Elite Signet. You gain 3...10...12 Energy. No effect unless you are within earshot of a spirit.,0,0,1,20,Channeling Magic,Factions
+Signet of Suffering,Elite Signet. You Bleed for 6 seconds. Applies Bleeding (2...13...16 seconds) to the target of your next Ritualist skill.,0,0,0,4,Blood Magic,Nightfall
+Soul Barbs,Hex Spell. (30 seconds.) Deals 15...27...30 damage when an enchantment or hex is cast on target foe.,0,10,2,20,Communing,Factions
+Soul Bind,Elite Hex Spell. (30 seconds.) Every time target foe is healed, the healer takes 20...68...80 damage. Ends if target is suffering from a Smiting Prayers hex.,0,10,1,5,Communing,Factions
+Soul Feast,Spell. You gain 50...234...280 Health. Exploits a fresh corpse.,0,10,1,0,Death Magic,Core
+Soul Leech,Elite Hex Spell. (10 seconds.) Steal 16...67...80 Health whenever target foe casts a spell.,0,10,2,15,Blood Magic,Prophecies
+Soul Taker,Elite Enchantment Spell. (3...25...30 seconds.) Attacks deal +15...19...20 damage and sacrifice 15...19...20 health. PvE Skill,0,5,1,15,Soul Reaping,Core
+Spiritleech Aura,Hex Spell. (10...34...40 seconds.) Cold damage interrupts target foe's skills. Interruption cost: you lose 10...6...5 Energy or Shivers of Dread ends.,0,10,2,15,Communing,Factions
+Spirit Boon Strike,Spell. Deals 20...56...65 lightning damage. Spirits you control within earshot gain 20...56...65 Health.,0,5,1,3,Channeling Magic,Factions
+Spirit Burn,Spell. Deals 5...41...50 lightning damage. Inflicts Burning condition (1...4...5 seconds) if you are within earshot of a spirit.,0,5,1,6,Channeling Magic,Factions
+Spirit Channeling,Elite Enchantment Spell. (12 seconds.) You have +1...5...6 Energy regeneration. Initial effect: you gain 3...10...12 Energy if you are within earshot of a spirit.,0,5,1,30,Channeling Magic,Factions
+Spirit Light,Spell. Heals for 60...156...180. You don't sacrifice Health if you are within earshot of any spirits.,10,10,1,3,Restoration Magic,Factions
+Spirit Light Weapon,Elite Weapon Spell. (10 seconds.) Target ally gains 1...12...15 Health each second. 1...12...15 more healing per second while within earshot of a spirit.,0,5,1,5,Restoration Magic,Factions
+Spirit Rift,Spell. After 3 seconds, affects foes adjacent to target's initial location. Deals 25...105...125 lightning damage and inflicts Cracked Armor (1...16...20 seconds).,0,10,2,5,Channeling Magic,Factions
+Spirit Siphon,Spell. The spirit nearest you loses all Energy. You gain 15...43...50% of that Energy.,0,5,0.25,3,Channeling Magic,Factions
+Spirit Transfer,Spell. The spirit nearest you loses 5...41...50 Health. Heals target ally for 5 for each point of Health lost.,0,10,0.25,5,Restoration Magic,Factions
+Spirit to Flesh,Touch Spell. Destroys target touched allied spirit. Heals nearby allies for 30...198...240.,0,10,0.75,15,Spawning Power,Factions
+Spiritleech Aura,Hex Spell. (10...34...40 seconds.) Causes -1...4...5 Health degeneration (10 seconds). Initial effect: deals 10...54...65 cold damage. Hex is only applied if target foe has a condition.,0,10,1,15,Death Magic,Factions
+Soothing,Binding Ritual. Creates a level 1...10...12 spirit (15...39...45 second lifespan). Building adrenaline takes twice as long for foes within range.,0,15,1,45,Communing,Factions
+Soothing (PvP),Binding Ritual. Creates a level 1...7...8 spirit (15...39...45 second lifespan). Building adrenaline takes twice as long for foes within range.,0,5,3,60,Communing,Factions
+Soothing Memories,Spell. Heals for 10...82...100. You gain 3 Energy if you are holding an item.,0,5,0.75,4,Restoration Magic,Factions
+Soul Twisting,Elite Skill. (5...37...45 seconds.) Your Binding Rituals cost 15 less Energy (minimum 10) and recharge instantly. Ends after 1...3...3 Binding Ritual[s].,0,5,0,15,Spawning Power,Factions
+Sundering Weapon,Weapon Spell. (4...9...10 seconds.) Target ally's next 3 attacks inflict Cracked Armor condition (5...17...20 seconds) and have 10% armor penetration.,0,5,1,10,Communing,Factions
+Tranquil Was Tanasen,Elite Item Spell. (5...17...20 seconds.) You have +10...22...25 armor. You cannot be interrupted.,0,10,1,20,Restoration Magic,Factions
+Union,Binding Ritual. Creates a level 1...10...12 spirit (30...54...60 second lifespan). Whenever a non-spirit ally within range takes damage or life steal, it is reduced by 15 and the spirit takes 15 damage.,0,15,0.75,45,Communing,Factions
+Union (PvP),Binding Ritual. Creates a level 1...7...8 spirit (30...54...60 second lifespan). Whenever a non-spirit ally within range takes damage or life steal, that damage is reduced by 15 and the spirit takes 15 damage.,0,15,3,60,Communing,Factions
+Vampirism,Binding Ritual. Creates a level 4...14 spirit (lifespan 75...150 seconds). Its attacks steal 10...20 Health, and you are healed for 10...20.,0,10,0.75,30,Spawning Power,Factions
+Vengeful Was Khanhei,Elite Item Spell. (5...10...11 seconds.) You steal 5...29...35 Health from every foe that hits you with an attack.,0,5,1,20,Restoration Magic,Factions
+Vengeful Weapon,Elite Weapon Spell. (8 seconds.) Steals 15...51...60 Health from the next foe that deals damage or life steal to target ally.,0,5,1,3,Restoration Magic,Factions
+Vengeful Weapon (PvP),Elite Weapon Spell. (8 seconds.) Steals 15...51...60 Health from the next foe that deals damage or life steal to target ally.,0,5,3,3,Restoration Magic,Factions
+Vital Weapon,Elite Weapon Spell. (8 seconds.) +40...148...175 maximum Health.,0,5,1,2,Communing,Factions
+Vocal Minority,Hex Spell. Also hexes foes near target (5...17...20 seconds). These foes cannot use shouts or chants.,0,10,1,20,Communing,Factions
+Wail of Doom,Elite Hex Spell. (1...3...4 second[s]).) Target foe's attributes are 0.,10,10,0.25,15,Soul Reaping,Factions
+Wanderlust,Elite Binding Ritual. Creates a level 1...10...12 spirit (30...54...60 second lifespan). Its attacks against stationary foes cause knock-down. Knock-down cost: this spirit loses 70...54...50 Health.,0,10,1,45,Communing,Factions
+Wanderlust (PvP),Elite Binding Ritual. Creates a level 1...7...8 spirit (30...54...60 second lifespan). Its attacks against stationary foes cause knock-down. Knock-down cost: this spirit loses 70...54...50 Health.,0,15,5,60,Communing,Factions
+Wielder's Boon,Spell. Heals for 15...51...60. Heals for 15...63...75 more if this ally is under a Weapon [*sic*] spell.,0,5,0.25,4,Restoration Magic,Factions
+Wielder's Remedy,Enchantment Spell. (10...26...30 seconds.) Whenever you cast a weapon spell, the targeted ally loses one condition.,0,5,1,10,Restoration Magic,Factions
+Wielder's Remedy (PvP),Enchantment Spell. (10...26...30 seconds.) Whenever you cast a weapon spell, the targeted ally loses one condition.,0,5,3,10,Restoration Magic,Factions
+Wielder's Strike,Spell. Deals 5...41...50 lightning damage. Deals 10...34...40 more lightning damage if you are under a weapon spell.,0,5,1,3,Channeling Magic,Factions
+Wielder's Zeal,Elite Enchantment Spell. (10...26...30 seconds.) You gain 1...4...5 Energy whenever you cast a weapon spell.,0,10,1,10,Channeling Magic,Factions
+Weapons of Three Forges,Elite Weapon Spell. (3...17...20 seconds.) Allies in earshot gain effect of a random Weapon Spell. Allied spirits are not affected. PvE Skill,0,10,2,15,Spawning Power,Factions
+Wielder's Boon,Spell. Heals for 15...51...60. Heals for 15...63...75 more if this ally is under a Weapon [*sic*] spell.,0,5,0.25,4,Restoration Magic,Factions
+Wielder's Remedy,Enchantment Spell. (10...26...30 seconds.) Whenever you cast a weapon spell, the targeted ally loses one condition.,0,5,1,10,Restoration Magic,Factions
+Wielder's Strike,Spell. Deals 5...41...50 lightning damage. Deals 10...34...40 more lightning damage if you are under a weapon spell.,0,5,1,3,Channeling Magic,Factions
+Wielder's Zeal,Elite Enchantment Spell. (10...26...30 seconds.) You gain 1...4...5 Energy whenever you cast a weapon spell.,0,10,3,10,Channeling Magic,Factions
+Xinrae's Weapon,Elite Weapon Spell. (8 seconds.) The next time target ally takes damage from a foe, that damage is limited to 5% of target ally's max Health and that ally steals 20...68...80 Health from that foe.,0,5,0.25,3,Restoration Magic,Factions
+Xinrae's Weapon (PvP),Elite Weapon Spell. (8 seconds.) The next time target ally takes damage from a foe, that damage is limited to 5% of target ally's max Health and that ally steals 20...68...80 Health from that foe.,0,5,3,3,Restoration Magic,Factions

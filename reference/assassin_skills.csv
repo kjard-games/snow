@@ -1,0 +1,115 @@
+name,campaign,attribute,elite,adrenaline,energy,activation,recharge,description
+Assassin's Promise,Factions,Deadly Arts,1,0,5,0.75,45,Elite Hex Spell. (5...13...15 seconds.) You gain 5...17...20 Energy and all your skills recharge if target foe dies.
+Assassin's Remedy,Nightfall,Critical Strikes,0,0,5,1,20,Enchantment Spell. (30 seconds.) Your next 1...8...10 attack skills each remove one condition.
+Assault Enchantments,Nightfall,,0,0,5,0.25,8,Elite Skill. Removes all enchantments. Must follow a dual attack.
+Augury of Death,Nightfall,Deadly Arts,0,0,5,1,20,Half Range Hex Spell. (5...29...35 seconds.) Inflict Deep Wound condition (5...17...20 seconds) and Shadow Step to target foe the next time damage would drop this foe's Health below 50%.
+Aura of Displacement,Factions,,1,-1,10,0.25,20,Elite Enchantment Spell. Shadow Step to target foe. End effect: return to your original location.
+Beguiling Haze,Factions,Shadow Arts,1,0,15,0.25,20,Elite Spell. You Shadow Step to this foe. Inflicts Dazed condition (3...8...9 seconds).
+Black Lotus Strike,Factions,Critical Strikes,0,0,10,0,6,Lead Attack. Deals +10...27...31 damage. You gain 5...11...13 Energy if target foe is hexed.
+Black Mantis Thrust,Factions,Dagger Mastery,0,0,5,1,6,Lead Attack. Deals +8...18...20 damage. Inflicts Crippled condition (3...13...15 seconds) if target foe is hexed.
+Black Spider Strike,Nightfall,Dagger Mastery,0,0,10,0,12,Off-Hand Attack. Deals +5...17...20 damage. Inflicts Poisoned condition (5...17...20 seconds). Must strike a hexed foe.
+Blades of Steel,Factions,Dagger Mastery,0,0,5,0,8,Dual Attack. Deals +5...14...16 damage (maximum 60) for each recharging dagger attack. Must follow an off-hand attack.
+Blinding Powder,Factions,Shadow Arts,0,0,5,0.25,20,Spell. Inflicts Blindness condition (3...13...15 seconds) on target and adjacent foes. Must follow an off-hand attack.
+Caltrops,Factions,Shadow Arts,0,0,10,0.25,10,Half Range Spell. Inflicts Crippled condition (5...13...15 seconds) on target and adjacent foes.
+Crippling Dagger,Factions,Deadly Arts,0,0,5,1,5,Half Range Spell. Projectile: deals 15...51...60 earth damage. Inflicts Crippled condition (3...13...15 seconds) if target foe is moving.
+Critical Agility,Nightfall,Critical Strikes,0,0,5,1,30,Enchantment Spell. (4 seconds plus 1 second for each rank of Critical Strikes.) You attack 33% faster and gain +15...25 armor. Renewal: every time you land a critical hit.
+Critical Defenses,Factions,Critical Strikes,0,0,10,1,30,Enchantment Spell. (4...9...10 seconds.) You have a 75% chance to block. Renewal: every time you land a critical hit.
+Critical Eye,Factions,Critical Strikes,0,0,5,0,30,Skill. (10...30...35 seconds.) You have +3...13...15% chance to land a critical hit. You gain 1 Energy whenever you land a critical hit.
+Critical Strike,Factions,Critical Strikes,0,0,5,0,6,Dual Attack. Deals +10...26...30 damage. Automatic critical hit. You gain 1...3...3 Energy. Must follow an off-hand attack.
+Dancing Daggers,Factions,Deadly Arts,0,0,5,1,5,Half Range Spell. Three projectiles: each deals 5...29...35 earth damage. Counts as a lead attack.
+Dark Apostasy,Factions,Critical Strikes,1,0,10,0.25,15,Elite Enchantment Spell. (3...14...17 seconds.) Your critical hits remove an enchantment. Removal cost: lose 10...5...4 Energy or Dark Apostasy ends.
+Dark Escape,Factions,Shadow Arts,0,0,5,0,30,Stance. (5...13...15 seconds.) You move 25% faster and take half damage. Ends if you hit with an attack.
+Dark Prison,Factions,Deadly Arts,0,0,10,0.25,30,Hex Spell. Shadow Step to target foe. This foe moves 33% slower (1...5...6 seconds).
+Dash,Factions,,0,0,5,0,8,Stance. (3 seconds.) You move 50% faster.
+Deadly Haste,Nightfall,Critical Strikes,0,0,10,1,20,Enchantment Spell. (10...30...35 seconds.) Your half-ranged spells cast 5...41...50% faster and recharge 5...41...50% faster.
+Deadly Paradox,Nightfall,Deadly Arts,0,0,15,0,10,Stance. (5...13...15 seconds.) Your Assassin skills activate and recharge 33% faster. Disables your attack skills (10 seconds).
+Death Blossom,Factions,Dagger Mastery,0,0,5,0,2,Dual Attack. Deals +20...40...45 damage. Also affects foes adjacent to target foe. Must follow an off-hand attack.
+Death's Charge,Factions,Shadow Arts,0,0,5,0.25,30,Spell. You Shadow Step to target foe. You are healed for 65...173...200 if this foe has more Health than you.
+Death's Retreat,Nightfall,Shadow Arts,0,0,5,0.25,20,Spell. Gain 40...112...130 Health if you have less Health than target ally. Initial effect: Shadow Step to this ally. Cannot self-target.
+Desperate Strike,Factions,Dagger Mastery,0,0,5,0,6,Lead Attack. Deals +15...51...60 damage if you have less than 50...74...80% Health.
+Disrupting Dagger,Nightfall,Deadly Arts,0,0,5,0.25,10,Half Range Spell. Projectile: deals 10...30...35 earth damage. Interrupts a skill.
+Disrupting Stab,Factions,Dagger Mastery,0,0,5,0,10,Lead Attack. Interrupts an action. If the interrupted action was a spell, it is disabled (3...9...10 seconds).
+Enduring Toxin,Factions,Deadly Arts,0,0,5,0.25,10,Hex Spell. (5 seconds.) Causes -1...4...5 Health degeneration. Renewal: if the target foe is moving when this hex ends.
+Entangling Asp,Factions,Deadly Arts,0,0,10,1,20,Spell. Causes knock-down. Inflicts Poisoned condition (5...17...20 seconds). Must follow a lead attack.
+Exhausting Assault,Factions,Dagger Mastery,0,0,5,0.5,8,Dual Attack. Interrupts an action. Inflicts 10 Overcast if the interrupted action was a spell. Must follow a lead attack.
+Expose Defenses,Factions,Deadly Arts,0,0,10,1,25,Hex Spell. (1...9...11 seconds.) Target foe cannot block your attacks.
+Expunge Enchantments,Factions,Deadly Arts,0,0,10,0.75,30,Touch Skill. Removes one enchantment for each non-attack skill you have. All your non-attack skills are disabled (10...6...5 seconds).
+Falling Lotus Strike,Eye of the North,Dagger Mastery,0,0,5,0,12,Off-Hand Attack. Deals +15...31...35 damage; you gain 1...10...12 Energy. No effect unless target foe is knocked-down.
+Falling Spider,Factions,Dagger Mastery,0,0,5,0,8,Off-Hand Attack. Deals +15...31...35 damage. Inflicts Poisoned condition (5...17...20 seconds). No effect unless target foe is knocked-down.
+Feigned Neutrality,Nightfall,Shadow Arts,0,0,5,0.25,25,Enchantment Spell. (4...9...10 seconds.) You have +7 Health regeneration and +80 armor. Ends if you hit with an attack or use a skill.
+Flashing Blades,Factions,Dagger Mastery,1,0,10,0,30,Elite Stance. (5...25...30 seconds.) You have 75% chance to block while attacking. Block effect: 5...17...20 damage to your attacker.
+Fox Fangs,Factions,Dagger Mastery,0,0,5,0.5,3,Off-Hand Attack. Deals +10...30...35 damage. Unblockable. Must follow a lead attack.
+Fox's Promise,Nightfall,Dagger Mastery,1,0,10,1,20,Elite Enchantment Spell. (5...17...20 seconds.) Your dagger attacks are unblockable. Ends the next time you fail to hit.
+Golden Fang Strike,Eye of the North,Dagger Mastery,0,0,5,0,4,Off-Hand Attack. Inflicts Deep Wound condition (5...17...20 seconds) if you are enchanted. Must follow a lead attack.
+Golden Fox Strike,Nightfall,Dagger Mastery,0,0,5,0,4,Lead Attack. Deals +10...26...30 damage. Unblockable if you are Enchanted.
+Golden Lotus Strike,Factions,Dagger Mastery,0,0,5,0,5,Lead Attack. Deals +5...17...20 damage. You gain 5...7...8 Energy if you are enchanted.
+Golden Phoenix Strike,Factions,Dagger Mastery,0,0,5,0,8,Off-Hand Attack. Deals +10...26...30 damage to target and deals 10...26...30 damage to adjacent foes. Fails if you are not enchanted.
+Golden Skull Strike,Nightfall,Dagger Mastery,1,0,10,0,15,Elite Off-Hand Attack. Inflicts Dazed condition (1...4...5 seconds). No effect unless you are enchanted.
+Heart of Shadow,Factions,Shadow Arts,0,0,5,0.25,15,Spell. You are healed for 30...126...150 and you Shadow Step to a nearby location directly away from your target.
+Hidden Caltrops,Nightfall,Shadow Arts,1,0,5,1,12,Elite Hex Spell. (1...8...10 seconds.) Causes 50% slower movement. End effect: inflicts Crippled condition (1...12...15 seconds). Your non-Assassin skills are disabled (10 seconds.)
+Horns of the Ox,Factions,Dagger Mastery,0,0,5,0,12,Dual Attack. Deals +1...9...11 damage. Causes knock-down if the target foe is not adjacent to any of its allies. Must follow an off-hand attack.
+Impale,Factions,Deadly Arts,0,0,5,1,15,Skill. Deals 25...85...100 earth damage. Inflicts Deep Wound condition (5...17...20 seconds). Must follow a dual attack.
+Iron Palm,Factions,Deadly Arts,0,0,5,0.75,20,Touch Skill. Deals 5...41...50 damage. Causes knock-down if target foe is hexed or has a condition. Counts as a lead attack.
+Jagged Strike,Factions,Dagger Mastery,0,0,5,0.5,1,Lead Attack. Inflicts Bleeding condition (5...17...20 seconds).
+Jungle Strike,Factions,Dagger Mastery,0,0,5,0.5,10,Off-Hand Attack. Deals +10...22...25 damage. Deals +1...25...31 damage to target and adjacent foes if target foe is Crippled. Must follow a lead attack.
+Leaping Mantis Sting,Factions,Dagger Mastery,0,0,5,0.5,8,Lead Attack. Deals +5...13...15 damage. Inflicts Crippled condition (3...13...15 seconds) if target foe is moving.
+Lift Enchantment,Nightfall,,0,0,5,0.25,10,Touch Skill. Removes one enchantment. No effect unless target foe is knocked-down.
+Locust's Fury,Factions,Critical Strikes,1,0,10,1,10,Elite Enchantment Spell. (10...30...35 seconds.) You have +50% chance to double strike. No effect unless you are wielding daggers.
+Lotus Strike,Eye of the North,Dagger Mastery,0,0,10,0,12,Off-Hand Attack. Deals +10...22...25 damage; you gain 5...17...20 Energy. Must follow a lead attack.
+Malicious Strike,Nightfall,Critical Strikes,0,0,5,0,6,Melee Attack. If target foe has a condition, this attack deals +10...26...30 damage and is a critical hit.
+Mantis Touch,Factions,Deadly Arts,0,0,5,0.75,15,Spell. Inflicts Crippled condition (5...17...20 seconds). This skill counts as an off-hand attack. Must follow a lead attack.
+Mark of Death,Factions,Deadly Arts,0,0,10,0.25,20,Hex Spell. (4...9...10 seconds.) Target foe receives 33% less from healing.
+Mark of Insecurity,Nightfall,Deadly Arts,1,0,5,1,10,Elite Hex Spell. (5...21...25 seconds.) Causes 1...3...3 Health degeneration. Enchantments and stances expire 30...70...80% faster on target foe. Disables your non-Assassin skills (10 seconds).
+Mark of Instability,Factions,,0,0,10,0.25,20,Hex Spell. (20 seconds.) Causes knock-down the next time you hit target foe with a dual attack.
+Mirrored Stance,Factions,Shadow Arts,0,0,5,0.25,15,Hex Spell. (10...30...35 seconds.) You enter any stance used by target foe.
+Moebius Strike,Factions,Dagger Mastery,1,0,5,0,2,Elite Off-Hand Attack. Deals +10...30...35 damage. Recharges all your other attack skills if target foe's Health is below 50%. Must follow a dual attack.
+Nine Tail Strike,Factions,Dagger Mastery,0,0,5,0,8,Dual Attack. Deals +15...35...40 damage. Unblockable. Must follow an off-hand attack.
+Palm Strike,Factions,Critical Strikes,1,0,5,0.75,7,Elite Touch Skill. Deals 10...54...65 damage and inflicts Crippled condition (1...4...5 seconds). This skill counts as an off-hand attack.
+Recall,Factions,,1,-1,15,1,10,Enchantment Spell. End effect: Shadow Step to target ally. Cannot self-target and disables all of your skills for 10 seconds when it ends.
+Repeating Strike,Factions,Dagger Mastery,0,0,5,0,0,Off-Hand Attack. Deals +10...26...30 damage. This skill has +15 second recharge time if it misses. Must follow an off-hand attack.
+Return,Factions,Shadow Arts,0,0,5,0.25,15,Spell. Inflicts Crippled condition (3...7...8 seconds) on all foes adjacent to you. You Shadow Step to target ally's location. Cannot self-target.
+Sadist's Signet,Eye of the North,Deadly Arts,0,0,0,1,8,Signet. You gain 10...34...40 Health for each condition on target foe.
+Scorpion Wire,Factions,Deadly Arts,0,0,5,1,10,Half Range Hex Spell. (8...18...20 seconds.) Shadow Step to target foe and cause knock-down the next time this foe is more than 100' away from you.
+Seeping Wound,Factions,Critical Strikes,1,0,15,0.25,12,Elite Half Range Hex Spell. (1...6...7 seconds.) Target foe moves 33% slower. This foe takes 5...21...25 damage each second while suffering from a condition.
+Shadow Fang,Eye of the North,Deadly Arts,0,0,10,0.25,45,Hex Spell. Shadow Step to target foe. End effect after 10 seconds: inflicts Deep Wound condition (5...17...20 seconds); you return to your original location.
+Shadow Form,Factions,Shadow Arts,1,0,5,1,30,Elite Enchantment Spell. (5...18...21 seconds.) Enemy spells cannot target you. Gain 5 damage reduction for each Assassin enchantment on you. You cannot deal more than 5...21...25 damage with a single skill or attack.
+Shadow Meld,Nightfall,,1,-1,10,0.25,20,Elite Enchantment Spell. Shadow Step to target ally. End effect: return to your original location. Cannot self-target.
+Shadow Prison,Nightfall,Deadly Arts,1,0,10,0.25,25,Elite Hex Spell. Shadow Step to target foe. This foe moves 66% slower (1...6...7 seconds).
+Shadow Refuge,Factions,Shadow Arts,0,0,5,1,8,Enchantment Spell. (6 seconds.) You have +5...9...10 Health regeneration. End effect: heals you for 40...88...100 if you are attacking.
+Shadow Sanctuary,Factions,Shadow Arts,0,0,5,0.25,30,Enchantment Spell. (10 seconds.) You gain +7...10 Health regeneration and +40 armor. You are Blind (5 seconds).
+Shadow Shroud,Factions,Shadow Arts,1,0,10,1,20,Elite Hex Spell. (3...8...9 seconds.) Target foe cannot be the target of enchantments.
+Shadow Theft,Nightfall,Critical Strikes,1,0,5,0.25,20,Elite Skill. Shadow Step to target foe. For 5...17...20 seconds that foe's attributes are reduced by 1...4...5 and your attributes are increased by 1...4...5. Counts as a Lead Attack. PvE Skill
+Shadow Walk,Nightfall,,0,0,5,0,30,Stance. (15 seconds.) Shadow Step to target foe. End effect: return to your original location. Disables your attack skills for 1 second. Disables your stances and enchantments for 10 seconds.
+Shadow of Haste,Factions,Shadow Arts,0,0,5,0,45,Stance. (10...34...40 seconds.) You move 15% faster. End effect: return to your original location.
+Shadowy Burden,Factions,Shadow Arts,0,0,10,0.25,15,Hex Spell. (3...13...15 seconds.) Target foe moves 25% slower and has 20 less armor against your attacks. Armor reduction only affects this foe while it has no other hexes.
+Shameful Fear,Factions,Deadly Arts,0,0,10,2,10,Hex Spell. (10 seconds.) Target foe takes 5...17...20 damage each second while moving, but moves 10% faster.
+Sharpen Daggers,Factions,Critical Strikes,0,0,5,1,20,Enchantment Spell. (5...25...30 seconds.) Your dagger attacks inflict the Bleeding condition (5...13...15 seconds).
+Shattering Assault,Nightfall,Critical Strikes,1,0,10,0,6,Elite Dual Attack. Deals 5...41...50 damage. Removes one enchantment. Unblockable. Must follow an off-hand attack.
+Shroud of Distress,Factions,Shadow Arts,0,0,10,1,45,Enchantment Spell. (30...54...60 seconds.) You have 3...7...8 health regeneration and a 75% chance to block. No effect unless your Health is below 50%.
+Shroud of Silence,Factions,Deadly Arts,1,0,10,0.75,30,Elite Touch Hex Spell. (1...3...3 seconds.) Target foe cannot cast spells. Your spells are disabled for 15 seconds.
+Signet of Deadly Corruption,Eye of the North,Deadly Arts,0,0,0,1,12,Signet. Deals 5...29...35 damage (maximum 130) for each condition on target foe.
+Signet of Malice,Factions,,0,0,0,0.25,5,Signet. You lose one condition for each condition on target foe.
+Signet of Shadows,Factions,Deadly Arts,0,0,0,1,30,Signet. Deals 5...29...35 damage. Deals 15...51...60 more damage if target foe is Blinded.
+Signet of Toxic Shock,Nightfall,Deadly Arts,0,0,0,1,15,Signet. Deals 10...82...100 damage. No effect unless target foe is Poisoned
+Signet of Twilight,Nightfall,,0,0,0,2,20,Signet. Removes one enchantment for each hex on target foe.
+Siphon Speed,Factions,Deadly Arts,0,0,5,1,30,Half Range Hex Spell. (5...13...15 seconds.) Target foe moves 33% slower and you move 33% faster. Recharges 50% faster if cast on a moving foe.
+Siphon Strength,Factions,Deadly Arts,1,0,10,1,10,Elite Hex Spell. (5...17...20 seconds.) Target foe deals -5...41...50 attack damage. You have +33% chance to land a critical hit on this foe.
+Smoke Powder Defense,Eye of the North,Shadow Arts,0,0,5,0,20,Stance. (8 seconds.) The next time you are struck, you take half damage and inflict Blindness condition (2...5...6 seconds) on adjacent foes.
+Spirit Walk,Factions,,0,0,5,0.25,8,Spell. Shadow Step to target Spirit.
+Swap,Nightfall,,0,0,5,0.25,10,Spell. You and target summoned creature Shadow Step to each other's locations.
+Temple Strike,Factions,Dagger Mastery,1,0,15,0,20,Elite Off-Hand Attack. Interrupts a spell. Inflicts Dazed and Blindness conditions (1...8...10 seconds). Must follow a lead attack.
+Trampling Ox,Eye of the North,Dagger Mastery,0,0,5,0,8,Dual Attack. Deals +5...17...20 damage; causes knock-down if target foe is Crippled. Must follow an off-hand attack.
+Twisting Fangs,Factions,Critical Strikes,0,0,10,0,15,Dual Attack. Deals +10...18...20 damage. Inflicts Bleeding and Deep Wound conditions (5...17...20 seconds). Must follow an off-hand attack.
+Unseen Fury,Factions,Shadow Arts,0,0,5,0,20,Stance. Inflicts Blindness condition on adjacent foes (3...9...10). You cannot be blocked by Blinded foes for 10...26...30 seconds.
+Unsuspecting Strike,Factions,Critical Strikes,0,0,10,0,2,Lead Attack. Deals +19...29...31 damage. Deals 15...63...75 more damage if target foe's Health is above 90%.
+Vampiric Assault,Eye of the North,Deadly Arts,0,0,5,0,8,Dual Attack. Steals 10...34...40 Health if this attack hits. Must follow an off-hand attack.
+Viper's Defense,Factions,Shadow Arts,0,0,5,0.25,10,Spell. Inflict Poisoned condition (5...17...20 seconds) on all adjacent foes and Shadow Step to a nearby location directly away from your target.
+Vicious Attack,Nightfall,Dagger Mastery,0,0,5,0,8,Spear Attack. Deals +5...17...20 damage. Inflicts Deep Wound condition (5...13...15 seconds) with a critical hit.
+Wastrel's Collapse,Nightfall,,0,0,5,0.25,20,Elite Skill. Shadow Step to target foe. Causes knock-down if target foe is not using a skill. Disables your non-dagger attack skills (10 seconds).
+Way of Perfection,Factions,Shadow Arts,0,0,5,0.25,30,Enchantment Spell. (60 seconds.) Your critical hits heal you for 10...34...40.
+Way of the Assassin,Nightfall,Critical Strikes,1,0,5,0,12,Elite Stance. (20 seconds.) While wielding daggers, you attack 5...17...20% faster and have +5...29...35% chance to land a critical hit.
+Way of the Empty Palm,Factions,Deadly Arts,1,0,5,0.25,10,Elite Enchantment Spell. (5...17...20 seconds.) Your off-hand and dual attacks cost no Energy.
+Way of the Fox,Factions,Shadow Arts,0,0,5,0.25,45,Enchantment Spell. (10...30...35 seconds.) Your attacks are unblockable. Ends after 1...5...6 attacks.
+Way of the Lotus,Factions,Shadow Arts,0,0,5,0.25,20,Enchantment Spell. (20 seconds.) You gain 5...17...20 Energy the next time you hit with a dual attack.
+Way of the Master,Eye of the North,Critical Strikes,0,0,5,0.25,30,Enchantment Spell. (60 seconds.) While holding a non-dagger weapon, you have +3...27...33% chance to land a critical hit.
+Wild Strike,Factions,Dagger Mastery,0,0,5,0,4,Off-Hand Attack. Deals +10...30...35 damage. Removes target foe's stance. Unblockable. Must follow a lead attack.

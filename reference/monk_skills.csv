@@ -1,46 +1,153 @@
 Name,Description,Upkeep,Energy,Activation,Recharge,Attribute,Campaign
 Aegis,Enchantment Spell. Enchants all party members within earshot (5...10...11 seconds). 50% chance to block.,0,10,2,30,Protection Prayers,Core
 Aegis (PvP),Enchantment Spell. (1...3...3 seconds). Target party member cannot be targeted by hostile spells. Attacks against this party member fail. Cannot self-target.,0,10,0.25,30,Protection Prayers,Core
+Air of Enchantment,Elite Enchantment Spell. (4...9...10 seconds.) Enchantments cast on target ally cost 5 less Energy (minimum 1 Energy). Cannot self-target.,0,5,0.25,8,Protection Prayers,Factions
+Amity,Elite Hex Spell. (8...18...20 seconds.) Foes adjacent to you cannot attack. Ends on any foes that take damage.,0,5,0.25,45,Protection Prayers,Prophecies
+Aura of Faith,Elite Enchantment Spell. (3 seconds.) Target ally gains 50...90...100% more Health when healed and takes 5...41...50% less damage.,0,5,0.25,8,Protection Prayers,Prophecies
+Aura of Stability,Enchantment Spell. (3...7...8 seconds.) Target ally cannot be knocked-down. Cannot self-target.,0,5,0.25,12,Protection Prayers,Eye of the North
 Balthazar's Aura,Enchantment Spell. (8 seconds.) Deals 10...22...25 holy damage each second to foes adjacent to target ally.,0,25,2,25,Smiting Prayers,Core
+Balthazar's Pendulum,Elite Enchantment Spell. (5...9...10 seconds.) Causes knock-down to the next foe attempting to knock-down target ally.,0,5,0.25,5,Smiting Prayers,Nightfall
+Balthazar's Spirit,Enchantment Spell. Target ally gains adrenaline and 1 Energy when taking damage.,-1,10,2,0,Smiting Prayers,Prophecies
 Bane Signet,Signet. Deals 26...50...56 holy damage. Causes knock-down if target foe is attacking.,0,0,1,20,Smiting Prayers,Core
 Banish,Spell. Deals 20...49...56 holy damage. Deals double damage to summoned creatures.,0,5,1,10,Smiting Prayers,Core
+Blessed Aura,Enchantment Spell. Monk enchantments you cast last 10...30...35% longer.,-1,10,2,2,Divine Favor,Prophecies
+Blessed Light,Elite Spell. Heals for 10...114...140. Removes one condition and one hex.,0,10,0.75,3,Divine Favor,Factions
 Blessed Signet,Signet. You gain 3 Energy for each enchantment you are maintaining. You cannot gain more than 3...20...24 Energy in this way.,0,0,2,10,Divine Favor,Core
+Boon Signet,Elite Signet. Heals for 20...68...80. Your next Healing or Protection Prayer spell that targets an ally heals for +20...68...80 Health.,0,0,1,8,Divine Favor,Factions
+Castigation Signet,Signet. Deals 26...50...56 holy damage. You gain 1...8...10 Energy if target foe is attacking.,0,0,1,20,Smiting Prayers,Eye of the North
+Contemplation of Purity,Skill. You gain 0...64...80 Health and lose one hex and one condition for each enchantment on you (maximum 1...7...8 hexes and conditions). You lose all enchantments.,0,5,0.25,10,Divine Favor,Prophecies
 Convert Hexes,Spell. Removes all hexes; +10 armor for each Necromancer hex removed (8...18...20 seconds). Cannot self-target.,0,15,1,12,Protection Prayers,Core
-Divine Boon,Enchantment Spell. Whenever you cast a Protection Prayer or Divine Favor spell on an ally, that ally is healed for 15...51...60. Heal cost: you lose 1 Energy.,-1,5,0.25,10,Divine Favor,Core
-Divine Intervention,Enchantment Spell. (10 seconds.) Negates the next fatal damage target ally takes. [Negation effect]: heals for 26...197...240.,0,5,0.25,30,Divine Favor,Core
+Cure Hex,Spell. Removes a Hex. Removal effect: Heals for 30...102...120.,0,5,1,12,Healing Prayers,Eye of the North
+Defender's Zeal,Elite Hex Spell. (5...21...25 seconds.) You gain 2 Energy whenever target foe hits with an attack.,0,5,1,5,Smiting Prayers,Nightfall
+Deny Hexes,Spell. Removes one hex from target ally and one additional hex for each recharging Divine Favor skill you have.,0,5,1,12,Divine Favor,Factions
+Dismiss Condition,Spell. Removes one condition. Heals for 15...63...75 if target ally is enchanted.,0,5,0.75,3,Protection Prayers,Nightfall
+Divert Hexes,Elite Spell. Removes 1...3...3 hex[es]. For each hex removed target ally loses one condition and gains 15...63...75 Health.,0,10,1,5,Protection Prayers,Nightfall
+Divine Boon,Enchantment Spell. Whenever you cast a Protection Prayer or Divine Favor spell on an ally that ally is healed for 15...51...60. Heal cost: you lose 1 Energy.,-1,5,0.25,10,Divine Favor,Core
+Divine Healing,Spell. Heals you and party members within earshot for 15...51...60.,0,5,1,12,Divine Favor,Prophecies
+Divine Intervention,Enchantment Spell. (10 seconds.) Negates the next fatal damage target ally takes. Negation effect: heals for 26...197...240.,0,5,0.25,30,Divine Favor,Core
+Divine Spirit,Enchantment Spell. (1...11...14 second[s].) Monk spells cost you 5 less Energy. Minimum cost: 1 Energy.,0,10,0.25,60,Divine Favor,Prophecies
 Draw Conditions,Spell. Transfers all conditions from target ally to yourself. Transfer effect: you gain 6...22...26 Health for each condition. Cannot self-target.,0,5,0.25,4,Protection Prayers,Core
+Dwayna's Kiss,Spell. Heals for 15...51...60. Heals for 10...30...35 more for each enchantment and hex on target ally. Cannot self-target.,0,5,1,3,Healing Prayers,Prophecies
+Dwayna's Sorrow,Enchantment Spell. Enchants allies near your target (30 seconds). Your party is healed for 5...41...50 whenever one of these allies dies.,0,5,1,5,Healing Prayers,Factions
+Empathic Removal,Elite Spell. Removes one condition and hex from target ally and yourself and heals for 50. Cannot self-target.,0,5,1,7,No Attribute,Factions
+Essence Bond,Enchantment Spell. You gain 1 Energy whenever target ally takes physical or elemental damage.,-1,10,2,0,No Attribute,Prophecies
+Ethereal Light,Spell. Heals for 25...85...100. Easily interrupted.,0,5,1,5,Healing Prayers,Factions
+Extinguish,Spell. Affects all party members. Removes one condition. Party members relieved of Burning are healed for 10...82...100.,0,15,1,12,Protection Prayers,Factions
+Gift of Health,Spell. Heals for 15...123...150. Disables your other Healing Prayers skills (10...6...5 seconds). Cannot self-target.,0,5,0.75,5,Healing Prayers,Factions
+Glimmer of Light,Elite Spell. Heals for 10...94...115.,0,5,0.25,1,Healing Prayers,Nightfall
 Guardian,Enchantment Spell. (2...6...7 seconds.) 50% chance to block.,0,5,1,4,Protection Prayers,Core
+Heal Area,Spell. Heals you and adjacent allies and foes for 30...150...180.,0,10,1,5,Healing Prayers,Prophecies
+Heal Other,Spell. Heals for 35...151...180. Cannot self-target.,0,10,0.75,3,Healing Prayers,Prophecies
 Heal Party,Spell. Heals entire party for 30...66...75.,0,15,2,2,Healing Prayers,Core
 Heal Party (PvP),Spell. Heals entire party for 30...66...75.,0,15,1,20,Healing Prayers,Core
+Healer's Boon,Elite Enchantment Spell. (10...46...55 seconds.) Healing Prayers spells cast 50% faster and heal for 50% more.,0,5,0.25,10,Divine Favor,Nightfall
+Healer's Covenant,Elite Enchantment Spell. Your Healing Prayers spells cost 1...3...3 less Energy. These spells heal for 25% less.,-1,5,0.25,5,Healing Prayers,Nightfall
 Healing Breeze,Enchantment Spell. (15 seconds.) +4...8...9 Health regeneration.,0,10,1,5,Healing Prayers,Core
+Healing Burst,Elite Spell. Heals for 10...130...160. Party members in earshot of your target gain Health equal to the Divine Favor bonus. Disables your Smiting Prayers (20 seconds).,0,5,0.75,4,Healing Prayers,Factions
+Healing Hands,Elite Enchantment Spell. (10 seconds.) Heals for 5...29...35 whenever target takes damage.,0,5,0.25,25,Healing Prayers,Prophecies
+Healing Light,Elite Spell. Heals for 40...88...100. You gain 1...3...3 Energy if target ally is enchanted.,0,5,1,4,Healing Prayers,Factions
+Healing Ribbon,Spell. Heals for 20...92...110. Heals two additional allies near target ally for 10...82...100. Cannot self-target.,0,10,1,5,Healing Prayers,Eye of the North
+Healing Ring,Spell. Heals adjacent allies and foes for 30...150...180. The caster is not healed.,0,5,1,10,Healing Prayers,Nightfall
 Healing Seed,Enchantment Spell. (10 seconds.) Target and adjacent allies gain 3...25...30 Health whenever this ally takes damage. Cannot self-target.,0,10,2,25,Healing Prayers,Core
 Healing Touch,Touch Spell. Heals for 16...51...60. Double Health gain from Divine Favor for this spell.,0,5,0.75,5,Healing Prayers,Core
-Holy Veil,Enchantment Spell. Doubles casting time of hexes cast on target ally. End effect: removes a hex.,-1,5,1,12,,Core
+Healing Whisper,Half Range Spell. Heals for 40...88...100. Cannot self-target.,0,5,1,1,Healing Prayers,Factions
+Heaven's Delight,Spell. Heals you and party members within earshot for 15...51...60 points.,0,5,1,12,Divine Favor,Factions
+Holy Haste,Enchantment Spell. (1...48...60 second[s].) Your Healing Prayers spells cast 50% faster. Ends if you cast an enchantment.,0,10,1,10,Divine Favor,Nightfall
+Holy Strike,Touch Skill. Deals 10...46...55 holy damage. Deals 10...46...55 more holy damage if target is knocked down.,0,5,0.75,8,Smiting Prayers,Prophecies
+Holy Veil,Enchantment Spell. Doubles casting time of hexes cast on target ally. End effect: removes a hex.,-1,5,1,12,No Attribute,Core
+Holy Wrath,Enchantment Spell. (10...26...30 seconds). Deals 66% of each attack's damage (maximum 5...41...50) back to source. Ends after dealing damage 1...8...10 time[s]. Cannot self-target.,0,10,1,10,Smiting Prayers,Prophecies
 Infuse Health,Spell. Heals for 100...129...136% of half your current Health. Lose half your current Health. Cannot self-target.,0,10,0.25,0,Healing Prayers,Core
+Jamei's Gaze,Spell. Heals for 35...151...180. Cannot self-target.,0,10,0.75,3,Healing Prayers,Factions
 Judge's Insight,Enchantment Spell. (8...18...20 seconds.) Converts target ally's attacks to holy damage and adds +20% armor penetration.,0,10,2,10,Smiting Prayers,Core
-Judgment Strike,Elite Melee Attack. Attacks target and adjacent foes for +13...27...30 Holy damage. Causes knock down on attacking foes. PvE Skill,0,5,1,8,Divine Favor,Core
+Judge's Intervention,Enchantment Spell. (10 seconds.) Negates the next fatal damage. Negation effect: deals 30...150...180 holy damage to one foe near target ally.,0,5,0.25,8,Smiting Prayers,Nightfall
+Judgment Strike,Elite Melee Attack. Attacks target and adjacent foes for +13...27...30 Holy damage. Causes knock down on attacking foes. PvE Skill.,0,5,1,8,Divine Favor,Core
+Karei's Healing Circle,Spell. Heals you for 30...150...180. Also heals adjacent creatures.,0,10,1,5,Healing Prayers,Factions
+Kirin's Wrath,Spell. Deals 8...27...32 holy damage each second (5 seconds). Hits foes adjacent to target's initial location.,0,5,2,30,Smiting Prayers,Factions
+Life Attunement,Enchantment Spell. Target ally gains 14...43...50% more Health when healed. This ally deals 30% less damage with attacks.,-1,10,2,0,Protection Prayers,Prophecies
+Life Barrier,Elite Enchantment Spell. Reduces damage by 20...44...50%. Cannot self-target. If your Health is below 50% when target takes damage Life Barrier ends.,-1,15,2,5,Protection Prayers,Prophecies
 Life Bond,Enchantment Spell. Half of the damage target ally takes from attacks is redirected to you. Redirected damage is reduced by 3...25...30. Cannot self-target.,-1,10,2,0,Protection Prayers,Core
-Martyr,Elite Spell. Transfer all conditions from all allies to you.,0,5,1,10,,Core
+Life Sheath,Elite Enchantment Spell. (8 seconds.) Converts the next incoming damage or life steal (maximum 20...84...100) to healing. Initial effect: Removes 0...2...2 condition[s].,0,5,0.25,2,Protection Prayers,Factions
+Light of Deliverance,Elite Spell. Heals entire party for 5...57...70.,0,5,1,6,Healing Prayers,Nightfall
+Light of Deliverance (PvP),Elite Spell. Heals entire party for 5...57...70. Disables your Smiting Prayers (20 seconds).,0,5,1,10,Healing Prayers,Nightfall
+Light of Dwayna,Spell. Resurrects all dead party members in the area. (25% Health zero Energy).,0,25,4,20,No Attribute,Prophecies
+Live Vicariously,Enchantment Spell. You gain 2...14...17 Health whenever target ally hits a foe.,-1,5,2,0,Healing Prayers,Prophecies
+Mark of Protection,Elite Enchantment Spell. (10 seconds.) Converts incoming damage to healing (maximum 6...49...60). All your Protection Prayers are disabled (5 seconds).,0,10,1,45,Protection Prayers,Prophecies
+Martyr,Elite Spell. Transfer all conditions from all allies to you.,0,5,1,10,No Attribute,Core
 Mend Ailment,Spell. Removes a condition. Removal effect: heals for 5...57...70 for each remaining condition.,0,5,0.75,5,Protection Prayers,Core
+Mend Condition,Spell. Removes one condition. Removal effect: heals for 5...57...70. Cannot self-target.,0,5,0.75,2,Protection Prayers,Prophecies
 Mending,Enchantment Spell. +1...3...4 Health regeneration.,-1,10,2,0,Healing Prayers,Core
+Mending Touch,Touch Spell. Removes two conditions. Heals for 15...51...60 for each condition removed.,0,5,0.75,6,Protection Prayers,Nightfall
 Orison of Healing,Spell. Heals for 20...60...70.,0,5,1,2,Healing Prayers,Core
+Pacifism,Hex Spell. (8...18...20 seconds.) Target foe cannot attack. Ends if this foe takes damage.,0,10,2,30,Protection Prayers,Prophecies
+Patient Spirit,Enchantment Spell. (2 seconds.) End effect: heals for 30...102...120. No effect if ends early.,0,5,0.25,4,Healing Prayers,Eye of the North
+Peace and Harmony,Elite Enchantment Spell. Target ally loses 0...7...9 condition[s] and hex[es]. Conditions and hexes expire 90% faster on that ally (1...3...3 second[s]). Disables your Smiting Prayers (20 seconds).,0,5,0.25,10,Divine Favor,Prophecies
+Pensive Guardian,Enchantment Spell. (5...10...11 seconds.) 50% chance to block enchanted foes.,0,5,1,5,Protection Prayers,Nightfall
+Protective Bond,Enchantment Spell. Target ally cannot lose more than 5% max Health from a single attack or spell. Each time damage is reduced you lose 6...4...3 Energy or this spell ends.,-1,10,2,0,Protection Prayers,Prophecies
 Protective Spirit,Enchantment Spell. (5...19...23 seconds.) Incoming damage is reduced to 10% of target ally's maximum Health.,0,10,0.25,5,Protection Prayers,Core
-Purge Conditions,Spell. Removes all conditions.,0,5,0.25,20,,Core
-Purge Signet,Signet. Removes all hexes and conditions. Removal cost: 10 Energy each.,0,0,2,20,,Core
-Rebirth,Spell. Resurrects target party member (25% Health, 0 Energy). Teleports target to you. Disables target's skills (10...4...3 seconds). You lose all Energy.,0,10,5,0,Protection Prayers,Core
-Remove Hex,Spell. Removes a hex from target ally.,0,5,1,8,,Core
-Resurrect,Spell. Resurrects target party member (25% Health, 0 Energy).,0,10,5,8,,Core
+Purge Conditions,Spell. Removes all conditions.,0,5,0.25,20,No Attribute,Core
+Purge Signet,Signet. Removes all hexes and conditions. Removal cost: 10 Energy each.,0,0,2,20,No Attribute,Core
+Purifying Veil,Enchantment Spell. Conditions expire 5...41...50% faster on target ally. End effect: removes a condition.,-1,5,1,6,Protection Prayers,Eye of the North
+Ray of Judgment,Elite Spell. Deals 5...37...45 holy damage and inflicts Burning (1...3...3 second[s]) every second (5 seconds). Hits foes adjacent to target's initial location.,0,10,2,20,Smiting Prayers,Factions
+Rebirth,Spell. Resurrects target party member (25% Health 0 Energy). Teleports target to you. Disables target's skills (10...4...3 seconds). You lose all Energy.,0,10,5,0,Protection Prayers,Core
+Release Enchantments,Spell. Removes all of your enchantments. Heals all party members for 5...29...35 for each Monk Enchantment removed.,0,5,1,5,Divine Favor,Factions
+Remove Hex,Spell. Removes a hex from target ally.,0,5,1,8,No Attribute,Core
+Renew Life,Touch Spell. Resurrects target party member (50% Health and 5...17...20% Energy). Heals allies within earshot for 55...115...130.,0,15,4,5,Healing Prayers,Nightfall
+Restful Breeze,Enchantment Spell. (8...16...18 seconds.) +10 Health regeneration. Ends if target ally attacks or uses a skill.,0,5,1,8,Healing Prayers,Nightfall
+Restore Condition,Elite Spell. Removes all conditions. Removal effect: heals for 10...58...70 for each condition removed. Cannot self-target.,0,5,0.75,2,Protection Prayers,Prophecies
+Restore Life,Touch Spell. Resurrects target party member (20...56...65% Health 42...80...90% Energy).,0,10,4,8,Healing Prayers,Prophecies
+Resurrect,Spell. Resurrects target party member (25% Health 0 Energy).,0,10,5,8,No Attribute,Core
+Resurrection Chant,Half Range Spell. Resurrects target party member at your current Health and with 5...29...35% Energy.,0,10,6,15,Healing Prayers,Factions
 Retribution,Enchantment Spell. Deals 33% of each attack's damage (maximum 5...17...20) back to the source.,-1,10,2,0,Smiting Prayers,Core
+Reversal of Damage,Enchantment Spell. (8 seconds.) Negates the next damage and hits the source for that same amount (maximum 5...61...75).,0,5,0.25,3,Smiting Prayers,Nightfall
 Reversal of Fortune,Enchantment Spell. (8 seconds.) Converts the next incoming damage or life steal (maximum 15...67...80) to healing.,0,5,0.25,2,Protection Prayers,Core
-Scourge Healing,Hex Spell. (30 seconds.) Whenever target foe is healed, the healer takes 15...67...80 holy damage.,0,10,2,5,Smiting Prayers,Core
+Reverse Hex,Enchantment Spell. (5...9...10 seconds.) Removes one hex from target ally. The next damage this ally takes is reduced by 5...41...50. No effect unless this ally is hexed.,0,10,0.25,10,Protection Prayers,Factions
+Scourge Enchantment,Hex Spell. (30 seconds.) Deals 15...63...75 damage to anyone casting an enchantment on target foe.,0,10,2,5,Smiting Prayers,Nightfall
+Scourge Healing,Hex Spell. (30 seconds.) Whenever target foe is healed the healer takes 15...67...80 holy damage.,0,10,2,5,Smiting Prayers,Core
+Scourge Sacrifice,Hex Spell. Also hexes foes adjacent to target (8...18...20 seconds). Doubles Health sacrifice.,0,10,1,5,Smiting Prayers,Prophecies
+Scribe's Insight,Elite Enchantment Spell. (10...30...35 seconds.) You gain 3 Energy whenever you use a signet.,0,5,0.25,20,Divine Favor,Nightfall
+Seed of Life,Enchantment Spell. (2...5) seconds. Heals party members for 2 for each rank in Divine Favor whenever target takes damage. Cannot self target.,0,5,0.25,20,Sunspear rank,Nightfall
+Selfless Spirit,Enchantment Spell. (15...20 seconds.) Spells you cast that target another ally cost 3 less Energy.,0,5,0.25,45,Allegiance rank,Factions
+Shield Guardian,Enchantment Spell. (1...3...4 second[s]). Party members in earshot have a 75% chance to block attacks. Block effect: Allies in earshot are healed for 10...34...40 and Shield Guardian ends.,0,5,1.5,20,Protection Prayers,Factions
+Shield of Absorption,Enchantment Spell. (3...6...7 seconds.) Reduces incoming damage by 5 each time target ally takes damage.,0,5,1,10,Protection Prayers,Nightfall
+Shield of Deflection,Elite Enchantment Spell. (3...9...10 seconds.) 75% chance to block. +15...27...30 armor.,0,10,0.25,10,Protection Prayers,Prophecies
+Shield of Judgment,Elite Enchantment Spell. (8...18...20 seconds.) Deals 5...41...50 holy damage to foes attacking target ally. Causes knock-down.,0,15,1,45,Smiting Prayers,Prophecies
 Shield of Regeneration,Elite Enchantment Spell. (5...11...13 seconds.) +3...9...10 Health regeneration and +40 armor.,0,15,0.25,8,Protection Prayers,Core
 Shielding Hands,Enchantment Spell. (8 seconds.) Reduces incoming damage and life steal by 3...15...18. End effect: heals for 5...41...50,0,5,0.25,15,Protection Prayers,Core
 Signet of Devotion,Signet. Heals for 14...83...100.,0,0,2,5,Divine Favor,Core
 Signet of Judgment,Elite Signet. Knocks down target. Deals 15...63...75 holy damage to target and adjacent foes.,0,0,1,20,Smiting Prayers,Core
 Signet of Judgment (PvP),Elite Half Range Signet. Knocks down target. Deals 5...41...50 holy damage to target and adjacent foes.,0,0,1,20,Smiting Prayers,Core
+Signet of Mystic Wrath,Signet. Deals 5...29...35 holy damage for each enchantment on you (maximum 100 holy damage).,0,0,2,20,Smiting Prayers,Nightfall
+Signet of Rage,Signet. Deals 5...41...50 holy damage. Deals 5...9...10 more holy damage for each of target foe's adrenaline skills.,0,0,1,20,Smiting Prayers,Factions
+Signet of Rejuvenation,Signet. Heals for 15...63...75. Heals for 15...63...75 more if target ally is casting a spell or attacking.,0,0,1,8,Healing Prayers,Factions
+Signet of Removal,Elite Signet. Removes one hex and one condition. No effect unless target ally is enchanted.,0,0,1,5,No Attribute,Nightfall
+Smite,Spell. Deals 10...46...55 holy damage. Deals 10...30...35 more holy damage if target is attacking.,0,10,1,10,Smiting Prayers,Prophecies
+Smite Condition,Spell. Removes a condition. Removal effect: deals 10...50...60 holy damage to foes in the area of target ally.,0,5,1,7,Smiting Prayers,Eye of the North
 Smite Hex,Spell. Removes a hex from target ally. Removal effect: deals 10...70...85 holy damage to foes in the area of target ally.,0,5,1,12,Smiting Prayers,Core
+Smiter's Boon,Enchantment Spell. (30 seconds.) Your Smiting Prayers have double Divine Favor healing bonus.,0,5,0.25,10,Divine Favor,Eye of the North
+Smiter's Boon (PvP),Enchantment Spell. (5 seconds.) Your Smiting Prayers have double Divine Favor healing bonus.,0,25,0.25,90,Divine Favor,Eye of the North
+Spear of Light,Spell. Projectile: deals 26...50...56 holy damage. Deals 15...51...60 more damage if target foe is attacking.,0,5,1,15,Smiting Prayers,Factions
 Spell Breaker,Elite Enchantment Spell. (5...15...17 seconds.) Target ally cannot be the target of enemy spells.,0,15,1,45,Divine Favor,Core
+Spell Shield,Enchantment Spell. (5...17...20 seconds.) While casting spells you cannot be the target of spells. End effect: your skills are disabled (10...6...5 seconds).,0,10,2,30,Divine Favor,Factions
+Spirit Bond,Enchantment Spell. (8 seconds.) Heals for 30...78...90 whenever target ally takes more than 50 damage. Ends after this ally takes damage from 10 attacks or spells.,0,10,0.25,2,Protection Prayers,Factions
+Spirit Bond (PvP),Enchantment Spell. (8 seconds.) Heals for 30...78...90 whenever target ally takes more than 50 damage. Ends after this ally takes damage from 10 attacks or spells.,0,10,0.25,5,Protection Prayers,Factions
+Spotless Mind,Enchantment Spell. (1...12...15 seconds.) Removes a hex every 5 seconds. Cannot self-target.,0,5,0.25,12,Healing Prayers,Eye of the North
+Spotless Soul,Enchantment Spell. (1...12...15 seconds.) Removes a condition every 3 seconds. Cannot self-target.,0,5,0.25,12,Healing Prayers,Eye of the North
+Stonesoul Strike,Touch Skill. Deals 10...46...55 holy damage. Deals 10...46...55 more holy damage if target is knocked down.,0,5,0.75,8,Smiting Prayers,Factions
 Strength of Honor,Enchantment Spell. Target ally deals 5...21...25 more damage in melee.,-1,10,2,15,Smiting Prayers,Core
 Strength of Honor (PvP),Enchantment Spell. Target ally deals 1...4...5 more damage in melee.,-1,10,2,15,Smiting Prayers,Core
+Succor,Enchantment Spell. +1 Health regeneration and +1 Energy regeneration. Cannot self-target. You lose 1 Energy each time target ally casts a spell.,-1,5,1,10,No Attribute,Prophecies
+Supportive Spirit,Enchantment Spell. (5...19...23 seconds.) Heals for 5...29...35 whenever target ally takes damage while knocked-down.,0,10,0.75,8,Healing Prayers,Nightfall
+Symbol of Wrath,Spell. Deals 8...27...32 holy damage each second (5 seconds). Hits foes adjacent to your initial location.,0,5,2,30,Smiting Prayers,Prophecies
+Unyielding Aura,Elite Enchantment Spell. Your Monk spells heal for +15...51...60%. End effect: a random other party member is resurrected with full Health and Energy and teleported to your location.,-1,5,0.25,10,Divine Favor,Prophecies
+Unyielding Aura (PvP),Elite Enchantment Spell. Resurrects target party member (full Health full Energy). End effect: this ally dies and leaves an exploited corpse. Does not incur a death penalty. 50% failure chance unless Divine Favor 5 or more.,-1,5,3,15,Divine Favor,Prophecies
+Vengeance,Enchantment Spell. (30 seconds.) Resurrects target party member (full Health full Energy). This ally deals 25% more damage and does not incur death penalty. End effect: this ally dies.,0,10,4,30,No Attribute,Prophecies
+Vigorous Spirit,Enchantment Spell. (30 seconds.) Heals for 5...17...20 each time target ally attacks or casts a spell.,0,5,0.25,4,Healing Prayers,Prophecies
+Vital Blessing,Enchantment Spell. +40...168...200 maximum Health.,-1,10,0.75,2,Protection Prayers,Prophecies
+Watchful Healing,Enchantment Spell. (10 seconds.) Target ally has +1...3...4 Health regeneration and gains 30...102...120 Health if this enchantment ends early.,0,5,1,10,Divine Favor,Nightfall
+Watchful Spirit,Enchantment Spell. +2 Health regeneration. End effect: heals for 30...150...180.,-1,15,1,5,Divine Favor,Prophecies
+Withdraw Hexes,Elite Spell. Removes all hexes. Also affects adjacent allies. Removal cost: +20...8...5 seconds recharge for each hex removed.,0,15,1,5,Divine Favor,Factions
+Word of Censure,Elite Spell. Deals 15...63...75 holy damage. +20 recharge time if target foe is below 33% Health.,0,10,1,2,Smiting Prayers,Factions
 Word of Healing,Elite Spell. Heals for 5...81...100. Heals for 30...98...115 more if target ally is below 50% Health.,0,5,0.75,3,Healing Prayers,Core
-Zealot's Fire,Enchantment Spell. (60 seconds.) Whenever you use a skill on an ally, all foes adjacent to that ally are hit for 5...29...35 fire damage. Damage cost: you lose 1 Energy.,0,10,0.25,30,Smiting Prayers,Core
+Words of Comfort,Spell. Heals for 15...51...60. Heals for 15...39...45 more if target ally has a condition.,0,5,1,4,Healing Prayers,Nightfall
+Zealot's Fire,Enchantment Spell. (60 seconds.) Whenever you use a skill on an ally all foes adjacent to that ally are hit for 5...29...35 fire damage. Damage cost: you lose 1 Energy.,0,10,0.25,30,Smiting Prayers,Core
+Zealous Benediction,Elite Spell. Heals for 30...150...180. You gain 7 Energy if target ally was below 50% Health.,0,10,0.75,4,Protection Prayers,Nightfall

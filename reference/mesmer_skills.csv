@@ -1,48 +1,168 @@
-Name,Description,Energy,Activation,Recharge,Attribute,Campaign
-Arcane Conundrum,Hex Spell. Also hexes foes adjacent to target (5...13...15 seconds). Doubles spell casting time. End effect: you gain 1...6...7 energy.,10,2,20,Illusion Magic,Core
-Arcane Echo,Enchantment Spell. (20 seconds.) Arcane Echo becomes the next spell you use (20 seconds). This enchantment ends if you use any skill that is not a spell.,15,2,20,,Core
-Arcane Mimicry,Spell. This skill becomes target ally's elite skill (20 seconds). Cannot self-target. No effect if target's elite skill is a form.,15,2,60,,Core
-Backfire,Hex Spell. (10 seconds.) Target foe takes 35...119...140 damage whenever it casts a spell.,15,3,20,Domination Magic,Core
-Clumsiness,Hex Spell. (4 seconds.) Also hexes adjacent foes. Interrupts next attack. Interruption effect: deals 10...76...92 damage.,10,2,8,Illusion Magic,Core
-Conjure Phantasm,Hex Spell. (2...13...16 seconds.) Causes -5 Health degeneration.,10,1,5,Illusion Magic,Core
-Crippling Anguish,Elite Hex Spell. (5...17...20 seconds.) Target foe moves and attacks 50% slower and has -1...7...8 Health degeneration.,5,1,12,Illusion Magic,Core
-Crippling Anguish (PvP),Elite Hex Spell. (5...17...20 seconds.) Target foe moves 50% slower and has -1...4...5 Health degeneration.,15,1,20,Illusion Magic,Core
-Cry of Frustration,Spell. If target foe is using a skill, that foe and all foes in the area are interrupted and take 15...63...75 damage.,10,0.25,15,Domination Magic,Core
-Diversion,Hex Spell. (6 seconds.) Target foe's next skill takes +10...47...56 seconds to recharge.,10,3,12,Domination Magic,Core
-Drain Enchantment,Spell. Removes an enchantment from target foe. Removal effect: you gain 8...15...17 Energy and 40...104...120 Health.,5,2,20,Inspiration Magic,Core
-Echo,Elite Enchantment Spell. (30 seconds.) Echo becomes the next skill you use (30 seconds).,5,1,10,,Core
-Empathy,Hex Spell. (5...13...15 seconds.) Target foe's attacks deal 1...12...15 less damage, and that foe takes 10...46...55 damage with each attack.,10,2,10,Domination Magic,Core
-Empathy (PvP),Hex Spell. (5...13...15 seconds.) Target foe takes 15...39...45 damage whenever it attacks.,10,2,10,Domination Magic,Core
-Energy Burn,Spell. Causes 1...8...10 Energy loss. Deals 9 damage for each point of Energy lost.,10,2,20,Domination Magic,Core
-Energy Drain,Elite Spell. Causes 2...8...9 Energy loss. You gain 3 Energy for each point of Energy lost.,5,1,30,Inspiration Magic,Core
-Energy Surge,Elite Spell. Causes 1...8...10 Energy loss. Deals 9 damage to target and nearby foes for each point of Energy lost.,5,2,15,Domination Magic,Core
-Energy Tap,Spell. Causes 4...6...7 Energy loss. You gain 2 Energy for each point of Energy lost.,5,2,30,Inspiration Magic,Core
-Epidemic,Spell. Conditions on target foe transfer to adjacent foes.,5,0.25,5,,Core
-Ether Feast,Spell. Causes 3 Energy loss. You gain 20...56...65 Health for each point of Energy lost.,5,1,8,Inspiration Magic,Core
-Fragility,Hex Spell. Also hexes foes adjacent to target (8...18...20 seconds). These foes take 5...17...20 damage each time they gain or lose a condition.,5,1,5,Illusion Magic,Core
-Fragility (PvP),Hex Spell. (8...18...20 seconds.) Target foe takes 5...17...20 damage each time it gains or loses a condition.,5,1,8,Illusion Magic,Core
-Hex Breaker,Stance. (5...65...80 seconds.) The next hex against you fails and the caster takes 10...39...46 damage.,5,0,15,Domination Magic,Core
-Ignorance,Hex Spell. (8...18...20 seconds.) Target foe cannot use signets.,15,1,10,Domination Magic,Core
-Illusion of Haste,Enchantment Spell. (5...10...11 seconds.) You move 33% faster. [Initial effect]: removes Crippled condition. End effect: you are Crippled (3 seconds).,5,1,5,Illusion Magic,Core
-Illusion of Haste (PvP),Enchantment Spell. (5...10...11 seconds.) You move 33% faster. End effect: you are Crippled (3 seconds).,5,1,8,Illusion Magic,Core
-Imagined Burden,Hex Spell. (8...18...20 seconds.) Target foe moves 50% slower.,15,1,30,Illusion Magic,Core
-Leech Signet,Signet. Interrupts an action. Interruption effect: you gain 3...13...15 Energy if the action was a spell.,0,0.25,30,Inspiration Magic,Core
-Mantra of Earth,Stance. (30...78...90 seconds.) Reduces earth damage you take by 26...45...50%. You gain 2 Energy when you take earth damage.,10,0,20,Inspiration Magic,Core
-Mantra of Flame,Stance. (30...78...90 seconds.) Reduces fire damage you take by 26...45...50%. You gain 2 Energy when you take fire damage.,10,0,20,Inspiration Magic,Core
-Mantra of Frost,Stance. (30...78...90 seconds.) Reduces cold damage you take by 26...45...50%. You gain 2 Energy when you take cold damage.,10,0,20,Inspiration Magic,Core
-Mantra of Inscriptions,Stance. (5...21...25 seconds.) Signets you successfully activate while in this stance recharge 10...34...40% faster.,10,0,20,Inspiration Magic,Core
-Mantra of Lightning,Stance. (30...78...90 seconds.) Reduces lightning damage you take by 26...45...50%. You gain 2 Energy when you take lightning damage.,10,0,20,Inspiration Magic,Core
-Mantra of Persistence,Stance. (5...21...25 seconds.) Illusion hexes you cast last 10...34...40% longer.,5,0,15,Inspiration Magic,Core
-Mantra of Recovery,Elite Stance. (5...17...20 seconds.) Your spells recharge 33% faster.,5,0,15,Fast Casting,Core
-Mantra of Resolve,Stance. (30...78...90 seconds.) Prevents interrupts against you. Prevention cost: lose 10...5...4 Energy or Mantra of Resolve ends.,10,0,20,Inspiration Magic,Core
-Mantra of Resolve (PvP),Stance. (5 seconds.) Prevents interrupts against you. Prevention cost: lose 10...5...4 Energy or Mantra of Resolve ends.,10,0,20,Inspiration Magic,Core
-Mind Wrack,Hex Spell. (5...33...40 seconds.) Causes 1 Energy loss each time foe is the target of your non-hex Mesmer skills. Deals 5...21...25 damage per point of Energy lost. If target foe's Energy drops to 0, it takes 15...83...100 damage and Mind Wrack ends.,5,1,7,Domination Magic,Core
-Mind Wrack (PvP),Hex Spell. (5...33...40 seconds.) Causes 1 Energy loss each time foe is the target of your non-hex Mesmer skills. If target foe's Energy drops to 0, Mind Wrack ends and that foe takes 15...83...100 damage.,5,1,7,Domination Magic,Core
-Power Drain,Spell. Interrupts a spell or chant. Interruption effect: you gain 1...25...31 Energy.,5,0.25,20,Inspiration Magic,Core
-Power Spike,Spell. Interrupts a spell or chant. Interruption effect: deals 30...102...120 damage.,5,0.25,12,Domination Magic,Core
-Shatter Enchantment,Spell. Removes an enchantment from target foe. Removal effect: deals 14...83...100 damage.,10,1,20,Domination Magic,Core
-Shatter Hex,Spell. Removes a hex from target ally. Removal effect: deals 30...102...120 damage to foes near this ally.,10,1,10,Domination Magic,Core
-Signet of Humility,Signet. Disables elite skill (1...13...16 second[s]). Disables your non-Mesmer skills (10 seconds).,0,3,20,Inspiration Magic,Core
-Soothing Images,Hex Spell. Also hexes foe adjacent to target. (8...18...20 seconds). These foes cannot gain adrenaline.,15,2,8,Illusion Magic,Core
-Spirit Shackles,Hex Spell. (5...17...20). Target foe loses 5 Energy whenever it attacks.,10,3,8,Inspiration Magic,Core
-Time Ward,Elite Ward Spell. (3...13...15 seconds.) Allies in this ward cast spells 15...19...20% faster and recharge skills 15...19...20% faster. Allied spirits are not affected. PvE Skill,10,2,30,Fast Casting,Core
+Name,Description,Upkeep,Energy,Activation,Recharge,Attribute,Campaign
+Accumulated Pain,Spell. Deals 15...63...75 damage. Inflicts Deep Wound condition (5...17...20 seconds) if target foe has 2 or more hexes.,0,5,2,12,Illusion Magic,Factions
+Accumulated Pain (PvP),Spell. Deals 10...30...35 damage. Inflicts Deep Wound condition (5...17...20 seconds) if target foe has 2 or more hexes.,0,5,2,15,Illusion Magic,Factions
+Air of Disenchantment,Elite Hex Spell. Also hexes foes near your target (5...17...20 seconds). Remove one enchantment from target and nearby foes. Enchantments expire 150...270...300% faster on those foes.,0,10,1,10,Illusion Magic,Nightfall
+Ancestor's Visage,Enchantment Spell. (4...9...10 seconds.) All adjacent foes lose all adrenaline and 3 Energy whenever a melee attack hits target ally.,0,10,1,20,Illusion Magic,Factions
+Aneurysm,Spell. Target foe regains all Energy. For each point of Energy gained, target takes 1...3...3 damage and all adjacent foes lose 1 Energy (maximum 1...24...30).,0,5,1,5,Domination Magic,Eye of the North
+Arcane Conundrum,Hex Spell. Also hexes foes adjacent to target (5...13...15 seconds). Doubles spell casting time. End effect: you gain 1...6...7 energy.,0,10,2,20,,Core
+Arcane Echo,Enchantment Spell. (20 seconds.) Arcane Echo becomes the next spell you use (20 seconds). This enchantment ends if you use any skill that is not a spell.,0,15,2,20,,Core
+Arcane Languor,Elite Hex Spell. (1...8...10 second[s].) Target foe's spells cause 10 Overcast.,0,10,2,15,Fast Casting,Factions
+Arcane Larceny,Spell. (5...29...35 seconds.) Disables one random spell. This skill becomes that spell.,0,10,1,0,Domination Magic,Factions
+Arcane Mimicry,Spell. This skill becomes target ally's elite skill (20 seconds). Cannot self-target. No effect if target's elite skill is a form.,0,15,2,60,,Core
+Arcane Thievery,Spell. (5...29...35 seconds.) Disables one random spell. This skill becomes that spell.,0,10,1,0,Domination Magic,Prophecies
+Auspicious Incantation,Enchantment Spell. (20 seconds.) Your next spell gives you 110...182...200% of its Energy cost. That spell takes 10...6...5 seconds longer to recharge.,0,5,1,25,Inspiration Magic,Factions
+Backfire,Hex Spell. (10 seconds.) Target foe takes 35...119...140 damage whenever it casts a spell.,0,15,3,20,Domination Magic,Core
+Blackout,Touch Skill. (2...5...6 seconds.) Disables skills. Your skills are disabled (5 seconds).,0,10,1,12,Domination Magic,Prophecies
+Calculated Risk,Hex Spell. Target foe does +10 damage with attacks (3...20...24 seconds). There is a 50% chance that the damage from each attack (maximum 15...83...100) will be done to that foe instead.,0,5,1,7,Illusion Magic,Eye of the North
+Calculated Risk (PvP),Hex Spell. Target foe does +10 damage with attacks (3...10...12 seconds). There is a 50% chance that the damage from each attack (maximum 10...50...60) will be done to that foe instead.,0,10,1,12,Illusion Magic,Eye of the North
+Channeling,Enchantment Spell. (8...46...56 seconds.) You gain 1 Energy for each foe in the area whenever you cast a spell.,0,5,1,15,Inspiration Magic,Prophecies
+Chaos Storm,Spell. Deals 5...21...25 damage and causes 0...2...2 Energy loss each second (10 seconds). Hits foes adjacent to target's initial location.,0,5,2,30,Domination Magic,Prophecies
+Clumsiness,Hex Spell. (4 seconds.) Also hexes adjacent foes. Interrupts next attack. Interruption effect: deals 10...76...92 damage.,0,10,2,8,Illusion Magic,Core
+Complicate,Spell. Interrupt a skill. Interruption effect: disables interrupted skill (+5...11...12 seconds) for target foe and all foes in the area.,0,10,0.25,20,Domination Magic,Factions
+Confusing Images,Hex Spell. (2...8...10 seconds). Target foe takes twice as long to activate non-attack skills.,0,10,2,20,Illusion Magic,Eye of the North
+Conjure Nightmare,Hex Spell. (2...13...16 seconds.) Causes -8 Health degeneration.,0,15,1,5,Illusion Magic,Factions
+Conjure Phantasm,Hex Spell. (2...13...16 seconds.) Causes -5 Health degeneration.,0,10,1,5,Illusion Magic,Core
+Crippling Anguish,Elite Hex Spell. (5...17...20 seconds.) Target foe moves and attacks 50% slower and has -1...7...8 Health degeneration.,0,5,1,12,Illusion Magic,Core
+Crippling Anguish (PvP),Elite Hex Spell. (5...17...20 seconds.) Target foe moves 50% slower and has -1...4...5 Health degeneration.,0,15,1,20,Illusion Magic,Core
+Cry of Frustration,Spell. If target foe is using a skill, that foe and all foes in the area are interrupted and take 15...63...75 damage.,0,10,0.25,15,Domination Magic,Core
+Cry of Pain,Spell. Interrupts a skill. If target foe had a Mesmer hex, deals 25...50 damage to target and foes in the area and causes 3...5 Health degeneration (10 seconds).,0,10,0.25,15,Sunspear rank,Nightfall
+Discharge Enchantment,Spell. Removes one enchantment from target foe. 20...44...50% faster recharge if that foe was hexed.,0,10,1,15,Inspiration Magic,Nightfall
+Distortion,Stance. (1...4...5 second[s].) You have 75% chance to block. Block cost: you lose 2 Energy or Distortion ends.,0,5,0,8,Illusion Magic,Prophecies
+Diversion,Hex Spell. (6 seconds.) Target foe's next skill takes +10...47...56 seconds to recharge.,0,10,3,12,Domination Magic,Core
+Drain Delusions,Spell. Removes one Mesmer hex from target foe. Causes 1...4...5 Energy loss. You gain 4 Energy for each point lost. No effect unless a hex was removed.,0,5,0.25,12,Inspiration Magic,Nightfall
+Drain Enchantment,Spell. Removes an enchantment from target foe. Removal effect: you gain 8...15...17 Energy and 40...104...120 Health.,0,5,2,20,Inspiration Magic,Core
+Echo,Elite Enchantment Spell. (30 seconds.) Echo becomes the next skill you use (30 seconds).,0,5,1,10,,Core
+Elemental Resistance,Stance. (30...78...90 seconds.) You have +40 armor against elemental damage. You have -24...14...12 armor against physical damage.,0,10,0,20,Inspiration Magic,Prophecies
+Empathy,Hex Spell. (5...13...15 seconds.) Target foe's attacks deal 1...12...15 less damage, and that foe takes 10...46...55 damage with each attack.,0,10,2,10,Domination Magic,Core
+Empathy (PvP),Hex Spell. (5...13...15 seconds.) Target foe takes 15...39...45 damage whenever it attacks.,0,10,2,10,Domination Magic,Core
+Enchanter's Conundrum,Elite Hex Spell. Causes 100...180...200% slower enchantment casting (10 seconds). Initial effect: deals 10...82...100 damage to target and adjacent foes if target foe is not enchanted.,0,10,2,10,Domination Magic,Nightfall
+Enchanter's Conundrum (PvP),Elite Hex Spell. Causes 100...180...200% slower enchantment casting (10 seconds). Initial effect: deals 10...82...100 damage to target and adjacent foes if target foe is not enchanted.,0,10,2,20,Domination Magic,Nightfall
+Energy Burn,Spell. Causes 1...8...10 Energy loss. Deals 9 damage for each point of Energy lost.,0,10,2,20,Domination Magic,Core
+Energy Drain,Elite Spell. Causes 2...8...9 Energy loss. You gain 3 Energy for each point of Energy lost.,0,5,1,30,Inspiration Magic,Core
+Energy Surge,Elite Spell. Causes 1...8...10 Energy loss. Deals 9 damage to target and nearby foes for each point of Energy lost.,0,5,2,15,Domination Magic,Core
+Energy Tap,Spell. Causes 4...6...7 Energy loss. You gain 2 Energy for each point of Energy lost.,0,5,2,30,Inspiration Magic,Core
+Epidemic,Spell. Conditions on target foe transfer to adjacent foes.,0,5,0.25,5,,Core
+Ether Feast,Spell. Causes 3 Energy loss. You gain 20...56...65 Health for each point of Energy lost.,0,5,1,8,Inspiration Magic,Core
+Ether Lord,Hex Spell. You lose all Energy. Target foe has -1...3...3 Energy degeneration and you have +1...3...3 Energy regeneration (5...9...10 seconds).,0,5,2,20,Inspiration Magic,Prophecies
+Ether Nightmare,Hex spell. Causes 5...8 Energy loss. Target and foes in the area have -1 Health degeneration for each point of Energy lost (10 seconds).,0,10,3,25,Allegiance rank,Factions
+Ether Phantom,Hex Spell. (10 seconds.) Causes -1 Energy degeneration. Causes 1...4...5 Energy loss if this hex ends early.,0,5,1,10,Inspiration Magic,Nightfall
+Ether Signet,Signet. You gain 10...18...20 Energy. No effect unless you have less than 5...9...10 Energy.,0,0,1,45,Inspiration Magic,Factions
+Ethereal Burden,Hex Spell. (10 seconds.) Target foe moves 50% slower. End effect: you gain 10...16...18 Energy.,0,15,1.5,30,Illusion Magic,Prophecies
+Expel Hexes,Elite Spell. Removes 2 hexes from target ally.,0,5,1,8,,Factions
+Extend Conditions,Elite Spell. Spread all conditions from target foe to foes near your target. Those durations of those conditions are increased by 5...81...100% (maximum 30 seconds).,0,5,0.25,5,Inspiration Magic,Nightfall
+Feedback,Spell. Removes one enchantment. Removal effect: target foe loses 4...9...10 Energy.,0,10,2,30,Inspiration Magic,Factions
+Fevered Dreams,Elite Hex Spell. (10...22...25 seconds.) Foes in the area also have any new conditions that target foe acquires. Inflicts Dazed on target foe (1...3...3 second[s]) if that foe has two or more conditions.,0,10,2,10,Illusion Magic,Prophecies
+Fevered Dreams (PvP),Elite Hex Spell. (5...13...15 seconds.) Foes in the area also have any new conditions that target foe acquires.,0,10,2,20,Illusion Magic,Prophecies
+Fragility,Hex Spell. Also hexes foes adjacent to target (8...18...20 seconds). These foes take 5...17...20 damage each time they gain or lose a condition.,0,5,1,5,Illusion Magic,Core
+Fragility (PvP),Hex Spell. (8...18...20 seconds.) Target foe takes 5...17...20 damage each time it gains or loses a condition.,0,5,1,8,Illusion Magic,Core
+Frustration,Hex Spell. (5...17...20 seconds.) Causes 50% slower spell casting. Target foe takes 5...41...50 damage whenever interrupted. Deals double damage on skill interrupt.,0,10,1,7,Illusion Magic,Nightfall
+Frustration (PvP),Hex Spell. (5...17...20 seconds.) Causes 50% slower spell casting. Target foe takes 5...41...50 damage whenever interrupted.,0,10,1,15,Illusion Magic,Nightfall
+Guilt,Hex Spell. (6 seconds.) Target foe's next spell fails and you steal 5...12...14 Energy. No effect unless this foe's spell targets one of your allies.,0,5,2,25,Domination Magic,Prophecies
+Hex Breaker,Stance. (5...65...80 seconds.) The next hex against you fails and the caster takes 10...39...46 damage.,0,5,0,15,Domination Magic,Core
+Hex Eater Signet,Touch Signet. Removes a hex from target and 2...4...5 adjacent allies. Removal effect: you gain 1...3...4 Energy for each hex removed.,0,0,1,25,Inspiration Magic,Factions
+Hex Eater Vortex,Elite Spell. Removes one hex from target ally. Removal effect: deals 30...78...90 damage and removes one enchantment from foes near this ally.,0,10,1,15,Domination Magic,Nightfall
+Hypochondria,Spell. Transfer all conditions from foes in the area to target foe.,0,5,1,7,,Nightfall
+Ignorance,Hex Spell. (8...18...20 seconds.) Target foe cannot use signets.,0,15,1,10,Domination Magic,Core
+Illusion of Haste,Enchantment Spell. (5...10...11 seconds.) You move 33% faster. Initial effect: removes Crippled condition. End effect: you are Crippled (3 seconds).,0,5,1,5,Illusion Magic,Core
+Illusion of Haste (PvP),Enchantment Spell. (5...10...11 seconds.) You move 33% faster. End effect: you are Crippled (3 seconds).,0,5,1,8,Illusion Magic,Core
+Illusion of Pain,Hex Spell. (8 seconds.) Causes -3...9...10 Health degeneration and target foe takes 3...9...10 damage each second. End effect: that foe is healed for 36...103...120.,0,10,2,5,Illusion Magic,Factions
+Illusion of Pain (PvP),Hex Spell. (8 seconds.) Causes -3...9...10 Health degeneration and target foe takes 3...9...10 damage each second. End effect: that foe is healed for 36...103...120. Ends if reapplied.,0,10,2,5,Illusion Magic,Factions
+Illusion of Weakness,Enchantment Spell. Lose 50...202...240 Health. End effect: you gain 50...202...240 Health. Ends if damage drops your Health below 25% of your maximum.,0,10,2,30,Illusion Magic,Prophecies
+Illusionary Weaponry,Elite Enchantment Spell. (30 seconds.) Deals 8...34...40 damage to foes in place of other damage or effects from melee attacks. You have +5 armor for each equipped Illusion Magic skill. Your melee attacks neither hit nor fail to hit.,0,5,1,25,Illusion Magic,Prophecies
+Illusionary Weaponry (PvP),Elite Enchantment Spell. (30 seconds.) Deals 8...34...40 damage to foes in place of other damage or effects from melee attacks. Your melee attacks neither hit nor fail to hit.,0,5,1,25,Illusion Magic,Prophecies
+Images of Remorse,Hex Spell. (5...9...10 seconds.) Causes -1...3...3 Health degeneration. Initial effect: 10...44...52 damage if target foe is attacking.,0,5,2,5,Illusion Magic,Factions
+Imagined Burden,Hex Spell. (8...18...20 seconds.) Target foe moves 50% slower.,0,15,1,30,Illusion Magic,Core
+Ineptitude,Elite Hex Spell. (4 seconds.) Also hexes foes adjacent to target. Deals 30...114...135 damage. Inflicts Blindness condition (10 seconds). No effect unless hexed foe attacks.,0,10,1,15,Illusion Magic,Prophecies
+Inspired Enchantment,Spell. Removes an enchantment from target foe. Removal effects: you gain 3...13...15 Energy; this spell is replaced with that enchantment (20 seconds).,0,10,1,0,Inspiration Magic,Prophecies
+Inspired Hex,Spell. Removes a hex from target ally. Removal effects: you gain 4...9...10 Energy; this spell is replaced with that hex (20 seconds).,0,5,1,0,Inspiration Magic,Prophecies
+Keystone Signet,Elite Signet. (20 seconds.) Your next 0...5...6 signet[s] interrupt and deal 15...51...60 damage to other foes adjacent to your target. Initial Effect: recharges all of your other signets.,0,0,1,15,Fast Casting,Prophecies
+Kitah's Burden,Hex Spell. (10 seconds.) Target foe moves 50% slower. End effect: you gain 10...16...18 Energy.,0,15,1.5,30,Illusion Magic,Factions
+Leech Signet,Signet. Interrupts an action. Interruption effect: you gain 3...13...15 Energy if the action was a spell.,0,0,0.25,30,Inspiration Magic,Core
+Lyssa's Aura,Elite Enchantment Spell. (10 seconds.) You have +0...4...5 Energy regeneration. Renewal: every time you cast a spell on an enemy.,0,5,1,30,Inspiration Magic,Factions
+Lyssa's Balance,Spell. Removes one enchantment from target foe. No effect if you have more enchantments than this foe.,0,5,1,15,,Factions
+Mantra of Concentration,Stance. (1...31...38 seconds.) The next time you would be interrupted, you are not interrupted.,0,5,0,30,Inspiration Magic,Prophecies
+Mantra of Earth,Stance. (30...78...90 seconds.) Reduces earth damage you take by 26...45...50%. You gain 2 Energy when you take earth damage.,0,10,0,20,Inspiration Magic,Core
+Mantra of Flame,Stance. (30...78...90 seconds.) Reduces fire damage you take by 26...45...50%. You gain 2 Energy when you take fire damage.,0,10,0,20,Inspiration Magic,Core
+Mantra of Frost,Stance. (30...78...90 seconds.) Reduces cold damage you take by 26...45...50%. You gain 2 Energy when you take cold damage.,0,10,0,20,Inspiration Magic,Core
+Mantra of Inscriptions,Stance. (5...21...25 seconds.) Signets you successfully activate while in this stance recharge 10...34...40% faster.,0,10,0,20,Inspiration Magic,Core
+Mantra of Lightning,Stance. (30...78...90 seconds.) Reduces lightning damage you take by 26...45...50%. You gain 2 Energy when you take lightning damage.,0,10,0,20,Inspiration Magic,Core
+Mantra of Persistence,Stance. (5...21...25 seconds.) Illusion hexes you cast last 10...34...40% longer.,0,5,0,15,Inspiration Magic,Core
+Mantra of Recall,Elite Enchantment Spell. (20 seconds.) End effect: you gain 10...22...25 Energy.,0,10,1,30,Inspiration Magic,Prophecies
+Mantra of Recovery,Elite Stance. (5...17...20 seconds.) Your spells recharge 33% faster.,0,5,0,15,Fast Casting,Core
+Mantra of Resolve,Stance. (30...78...90 seconds.) Prevents interrupts against you. Prevention cost: lose 10...5...4 Energy or Mantra of Resolve ends.,0,10,0,20,Inspiration Magic,Core
+Mantra of Resolve (PvP),Stance. (5 seconds.) Prevents interrupts against you. Prevention cost: lose 10...5...4 Energy or Mantra of Resolve ends.,0,10,0,20,Inspiration Magic,Core
+Mantra of Signets,Stance. (10...34...40 seconds.) You have +3 armor for each signet. You gain 5...49...60 health each time you use a signet.,0,5,0,20,Inspiration Magic,Prophecies
+Mantra of Signets (PvP),Stance. (10...34...40 seconds.) You gain 5...49...60 Health each time you use a signet.,0,5,0,20,Inspiration Magic,Prophecies
+Migraine,Elite Hex Spell. (5...17...20 seconds.) Causes -1...7...8 Health degeneration and doubles skill activation time.,0,10,2,12,Illusion Magic,Prophecies
+Migraine (PvP),Elite Hex Spell. (3...10...12 seconds.) Causes -1...7...8 Health degeneration and doubles skill activation time.,0,10,2,12,Illusion Magic,Prophecies
+Mind Wrack,Hex Spell. (5...33...40 seconds.) Causes 1 Energy loss each time foe is the target of your non-hex Mesmer skills. Deals 5...21...25 damage per point of Energy lost. If target foe's Energy drops to 0, it takes 15...83...100 damage and Mind Wrack ends.,0,5,1,7,Domination Magic,Core
+Mind Wrack (PvP),Hex Spell. (5...33...40 seconds.) Causes 1 Energy loss each time foe is the target of your non-hex Mesmer skills. If target foe's Energy drops to 0, Mind Wrack ends and that foe takes 15...83...100 damage.,0,5,1,7,Domination Magic,Core
+Mirror of Disenchantment,Spell. Removes one enchantment from target foe. That foe's party members also lose this enchantment.,0,5,1,15,,Nightfall
+Mirror of Disenchantment (PvP),Spell. Removes one enchantment from target foe. That foe's party members also lose this enchantment.,0,15,1,20,,Nightfall
+Mistrust,Hex Spell. (6 seconds.) The next spell that target foe casts on one of your allies fails and deals 10...82...100 damage to target and nearby foes.,0,10,2,12,Domination Magic,Nightfall
+Mistrust (PvP),Hex Spell. (6 seconds.) The next spell that target foe casts on one of your allies fails and deals 10...62...75 damage to target and nearby foes.,0,10,2,12,Domination Magic,Nightfall
+Overload,Hex Spell. (5 seconds.) Causes -1...3...3 Health degeneration. If target foe is using a skill, that foe and all adjacent foes take 15...63...75 damage.,0,5,0.25,5,Domination Magic,Factions
+Panic,Elite Hex Spell. Also hexes foes near your target (1...8...10 second[s]). Interrupts all other nearby foes whenever a hexed foe successfully activates a skill.,0,10,1,15,Domination Magic,Prophecies
+Persistence of Memory,Enchantment Spell. (5...17...20 seconds.) Your interrupted spells recharge instantly.,0,10,1,20,Fast Casting,Nightfall
+Phantom Pain,Hex Spell. (10 seconds.) Causes -1...3...4 Health degeneration. End effect: inflicts Deep Wound condition (5...17...20 seconds).,0,5,2,15,Illusion Magic,Prophecies
+Physical Resistance,Stance. (30...78...90 seconds.) You have +40 armor against physical damage. You have -24...14...12 armor against elemental damage.,0,10,0,20,Inspiration Magic,Prophecies
+Power Block,Elite Spell. If target foe is casting a spell or chant, that skill and all skills of the same attribute are disabled (1...10...12 seconds) and that skill is interrupted.,0,15,0.25,20,Domination Magic,Prophecies
+Power Drain,Spell. Interrupts a spell or chant. Interruption effect: you gain 1...25...31 Energy.,0,5,0.25,20,Inspiration Magic,Core
+Power Flux,Elite Hex Spell. Interrupts a spell or chant. Interruption effect: -2 Energy degeneration (4...9...10 seconds).,0,10,0.25,10,Domination Magic,Nightfall
+Power Leak,Spell. Interrupts a spell or chant. Interruption effect: causes 3...14...17 Energy loss.,0,10,0.25,20,Domination Magic,Prophecies
+Power Leech,Elite Hex Spell. Interrupt a spell or a chant. Interruption effect: steal 5...13...15 Energy whenever target foe casts a spell (10 seconds).,0,5,0.25,20,Inspiration Magic,Factions
+Power Lock,Spell. Interrupts a spell or chant. Interruption effect: interrupted spell or chant is disabled for +5...11...13 seconds.,0,5,0.25,12,Domination Magic,Eye of the North
+Power Return,Spell. Interrupts a spell or chant. Interruption effect: target foe gains 10...6...5 Energy.,0,5,0.25,7,Fast Casting,Factions
+Power Spike,Spell. Interrupts a spell or chant. Interruption effect: deals 30...102...120 damage.,0,5,0.25,12,Domination Magic,Core
+Price of Pride,Hex Spell. (5...17...20 seconds.) Causes 1...6...7 Energy loss the next time target foe uses an elite skill.,0,5,2,8,Domination Magic,Nightfall
+Psychic Distraction,Elite Spell. Interrupts a skill. Interruption effect: disables interrupted skill (+5...11...12 seconds). Your other skills are disabled (8 seconds).,0,10,0.25,2,Domination Magic,Factions
+Psychic Instability,Elite Spell. Interrupts an action. Interruption effect: if the action is a skill, cause knockdown for 2...4...4 seconds on target foe and all nearby foes. 50% failure chance unless Fast Casting 5 or higher.,0,5,0.25,12,Fast Casting,Factions
+Psychic Instability (PvP),Elite Spell. Interrupts an action. Interruption effect: if the action is a skill, causes knockdown for 2...3...3 seconds on target foe and all adjacent foes. 50% failure chance unless Fast Casting 5 or higher.,0,5,0.25,12,Fast Casting,Factions
+Recurring Insecurity,Elite Hex Spell. (10 seconds.) Causes -1...4...5 Health degeneration. Renewal: if target foe has another hex when Recurring Insecurity would end.,0,10,1,10,Illusion Magic,Factions
+Revealed Enchantment,Spell. Removes an enchantment from target foe. Removal effects: you gain 3...13...15 Energy; this spell is replaced with that enchantment (20 seconds).,0,10,1,0,Inspiration Magic,Factions
+Revealed Hex,Spell. Removes a hex from target ally. Removal effects: you gain 4...9...10 Energy; this spell is replaced with that hex (20 seconds).,0,5,1,0,Inspiration Magic,Factions
+Shame,Hex Spell. (6 seconds.) Target foe's next spell fails and you steal 5...12...14 Energy. No effect unless this foe's spell targeted one of its allies.,0,10,2,30,Domination Magic,Prophecies
+Shared Burden,Elite Hex Spell. Also hexes foes near your target (5...17...20 seconds). These foes attack, cast spells, and move 50% slower.,0,5,2,15,Illusion Magic,Factions
+Shared Burden (PvP),Elite Hex Spell. Also hexes foes near your target (5...17...20 seconds). These foes attack, cast spells, and move 33% slower.,0,10,2,20,Illusion Magic,Factions
+Shatter Delusions,Spell. Removes a Mesmer hex from target foe. Removal effect: 15...63...75 damage to target and all adjacent foes.,0,5,0.25,6,Domination Magic,Prophecies
+Shatter Delusions (PvP),Spell. Removes a Mesmer hex from target foe. Removal effect: 15...63...75 damage to target and all adjacent foes.,0,5,0.25,10,Domination Magic,Prophecies
+Shatter Enchantment,Spell. Removes an enchantment from target foe. Removal effect: deals 14...83...100 damage.,0,10,1,20,Domination Magic,Core
+Shatter Hex,Spell. Removes a hex from target ally. Removal effect: deals 30...102...120 damage to foes near this ally.,0,10,1,10,Domination Magic,Core
+Shatter Storm,Elite Spell. Removes all enchantments. Removal cost: Shatter Storm is disabled for +7 seconds for each enchantment removed.,0,10,1,0,,Factions
+Shrinking Armor,Hex Spell. (10 seconds.) Causes -1...3...4 Health degeneration. End effect: inflicts Cracked Armor condition (5...17...20 seconds).,0,5,1,8,Illusion Magic,Eye of the North
+Signet of Clumsiness,Signet. Interrupts an attack for target foe and all adjacent foes. Interruption effect: deals 15...51...60 damage; knocks down foes using attack skills.,0,0,0.25,8,Illusion Magic,Nightfall
+Signet of Clumsiness (PvP),Signet. Interrupts an attack for target foe and all adjacent foes. Interruption effect: deals 15...51...60 damage; knocks down foes using attack skills.,0,0,0.25,12,Illusion Magic,Nightfall
+Signet of Disenchantment,Signet. Removes one enchantment. You lose all Energy.,0,0,1,15,,Factions
+Signet of Disruption,Signet. Interrupts a spell. Can interrupt any skill if target foe is hexed. Interruption effect: deals 10...43...51 damage.,0,0,0.25,15,Domination Magic,Factions
+Signet of Distraction,Signet. Interrupts a spell. Interruption effect: target foe's spell is disabled for 1...4...5 seconds for each signet you have equipped.,0,0,0.25,15,Domination Magic,Eye of the North
+Signet of Humility,Signet. Disables elite skill (1...13...16 second[s]). Disables your non-Mesmer skills (10 seconds).,0,0,3,20,Inspiration Magic,Core
+Signet of Illusions,Elite Signet. Your next 1...3...3 spell[s] use your Illusion attribute instead of its normal attribute.,0,0,2,5,Illusion Magic,Nightfall
+Signet of Midnight,Elite Touch Signet. (15 seconds.) Inflicts Blindness condition. You suffer from Blindness (15 seconds).,0,0,2,10,,Prophecies
+Signet of Recall,Signet. (10 seconds.) You have -4 Energy regeneration. End effect: you gain 13...19...20 Energy.,0,0,1,20,Inspiration Magic,Eye of the North
+Signet of Weariness,Signet. Also affects foes near your target. Causes 3...7...8 Energy loss and inflicts Weakness (1...10...12 second[s]).,0,0,2,30,Domination Magic,Prophecies
+Simple Thievery,Elite Spell. Interrupts an action. Interruption effect: If a skill was interrupted, that skill is disabled and Simple Thievery becomes that skill (5...17...20 seconds).,0,10,0.25,10,Domination Magic,Nightfall
+Soothing Images,Hex Spell. Also hexes foe adjacent to target. (8...18...20 seconds). These foes cannot gain adrenaline.,0,15,2,8,Illusion Magic,Core
+Spirit Shackles,Hex Spell. (5...17...20). Target foe loses 5 Energy whenever it attacks.,0,10,3,8,Inspiration Magic,Core
+Spirit of Failure,Hex Spell. (30 seconds.) Target foe has 25% chance to miss. You gain 1...3...3 Energy whenever this foe misses.,0,15,3,20,Inspiration Magic,Prophecies
+Spiritual Pain,Spell. Deals 15...63...75 damage. Deals 25...105...125 damage to hostile summoned creatures in the area of your target foe.,0,5,1,7,Domination Magic,Nightfall
+Spiritual Pain (PvP),Spell. Deals 5...33...40 damage. Deals 25...105...125 damage to hostile summoned creatures in the area of your target foe.,0,5,1,12,Domination Magic,Nightfall
+Stolen Speed,Elite Hex Spell. Also hexes adjacent foes (1...8...10 seconds). Doubles spell casting time. Spells cast by you or your allies have -50% casting times.,0,5,1,12,Fast Casting,Factions
+Stolen Speed (PvP),Elite Hex Spell. Also hexes adjacent foes (1...8...10 second[s]). Doubles spell casting time. Spells you cast on hexed foes have -50% casting time.,0,5,1,12,Fast Casting,Factions
+Sum of All Fears,Hex Spell. (1...8...10 second[s].) Target foe moves, attacks, and casts spells 33% slower.,0,10,2,10,Illusion Magic,Eye of the North
+Symbolic Celerity,Enchantment Spell. (36...55...60 seconds.) Your signets use your Fast Casting attribute.,0,15,1,30,Fast Casting,Nightfall
+Symbolic Posture,Stance. (5...17...20 seconds.) Your next signet recharges 20...68...80% faster.,0,10,0,20,Fast Casting,Nightfall
+Symbols of Inspiration,Elite Skill. (1...25...31 seconds.) This skill becomes Elite of target foe. Elite spells you cast use your Fast Casting attribute instead of their normal attributes.,0,5,1,15,Fast Casting,Nightfall
+Sympathetic Visage,Enchantment Spell. (4...9...10 seconds.) All adjacent foes lose all adrenaline and 3 Energy whenever a melee attack hits target ally.,0,10,1,20,Illusion Magic,Prophecies
+Tease,Elite Spell. Interrupts a skill. Interruption effect: also interrupts other foes in the area, and you steal 0...4...5 Energy from all foes in the area.,0,5,0.25,15,Inspiration Magic,Nightfall
+Time Ward,Elite Ward Spell. (3...13...15 seconds.) Allies in this ward cast spells 15...19...20% faster and recharge skills 15...19...20% faster. Allied spirits are not affected. PvE Skill,0,10,2,30,Fast Casting,Core
+Unnatural Signet,Signet. Deals 15...63...75 damage. Deals 5...41...50 damage to other adjacent foes if target is hexed or enchanted.,0,0,1,10,Domination Magic,Factions
+Unnatural Signet (PvP),Signet. Deals 10...50...60 damage. Deals 10...50...60 damage to other adjacent foes if target is hexed or enchanted. Your non-Mesmer skills except signets are disabled (10 seconds).,0,0,1,20,Domination Magic,Factions
+Visions of Regret,Elite Hex Spell. Also hexes foes adjacent to target (10 seconds). These foes take 15...39...45 damage whenever they use a skill and 5...41...50 additional damage if not under the effects of another Mesmer hex.,0,10,2,20,Domination Magic,Nightfall
+Visions of Regret (PvP),Elite Hex Spell. Also hexes foes adjacent to target (10 seconds). These foes take 10...26...30 damage whenever they use a skill and 5...33...40 additional damage if not under the effects of another Mesmer hex.,0,10,2,30,Domination Magic,Nightfall
+Wandering Eye,Hex Spell. (4 seconds.) Interrupts target foe's next attack. Interruption effect: 30...94...110 damage to nearby foes.,0,5,2,12,Illusion Magic,Eye of the North
+Wandering Eye (PvP),Hex Spell. (4 seconds.) Interrupts target foe's next attack. Interruption effect: 10...76...92 damage to nearby foes.,0,10,2,12,Illusion Magic,Eye of the North
+Waste Not, Want Not,Spell. You gain 8...12...13 Energy if target foe is not attacking or casting a spell.,0,5,0.25,15,Inspiration Magic,Eye of the North
+Wastrel's Demise,Hex Spell. (5 seconds.) Each second while hexed, target foe and all foes adjacent to that foe take 1...8...10 damage. Foes take +1...8...10 damage each second this hex is in effect. Ends early if target foe uses a skill.,0,5,0.25,3,Domination Magic,Nightfall
+Wastrel's Worry,Hex Spell. (3 seconds). End effect: causes 20...84...100 damage to target and adjacent foes. No effect and ends early if target foe uses a skill.,0,5,0.25,1,Domination Magic,Prophecies
+Web of Disruption,Hex Spell. (10 seconds.) Initial effect: interrupts a skill. End effect: interrupts a skill.,0,5,0.25,15,,Nightfall
+Web of Disruption (PvP),Hex Spell. (10 seconds.) Initial effect: interrupts a skill. End effect: interrupts a skill.,0,10,0.25,15,,Nightfall

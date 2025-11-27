@@ -1,0 +1,110 @@
+Name,Description,Adrenaline,Energy,Activation,Recharge,Attribute,Campaign
+Arcane Zeal,Elite Enchantment Spell. (10 seconds.) You gain 1 Energy (maximum 1...6...7) for each enchantment on you whenever you cast a spell.,0,10,1,5,Mysticism,Nightfall
+Armor of Sanctity,Enchantment Spell. Inflicts Weakness condition on all adjacent foes (5...13...15 seconds). You take 5...17...20 less damage from foes with a condition. (15 seconds.),0,5,0.25,15,Earth Prayers,Nightfall
+Attacker's Insight,Flash Enchantment Spell. (3...9...10 seconds.) Gives 50% block chance while attacking. End Effect: Causes Weakness 3...13...15 seconds to adjacent foes.,0,10,0,10,Wind Prayers,Nightfall
+Aura Slicer,Melee Attack. (5...13...15 seconds.)Inflicts [*sic*] Bleeding [condition]. Also inflicts Cracked Armor (1...8...10 seconds).,4,0,0,0,Mysticism,Eye of the North
+Aura of Holy Might,Enchantment Spell. (45 seconds.) Whenever you lose a Dervish enchantment, adjacent foes take 20...25 holy damage.,0,10,0.75,30,Allegiance rank,Factions
+Aura of Thorns,Flash Enchantment Spell. (30 seconds.) Initial effect: inflicts Bleeding condition (5...13...15 seconds) on nearby foes. End effect: inflicts Crippled condition (3...7...8 seconds) on nearby foes.,0,5,0,10,Earth Prayers,Nightfall
+Aura of Thorns (PvP),Flash Enchantment Spell. (30 seconds.) Initial effect: inflicts Bleeding condition (5...13...15 seconds) on nearby foes. End effect: inflicts Crippled condition (3...7...8 seconds) on nearby foes.,0,10,0,10,Earth Prayers,Nightfall
+Avatar of Balthazar,Elite Form. (10...74...90 seconds.) You gain +20 armor against physical damage, you gain adrenaline 25% faster, your attacks deal holy damage, you inflict Burning (1...3...3 seconds) on nearby foes whenever you lose a Dervish enchantment. This skill is disabled for 45 seconds.,0,5,2,20,Mysticism,Nightfall
+Avatar of Dwayna,Elite Form. (10...74...90 seconds.) You deal holy damage. Whenever you use a Dervish attack skill, you lose 1 hex. Heal allies in earshot for 5...41...50 Health when you lose a Dervish enchantment. This skill is disabled for 45 seconds.,0,5,2,20,Mysticism,Nightfall
+Avatar of Dwayna (PvP),Elite Form. (10...74...90 seconds.) Deal holy damage. You lose 1 hex whenever you use a Dervish attack skill. Heal yourself for 5...41...50 Health whenever you lose a Dervish enchantment. This skill is disabled for 45 seconds.,0,5,2,20,Mysticism,Nightfall
+Avatar of Grenth,Elite Form. (10...74...90 seconds.) Your scythe attacks deal dark damage and steal 0...10...12 Health. You are immune to Disease. Apply Disease to all adjacent foes (3 seconds) when you lose a Dervish enchantment. This skill is disabled for 45 seconds.,0,5,2,20,Mysticism,Nightfall
+Avatar of Lyssa,Elite Form. (10...74...90 seconds.) Your Dervish enchantments recharge 50% faster and deal chaos damage with attacks. Steal 1 Energy from nearby foes when you lose a Dervish enchantment. This skill is disabled for 45 seconds.,0,5,2,20,Mysticism,Nightfall
+Avatar of Melandru,Elite Form. (10...74...90 seconds.) You have +150 maximum Health, +30 elemental armor, and your attacks deal earth damage. Cure 1 condition from all party members in earshot whenever you lose a Dervish enchantment. This skill is disabled for 45 seconds.,0,5,2,20,Mysticism,Nightfall
+Avatar of Melandru (PvP),Elite Form. (10...74...90 seconds.) You have +100 maximum Health, +30 elemental armor, and your attacks deal earth damage. Cure 2 conditions from yourself whenever you lose a Dervish enchantment. This skill is disabled for 45 seconds.,0,5,2,20,Mysticism,Nightfall
+Balthazar's Rage,Flash Enchantment Spell. (20 seconds.) Initial Effect: Inflicts burning (1...3...3 seconds) on nearby foes. End Effect: gain 1...2...2 strike[s] of adrenaline if any foes are within earshot.,0,10,0,10,Mysticism,Nightfall
+Banishing Strike,Melee Attack. Deals 10...50...60 holy damage. Deals double damage to summoned creatures.,0,5,1,3,Mysticism,Nightfall
+Banishing Strike (PvP),Melee Attack. Deals 10...50...60 holy damage. Deals double damage to summoned creatures.,0,5,0,3,Mysticism,Nightfall
+Chilling Victory,Scythe Attack. Deals +3...13...15 damage. Deals 10...26...30 cold damage to each foe hit who has less Health than you and foes adjacent to those.,6,0,0,0,Scythe Mastery,Nightfall
+Conviction,Flash Enchantment Spell. (10 seconds.) Gain +10 armor while conditioned. Gain 1...3...3 Health regeneration for each condition you have. End Effect: Remove 1...2...2 condition[s].,0,5,0,10,Earth Prayers,Nightfall
+Crippling Sweep,Scythe Attack. (3...10...12 seconds.) Inflicts [*sic*] Ripple condition. Deals +3...13...15 damage to moving foes.,0,5,0,6,Scythe Mastery,Nightfall
+Crippling Victory,Scythe Attack. (3...7...8 seconds) Cripples target foe. If your health is greater than target foe's, all adjacent foes take 10...26...30 earth damage.,6,0,0,0,Scythe Mastery,Eye of the North
+Dust Cloak,Flash Enchantment Spell. (30 seconds.) Your attacks deal earth damage. Initial effect: deals 10...34...40 earth damage to adjacent foes. End effect: inflicts Blindness condition (1...3...4 seconds) on adjacent foes.,0,10,0,6,Earth Prayers,Nightfall
+Dust Cloak (PvP),Flash Enchantment Spell. (30 seconds.) Your attacks deal earth damage. Initial effect: deals 10...34...40 earth damage to adjacent foes. End effect: inflicts Blindness condition (1...3...4 seconds) on adjacent foes.,0,10,0,10,Earth Prayers,Nightfall
+Dwayna's Touch,Touch Spell. Heals for 15...51...60 (maximum 150) for each enchantment on you.,0,5,0.75,5,Wind Prayers,Nightfall
+Ebon Dust Aura,Elite Flash Enchantment Spell. (30 seconds.) Deal +3...13...15 earth damage with your melee attacks. Initial Effect: Blinds nearby foes for 1...6...7 seconds. End Effect: removes Blindness. No effect unless wielding an earth weapon.,0,10,0,20,Earth Prayers,Nightfall
+Enchanted Haste,Flash Enchantment Spell. (7 seconds.) You move 25% faster. Lose 1 condition if this enchantment ends prematurely.,0,10,0,15,Wind Prayers,Nightfall
+Eremite's Attack,Scythe Attack. Deals +1...8...10 damage and removes a Dervish enchantment. Removal Effect: Deals +1...8...10 damage and strikes all adjacent foes.,0,5,0,6,Scythe Mastery,Nightfall
+Eremite's Zeal,Enchantment Spell. (10 seconds.) Initial effect: you gain 1...3...3 Energy (maximum 8) for each foe in earshot. End effect: you gain 1...3...3 Energy (maximum 8) for each foe in earshot.,0,5,0.25,15,Mysticism,Nightfall
+Eternal Aura,Enchantment Spell. You have +100 max Health. End effect: all party members in the area are resurrected with 40...50% Health and 20...30% Energy.,0,15,4,30,Sunspear rank,Nightfall
+Extend Enchantments,Skill. (10 seconds.) Your next Dervish enchantment lasts 10...122...150% longer.,0,5,0,10,Mysticism,Nightfall
+Faithful Intervention,Enchantment Spell. You gain 30...126...150 Health next time damage drops your Health below 50%.,0,5,2,20,Mysticism,Nightfall
+Farmer's Scythe,Scythe Attack. Deals +5...17...20 damage. Instant recharge if you hit more than one foe.,0,5,0,12,Scythe Mastery,Eye of the North
+Featherfoot Grace,Enchantment Spell. (5...17...20 seconds.) You move 25% faster, and conditions expire 25% faster.,0,10,0.25,15,Wind Prayers,Nightfall
+Fleeting Stability,Flash Enchantment Spell. (2...5...6 seconds.) You cannot be knocked down and move 25% faster. Ends if knockdown prevented.,0,5,0,10,Earth Prayers,Nightfall
+Grenth's Aura,Flash Enchantment Spell. (20 seconds.) You deal 5...21...25 less damage and steal 5...21...25 Health when you hit with a scythe. Initial effect: steal 5...21...25 Health from all adjacent foes.,0,10,0,10,Wind Prayers,Nightfall
+Grenth's Fingers,Flash Enchantment Spell. (30 seconds.) Your attacks deal cold damage. Initial effect: hits nearby foes for 10...34...40 cold damage. End effect: transfers 1...2...2 condition[s] to all nearby foes.,0,5,0,10,Wind Prayers,Nightfall
+Grenth's Grasp,Elite Flash Enchantment Spell. (20 seconds.) Inflicts Crippled condition (1...9...11 seconds) with your attack skills and transfer 1 condition. No effect unless wielding a cold weapon.,0,5,0,10,Wind Prayers,Nightfall
+Guiding Hands,Enchantment Spell. (20 seconds.) Your next 0...2...3 attack[s] cannot be blocked. Initial effect: removes Blindness.,0,10,0.25,10,Wind Prayers,Nightfall
+Guiding Hands (PvP),Enchantment Spell. (20 seconds.) Your next 0...2...3 attack[s] cannot be blocked. Initial effect: removes Blindness.,0,10,0.25,30,Wind Prayers,Nightfall
+Harrier's Grasp,Flash Enchantment Spell. (5...17...20 seconds.) Attacks on moving foes also Cripple them. [*sic*] Ends after you apply Cripple 1...3...3 times. Initial Effect: you lose Cripple and 1 other condition.,0,10,0,15,Wind Prayers,Nightfall
+Harrier's Haste,Flash Enchantment Spell. (2...7...8 seconds.) You move 25% faster and deal +3...10...12 damage to moving foes.,0,10,0,10,Wind Prayers,Nightfall
+Heart of Fury,Stance. (2...8...10 seconds.) You attack 25% faster.,4,0,0,0,Mysticism,Nightfall
+Heart of Fury (PvP),Stance. (2...8...10 seconds.) You attack 25% faster.,4,0,0,6,Mysticism,Nightfall
+Heart of Holy Flame,Flash Enchantment Spell. (30 seconds.) Your attacks deal holy damage. Initial effect: deals 5...25...30 holy damage to nearby foes. End effect: inflicts Burning condition (2...4...5 seconds) on nearby foes.,0,10,0,10,Mysticism,Nightfall
+Imbue Health,Enchantment Spell. (5...17...20 seconds.) You gain 5...41...50% of your current Health (maximum 300).,0,5,0.25,15,Mysticism,Nightfall
+Imbue Health (PvP),Enchantment Spell. (5...17...20 seconds.) You gain 5...41...50% of your current Health (maximum 200).,0,5,0.25,15,Mysticism,Nightfall
+Intimidating Aura,Enchantment Spell. (60 seconds.) You have +40...88...100 max Health and take -1...8...10 damage from foes with less Health than you.,0,10,0.75,20,Mysticism,Nightfall
+Irresistible Sweep,Scythe Attack. Deals +3...13...15 damage. Remove 1 of your Dervish enchantments. Removal effect: unblockable, removes a stance, deals +3...13...15 additional damage.,0,5,0,6,Scythe Mastery,Nightfall
+Irresistible Sweep (PvP),Scythe Attack. Deals +3...13...15 damage. Remove 1 of your Dervish enchantments. Removal effect: unblockable, removes a stance.,0,5,0,6,Scythe Mastery,Nightfall
+Lyssa's Assault,Scythe Attack. Interrupts an action. If you are enchanted, the interrupted skill is disabled for an additional 1...8...10 seconds. This attack does 50% of normal damage.,0,5,0.5,15,Scythe Mastery,Nightfall
+Lyssa's Haste,Flash Enchantment Spell. (3...13...15 seconds.) Your Dervish enchantments recharge 33% faster. Initial Effect: interrupts all adjacent foes. End Effect: interrupts all adjacent foes. 50% failure chance unless Wind Prayers 5 or higher.,0,10,0,15,Wind Prayers,Nightfall
+Lyssa's Haste (PvP),Flash Enchantment Spell. (3...13...15 seconds.) Your Dervish enchantments recharge 33% faster. Initial Effect: interrupts all adjacent foes. End Effect: interrupts all adjacent foes. 50% failure chance unless Wind Prayers 5 or higher.,0,10,0,25,Wind Prayers,Nightfall
+Meditation,Enchantment Spell. (20 seconds.) Lose all adrenaline. Gain 1...3...4 Energy whenever an enchantment on you ends.,0,10,0.25,20,Mysticism,Nightfall
+Mystic Corruption,Flash Enchantment Spell. (20 seconds.) Initial Effect: all adjacent foes are Diseased (1...2...2 seconds). Double duration if you are already enchanted. End Effect: party members in earshot lose Disease.,0,10,0,10,Mysticism,Nightfall
+Mystic Healing,Spell. Heals you for 5...53...65. Heals all enchanted party members for 5...53...65 Health.,0,5,1,4,Wind Prayers,Nightfall
+Mystic Healing (PvP),Spell. Heals you for 5...53...65. Heals all enchanted party members for 5...53...65 Health.,0,5,1,20,Wind Prayers,Nightfall
+Mystic Regeneration,Enchantment Spell. (5...17...20 seconds.) You have +1...3...4 Health regeneration for each enchantment (maximum of 8) on you.,0,10,0.25,10,Mysticism,Nightfall
+Mystic Regeneration (PvP),Enchantment Spell. (5...17...20 seconds.) You have +1...3...4 Health regeneration for each enchantment (maximum of 3) on you.,0,10,0.25,12,Mysticism,Nightfall
+Mystic Sandstorm,Spell. (3 seconds.) Deals 10...18...20 earth damage each second. Deals an additional 10...18...20 damage to attacking foes. Hits foes nearby your initial location. Lasts twice as long if you are enchanted.,5,1,1,8,Earth Prayers,Nightfall
+Mystic Sweep,Melee Attack. Deals +3...10...12 damage. Deals an additional +3...10...12 damage if you are enchanted.,0,5,1,6,Scythe Mastery,Nightfall
+Mystic Twister,Spell. Deals 10...50...60 cold damage to all nearby foes. Deals 10...50...60 more cold damage if you are enchanted.,5,1,1,8,Wind Prayers,Nightfall
+Mystic Vigor,Enchantment Spell. (20 seconds.) You gain 3...13...15 Health (maximum 25) for each enchantment on you whenever you hit with an attack.,0,10,0.25,10,Mysticism,Nightfall
+Natural Healing,Spell. Heals you for 50...146...170. This skill activates 50% faster if you are not enchanted.,0,5,2,6,Wind Prayers,Nightfall
+Onslaught,Elite Flash Enchantment Spell. (3...13...15 seconds.) You attack, move and gain adrenaline 25% faster.,0,10,0,10,Wind Prayers,Nightfall
+Onslaught (PvP),Elite Flash Enchantment Spell. (2...7...8 seconds.) You attack and gain adrenaline 25% faster.,0,10,0,10,Wind Prayers,Nightfall
+Pious Assault,Melee Attack. Deals +10...18...20 damage. Removes 1 of your Dervish enchantments. Removal Effect: this skill recharges 75% faster and adjacent foes take 10...26...30 damage.,0,5,0,12,Scythe Mastery,Nightfall
+Pious Assault (PvP),Melee Attack. Removes 1 of your Dervish enchantments. Removal effect: this skill recharges 75% faster and adjacent foes take 10...26...30 damage.,0,5,0,12,Scythe Mastery,Nightfall
+Pious Concentration,Stance. (5...17...20 seconds.) Prevents interrupts. Prevention cost: you lose one Dervish enchantment or Pious Concentration ends.,0,10,0,10,Wind Prayers,Nightfall
+Pious Fury,Stance. (1...6...7 seconds.) You attack 25% faster and remove 1 of your Dervish enchantments. Removal Effect: this stance lasts twice as long.,0,5,0,10,Wind Prayers,Nightfall
+Pious Fury (PvP),Stance. (1...4...5 seconds.) You attack 25% faster and remove 1 of your Dervish enchantments. Removal Effect: this stance lasts twice as long.,0,5,0,6,Mysticism,Nightfall
+Pious Haste,Stance. (1...6...7 seconds.) Lose 1 Dervish enchantment and move 25% faster. Removal Effect: Run 50% faster instead.,0,5,0,10,Wind Prayers,Nightfall
+Pious Haste (PvP),Stance. (1...4...5 seconds.) Lose 1 Dervish enchantment and move 25% faster. Removal Effect: Run 50% faster instead.,0,5,0,12,Mysticism,Nightfall
+Pious Renewal,Enchantment Spell. (10 seconds.) Initial effect: you gain 0...4...5 Energy and 0...24...30 Health. End effect: you lose 1...2...2 hex[es].,0,5,0.25,15,Wind Prayers,Nightfall
+Pious Restoration,Spell. Gain 80...136...150 Health and remove 1 Dervish enchantment. Removal effect: lose 1...2...2 hex[es].,0,5,1,8,Wind Prayers,Nightfall
+Radiant Scythe,Scythe Attack. Deals +1 damage (maximum 5...25...30) for each point of Energy you have. Gain 1...6...7 Energy.,6,0,0,0,Scythe Mastery,Eye of the North
+Reap Impurities,Melee Attack. Deals +3...13...15 damage. Struck foes lose 1 condition. Removal Effect: all foes adjacent to those struck take 10...34...40 holy damage.,5,0,0,0,Scythe Mastery,Nightfall
+Reaper's Sweep,Elite Scythe Attack. (3...13...15 seconds.) Cause Cripple. Lose 1 Dervish enchantment. Removal Effect: cause knockdown for 2...3...3 seconds.,8,0,0,0,Scythe Mastery,Nightfall
+Rending Aura,Flash Enchantment Spell. (30 seconds.) Your attack skills remove enchantments from knocked-down foes. Initial effect: deals 10...34...40 cold damage to all nearby foes. End effect: nearby foes have Cracked Armor condition (1...8...10 seconds).,0,10,0,6,Earth Prayers,Nightfall
+Rending Sweep,Scythe Attack. Deals +5...17...20 damage. You lose 1 Dervish enchantment. Removal effect: struck foes lose an enchantment.,6,0,0,0,Scythe Mastery,Nightfall
+Sand Shards,Flash Enchantment Spell. (30 seconds.) Deal 10...50...60 earth damage to all other adjacent foes whenever you hit with your scythe. Ends after 1...4...5 hits.,0,10,0,10,Earth Prayers,Nightfall
+Shield of Force,Flash Enchantment Spell. (1...13...16 seconds.) Blocks the next 1 attack against you. Knocks down and inflicts Weakness condition (5...17...20 seconds) on all adjacent attacking foes.,0,10,0,12,Earth Prayers,Nightfall
+Signet of Mystic Speed,Signet. (30 seconds.) Your next 1...3...3 self-targeted enchantments cast instantly. Flash enchantments do not consume uses of this skill.,0,0,1,20,Wind Prayers,Nightfall
+Signet of Pious Light,Signet. Heals for 30...126...150. Removes one of your Dervish enchantments. Removal effect: recharges 75% faster.,0,0,1,20,Earth Prayers,Nightfall
+Signet of Pious Restraint,Signet. (30 seconds.) Your next 1...3...3 Dervish enchantments last 10...122...150% longer. Removal effect: recharges 75% faster.,0,0,1,20,Wind Prayers,Nightfall
+Signet of Pious Restraint (PvP),Signet. (30 seconds.) Your next 1...3...3 Dervish enchantments last 10...122...150% longer. Removal effect: recharges 75% faster.,0,0,1,30,Wind Prayers,Nightfall
+Staggering Force,Flash Enchantment Spell. (30 seconds.) Your attacks deal earth damage. Initial effect: deals 10...34...40 earth damage to nearby foes. End effect: inflicts Cracked Armor condition (1...8...10 seconds) on nearby foes.,0,10,0,6,Earth Prayers,Nightfall
+Test of Faith,Touch Spell. Deals 15...55...65 cold damage and removes 1 enchantment. Target foe is Dazed for 1...3...4 seconds if that foe was not enchanted.,7,0,0.75,5,Wind Prayers,Nightfall
+Twin Moon Sweep,Melee Attack. Remove 1 of your Dervish enchantments. Gain 10...42...50 Health. Removal effect: unblockable, attack twice, and gain 10...58...70 more Health.,7,0,0,0,Scythe Mastery,Nightfall
+Twin Moon Sweep (PvP),Melee Attack. Remove 1 of your Dervish enchantments. Gain 10...18...20 Health. Removal effect: Unblockable, attack twice, each strike doing 25% less damage, and gain 10...26...30 more Health.,7,0,0,0,Scythe Mastery,Nightfall
+Veil of Thorns,Flash Enchantment Spell. (5...21...25 seconds.) Spell damage is reduced by 5...29...35%. Initial Effect: nearby foes are struck for 5...41...50 piercing damage.,0,10,0,15,Earth Prayers,Nightfall
+Victorious Sweep,Melee Attack. Deals +5...21...25 damage. You gain 30...70...80 Health for each foe you hit that has less Health than you.,0,5,0,4,Scythe Mastery,Nightfall
+Vital Boon,Enchantment Spell. (20 seconds.) You have +40...88...100 maximum Health. End effect: Heals you for 75...175...200.,0,5,1,8,Earth Prayers,Nightfall
+Vow of Piety,Enchantment Spell. (20 seconds.) +24 armor and +1...3...4 Health regeneration. Renewal: Whenever an enchantment on you ends.,0,15,0.25,45,Wind Prayers,Nightfall
+Vow of Piety (PvP),Enchantment Spell. (20 seconds.) +24 armor and +1...3...4 Health regeneration. Renewal: Whenever an enchantment on you ends.,0,15,0.25,45,Wind Prayers,Nightfall
+Vow of Silence,Elite Enchantment Spell. (5...9...10 seconds.) Spells cannot target you. You cannot cast spells.,0,5,0.25,10,Mysticism,Nightfall
+Vow of Strength,Elite Enchantment Spell. (15 seconds.) When you attack with a scythe, deals 10...22...25 slashing damage to adjacent foes.,0,5,0.25,20,Earth Prayers,Nightfall
+Vow of Strength (PvP),Elite Enchantment Spell. (15 seconds.) When you attack with a scythe, deals 10...22...25 slashing damage to adjacent foes.,0,5,0.25,20,Earth Prayers,Nightfall
+Vow of Revolution,Elite Enchantment Spell. (3...9...10 seconds.) Gain +1...4...5 energy regeneration. Renewal: whenever you use a non-Dervish skill. PvE Skill,0,10,1,20,Mysticism,Nightfall
+Vow of Silence (PvP),Elite Enchantment Spell. (5...9...10 seconds.) Spells cannot target you. You cannot cast spells.,0,5,0.25,10,Mysticism,Nightfall
+Watchful Intervention,Enchantment Spell. (60 seconds.) Heals for 50...170...200 next time damage drops target ally's Health below 25%.,0,10,1,15,Mysticism,Nightfall
+Wearying Strike,Scythe Attack. Deals +5...17...20 damage. Remove 1 Dervish enchantment. Removal Effect: Inflicts Deep Wound condition (3...9...10 seconds). You are Weakened (10 seconds) if an enchantment is not lost.,0,5,0,4,Scythe Mastery,Nightfall
+Winds of Disenchantment,Spell. Remove one of your Dervish enchantments. Removal effect: all nearby foes lose 1 enchantment and take 20...68...80 cold damage.,0,10,0.75,15,Wind Prayers,Nightfall
+Wounding Strike,Elite Scythe Attack. Deals +5...17...20 damage and inflicts Bleeding condition (5...17...20 seconds). Remove 1 Dervish enchantment. Removal effect: inflicts Deep Wound condition (5...17...20 seconds).,0,5,0,3,Scythe Mastery,Nightfall
+Wounding Strike (PvP),Elite Scythe Attack. Inflicts Bleeding condition (5...17...20 seconds). Removes 1 Dervish enchantment. Removal effect: inflicts Deep Wound condition (5...17...20 seconds).,0,5,0,3,Scythe Mastery,Nightfall
+Whirling Charge,Flash Enchantment Spell. (1...5...6 seconds.) You move 33% faster. Deal 10...50...60 cold damage to all other nearby foes next time you hit a foe and this enchantment ends.,0,10,0,6,Wind Prayers,Nightfall
+Zealous Renewal,Flash Enchantment Spell. (5...21...25 seconds.) Initial effect: deals 5...25...30 holy damage to nearby foes. You have -1 Energy regeneration and gain 1 Energy when you hit. Gain 1...4...5 Energy if this enchantment ends early.,0,5,0,10,Mysticism,Nightfall
+Zealous Sweep,Scythe Attack. Deals +5...17...20 damage. You gain 3 Energy and 1 adrenaline for each foe you hit.,0,5,0,10,Scythe Mastery,Nightfall
+Zealous Vow,Elite Enchantment Spell. (20 seconds.) You gain 1...5...6 Energy each time you hit with an attack. You have -3 Energy regeneration.,0,5,0.25,12,Mysticism,Nightfall
+Zealous Vow (PvP),Elite Enchantment Spell. (20 seconds.) You gain 1...5...6 Energy each time you hit with an attack. You have -3 Energy regeneration.,0,5,0.25,12,Mysticism,Nightfall

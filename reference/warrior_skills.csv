@@ -1,44 +1,151 @@
 Name,Description,Adrenaline,Energy,Activation,Recharge,Attribute,Campaign
-"Charge!",Elite Shout. (5...11...13 seconds.) Allies in earshot move 33% faster. [Initial effect]: these allies lose Crippled condition.,0,5,0,20,Tactics,Core
+"Charge!",Elite Shout. (5...11...13 seconds.) Allies in earshot move 33% faster. Initial effect: these allies lose the Crippled condition.,0,5,0,20,Tactics,Core
+"Coward!",Elite Shout. Causes knock-down if target foe is moving.,4,0,0,2,,Factions
+"Fear Me!",Shout. (1...12...15 seconds.) You have +5...25...30% chance of a critical hit with melee attacks against stationary foes. Initial effect: nearby foes lose 1...3...4 Energy.,4,0,0,6,Tactics,Prophecies
 "For Great Justice!",Shout. (20 seconds.) You gain 100% more adrenaline.,0,5,0,45,,Core
 "For Great Justice!" (PvP),Shout. (8 seconds.) You gain 1 extra strike of adrenaline whenever you hit with an attack.,0,5,0,45,,Core
+"I Meant to Do That!",Shout. You gain 1...4...5 strikes of adrenaline if you are knocked-down.,0,5,0,8,Strength,Eye of the North
+"I Will Avenge You!",Shout. You have +3...6...7 Health regeneration and attack 25% faster (10 seconds for each dead ally).,0,5,0,45,Strength,Prophecies
+"I Will Survive!",Shout. (5...10...11 seconds.) You have +3 Health regeneration for each condition on you.,0,5,0,30,Strength,Prophecies
+"None Shall Pass!",Shout. Knocks down all nearby moving foes. Recharges 1...7...8 seconds faster for each affected foe (maximum 25 seconds).,0,5,0,45,Tactics,Factions
+"On Your Knees!",Shout. Recharges all your stances if you are adjacent to a knocked-down foe. You lose all adrenaline.,6,0,0,0,,Factions
+"Retreat!",Shout. (5...10...11 seconds.) Party members in earshot move 33% faster. No effect unless there are dead allies within earshot.,0,5,0,20,Tactics,Factions
+"Save Yourselves!",Shout. (4...6 seconds.) All other party members gain +100 armor.,8,0,0,0,Allegiance rank,Factions
 "Shields Up!",Shout. (5...10...11 seconds.) Party members in earshot have +60 armor against projectile attacks.,0,10,0,30,Tactics,Core
+"To the Limit!",Shout. (10...18...20 seconds.) You have +10...50...60 maximum Health. Initial effect: you gain one strike of adrenaline for each foe within earshot (maximum 1...5...6).,0,5,0,15,Tactics,Prophecies
+"Victory Is Mine!",Elite Shout. You gain 10...56...68 Health and 3...6...7 Energy for each condition on target foe.,0,5,0,15,Tactics,Prophecies
 "Watch Yourself!",Shout. (10 seconds.) Party members in earshot have +5...21...25 armor. Ends after 10 incoming attacks.,4,0,0,4,Tactics,Core
-"Watch Yourself!" (PvP),Shout. (10 seconds.) Party members in earshot have +5...21...25 armor. Ends after 1...3...3 incoming attack[s].,4,0,0,4,Tactics,Core
+"Watch Yourself!" (PvP),Shout. (10 seconds.) Party members in earshot have +5...21...25 armor. Ends after 1...3...3 incoming attacks.,4,0,0,4,Tactics,Core
+"You Will Die!",Shout. You gain 1...3...3 strikes of adrenaline. No effect unless target foe is under 50% Health.,0,5,0,15,Strength,Factions
+"You're All Alone!",Elite Shout. Inflicts Cripple and Weakness conditions (8 seconds). No effect if target foe is near one of its allies.,0,5,0,10,,Nightfall
+Agonizing Chop,Axe Attack. Deals +5...17...20 damage. Interrupts an action if target foe has a Deep Wound.,6,0,1,0,Axe Mastery,Nightfall
+Auspicious Blow,Hammer Attack. Deals +5...17...20 damage and you gain 3...7...8 Energy. Unblockable if target foe is Weakened.,5,0,0,0,Hammer Mastery,Factions
+Auspicious Parry,Elite Stance. (8 seconds.) Blocks one attack. End effect: you gain 1...3...4 strikes of adrenaline.,1,0,0,2,Tactics,Factions
 Axe Rake,Axe Attack. Deals +1...8...10 damage and inflicts Crippled condition (15 seconds) if target foe has a Deep Wound.,5,0,0,0,Axe Mastery,Core
+Axe Twist,Axe Attack. Deals +1...16...20 damage and inflicts Weakness condition (20 seconds) if target foe has a Deep Wound.,5,0,0,0,Axe Mastery,Prophecies
+Backbreaker,Elite Hammer Attack. Deals +1...16...20 damage. Causes knockdown. Knockdown lasts 4 seconds with Strength 8 or higher.,9,0,0,0,Hammer Mastery,Prophecies
 Balanced Stance,Stance. (8...18...20 seconds.) You cannot be knocked-down and do not take extra damage from critical hits.,0,5,0,30,Tactics,Core
+Barbarous Slice,Sword Attack. Deals +5...25...30 damage. Inflicts Bleeding condition (5...13...15 seconds) if you are not in a stance.,6,0,0,0,Swordsmanship,Nightfall
 Battle Rage,Elite Stance. (5...17...20 seconds.) You move 33% faster and gain double adrenaline from your attacks. Ends if you use any non-adrenal skills.,4,0,0,0,Strength,Core
+Belly Smash,Hammer Attack. Inflicts Blindness condition to adjacent foes (3...6...7 seconds) if target foe is knocked down.,0,5,1,10,Hammer Mastery,Prophecies
 Berserker Stance,Stance. (5...10...11 seconds.) You attack 33% faster and gain 50% more adrenaline. Ends if you use a skill.,0,5,0,20,Strength,Core
+Body Blow,Melee Attack. Deals +10...34...40 damage. Inflicts Deep Wound (0...12...15 seconds) if target foe has Cracked Armor.,7,0,0,0,Strength,Eye of the North
+Bonetti's Defense,Stance. (5...10...11 seconds.) You have 75% chance to block. Gain 5 Energy for each melee attack blocked. Ends if you use a skill.,8,0,0,0,Tactics,Prophecies
+Bull's Charge,Elite Stance. (5...10...11 seconds.) You move 33% faster. Causes knock-down if you hit a moving foe in melee. Ends if you use a skill.,0,5,0,20,Strength,Prophecies
 Bull's Strike,Melee Attack. Deals +5...25...30 damage and causes knock-down if target foe is moving.,0,5,0,10,Strength,Core
+Burst of Aggression,Stance. (2...8...10 seconds.) You attack 33% faster. End effect: lose all adrenaline.,0,5,0,12,Strength,Nightfall
+Charging Strike,Elite Stance. (1...8...10 seconds.) You move 33% faster and deal +10...34...40 damage with your next melee hit. Ends when you hit or if you use a skill.,0,5,0,5,Strength,Nightfall
 Cleave,Elite Axe Attack. Deals +10...26...30 damage.,4,0,0,0,Axe Mastery,Core
 Counter Blow,Hammer Attack. Causes knock-down if target foe is attacking.,4,0,0,0,Hammer Mastery,Core
+Counterattack,Melee Attack. Deals +5...29...35 damage. You gain 2...5...6 Energy if target foe is attacking.,0,5,0,6,Strength,Nightfall
+Crippling Slash,Elite Sword Attack. Inflicts Crippled condition (5...13...15 seconds) and Bleeding condition (10...22...25 seconds).,6,0,0,0,Swordsmanship,Nightfall
+Critical Chop,Axe Attack. Deals +5...17...20 damage. Interrupts an action if you land a critical hit.,0,5,1,15,Axe Mastery,Nightfall
+Crude Swing,Hammer Attack. Attack all adjacent foes for +1...16...20 damage.,0,5,0,5,Hammer Mastery,Prophecies
+Crushing Blow,Hammer Attack. Deals +1...16...20 damage. Inflicts Deep Wound condition if target foe is knocked-down (5...17...20 seconds).,0,5,0,10,Hammer Mastery,Prophecies
 Cyclone Axe,Axe Attack. Deals +4...10...12 damage to all foes adjacent to you.,0,5,0,4,Axe Mastery,Core
-Defensive Stance,Stance. (1...4...5 second[s].) You have 75% chance to block. End effect: gain one adrenaline for each melee attack skill you have (maximum 0...3...4).,5,0,0,8,Tactics,Core
+Deadly Riposte,Skill. (8 seconds). You block the next melee attack and your attacker takes 15...75...90 damage. Inflicts Bleeding condition. (3...21...25 seconds). No effect unless you have a sword equipped.,0,5,0,10,Tactics,Prophecies
+Decapitate,Elite Axe Attack. Deals +5...41...50 damage. Inflicts Deep Wound condition (5...17...20 seconds). Automatic critical hit. You lose all adrenaline and Energy.,8,0,0,0,Axe Mastery,Nightfall
+Defensive Stance,Stance. (1...4...5 seconds.) You have 75% chance to block. End effect: gain one adrenaline for each melee attack skill you have (maximum 0...3...4).,5,0,0,8,Tactics,Core
+Deflect Arrows,Stance. (1...5...6 seconds.) You have 75% chance to block attacks. Adjacent foes suffer Bleeding (5...13...15 seconds) when you block a projectile attack.,5,0,0,12,Tactics,Prophecies
+Defy Pain,Elite Skill. (20 seconds.) You have +90...258...300 maximum Health, +20 armor, and take 1...8...10 less damage.,5,0,0,0,Strength,Prophecies
+Defy Pain (PvP),Elite Stance. (20 seconds.) You have +90...258...300 maximum Health and +20 armor.,5,0,0,0,Strength,Prophecies
+Desperation Blow,Melee Attack. Deals +10...34...40 damage. Inflicts one of the following random conditions: Deep Wound (20 seconds), Weakness (20 seconds), Bleeding (25 seconds), or Crippled (15 seconds). You are knocked-down.,0,5,0,7,Tactics,Prophecies
 Devastating Hammer,Elite Hammer Attack. Causes knock-down. Inflicts Weakness condition (5...17...20 seconds).,7,0,0,0,Hammer Mastery,Core
+Disarm,Sword Attack. Interrupts target foe. Interruption effect: disables this foe's attack skills (0...2...3 seconds) if that action was an attack.,0,5,0.5,20,Strength,Eye of the North
+Disciplined Stance,Stance. (1...3...4 seconds.) You have 75% chance to block and +10 armor. Ends if you use an adrenal skill.,0,5,0,15,Tactics,Prophecies
 Dismember,Axe Attack. Inflicts Deep Wound condition (5...17...20 seconds).,5,0,0,0,Axe Mastery,Core
 Disrupting Chop,Axe Attack. Interrupts an action. Interruption effect: interrupted skill is disabled for +20 seconds.,6,0,0,0,Axe Mastery,Core
 Distracting Blow,Melee Attack. Also attacks foes adjacent to your target. Interrupts an action. Hits for no damage.,0,5,0.5,10,,Core
+Distracting Strike,Melee Attack. Interrupts an action. Interruption effect: Disables interrupted skill (20 seconds) if target foe has Cracked Armor. Deals no damage.,0,5,0.5,15,,Eye of the North
+Dolyak Signet,Signet. (8...18...20 seconds.) You have +10...34...40 armor and cannot be knocked-down. You move 75% slower.,0,0,0,20,Strength,Prophecies
+Dragon Slash,Elite Sword Attack. Deals +10...34...40 damage. You gain 1...4...5 strikes of adrenaline if it hits.,10,0,0,0,Swordsmanship,Factions
+Drunken Blow,Melee Attack. Deals +10...34...40 damage. Inflicts one of the following random conditions: Deep Wound (20 seconds), Weakness (20 seconds), Bleeding (25 seconds), or Crippled (15 seconds). You are knocked-down.,0,5,0,7,Tactics,Factions
+Dwarven Battle Stance,Elite Stance. (5...10...11 seconds.) You attack 33% faster, you gain +40 armor, and your attack skills interrupt actions. No effect unless you have a hammer equipped.,0,5,0,20,Strength,Prophecies
+Earth Shaker,Elite Hammer Attack. Knocks down target and adjacent foes. 50% failure chance unless Hammer Mastery is 5 or more.,8,0,0,0,Hammer Mastery,Prophecies
 Endure Pain,Skill. (7...16...18 seconds.) You have +90...258...300 maximum Health.,0,5,0,30,Strength,Core
+Enraged Smash,Elite Hammer Attack. Gives you 1...3...4 strikes of adrenaline if you hit. Deals +10...34...40 damage and causes knockdown if target foe was moving.,0,5,0,5,Hammer Mastery,Factions
+Enraged Smash (PvP),Elite Hammer Attack. Gives you 1...3...4 strikes of adrenaline if you hit. Deals +10...34...40 damage and causes knockdown if target foe was moving.,0,5,0,10,Hammer Mastery,Factions
+Enraging Charge,Stance. (5...13...15 seconds.) You move 25% faster. Gain +0...2...3 adrenaline on your next melee attack. Ends after your next hit.,0,5,0,20,Strength,Nightfall
+Eviscerate,Elite Axe Attack. Deals +1...25...31 damage. Inflicts Deep Wound condition (5...17...20 seconds).,8,0,0,0,Axe Mastery,Prophecies
 Executioner's Strike,Axe Attack. Deals +10...34...40 damage.,8,0,0,0,Axe Mastery,Core
+Fierce Blow,Hammer Attack. Deals +5...17...20 damage. Inflicts Deep Wound (1...7...8 seconds) if target foe is Weakened.,6,0,0,0,Hammer Mastery,Factions
 Final Thrust,Sword Attack. Deals +1...32...40 damage. Deals +1...32...40 more damage if target foe is below 50% Health. Lose all adrenaline.,10,0,0,0,Swordsmanship,Core
+Flail,Stance. (1...12...15 seconds.) You attack 33% faster. You move 33% slower.,4,0,0,0,Strength,Nightfall
+Flourish,Elite Skill. Recharges your attack skills. You gain 2...6...7 Energy for each skill recharged.,0,5,1,8,Strength,Prophecies
+Flurry,Stance. (5 seconds). You attack 33% faster. You do 25% less damage.,0,5,0,5,,Prophecies
+Forceful Blow,Elite Hammer Attack. Deals +10...26...30 damage. Remove target foe's stance. Inflicts Weakness condition (5...17...20 seconds). Unblockable.,5,0,0,0,Hammer Mastery,Factions
+Frenzied Defense,Stance. (8 seconds.) You have 75% chance to block. You take double damage.,0,5,0,10,,Nightfall
 Frenzy,Stance. (8 seconds.) You attack 33% faster. You take double damage.,0,5,0,4,,Core
+Furious Axe,Axe Attack. Deals +5...29...35 damage. Gives you 3 strikes of adrenaline if blocked.,0,5,0,6,Axe Mastery,Factions
+Galrath Slash,Sword Attack. Deals +1...32...40 damage.,8,0,0,0,Swordsmanship,Prophecies
 Gash,Sword Attack. Deals +5...17...20 damage and inflicts Deep Wound condition (5...17...20 seconds) if your target is Bleeding.,6,0,0,0,Swordsmanship,Core
+Gladiator's Defense,Elite Stance. (5...10...11 seconds.) You have 75% chance to block. Your attacker takes 5...29...35 damage whenever you block a melee attack this way.,0,5,0,30,Tactics,Prophecies
+Grapple,Touch Skill. Causes knockdown. You are also knocked down. Your current stance ends.,0,5,0.75,12,,Eye of the North
+Griffon's Sweep,Melee Attack. Deals +5...17...20 damage. Causes knock-down and deals 10...29...34 damage if blocked.,0,5,0,8,Strength,Prophecies
 Hammer Bash,Hammer Attack. Causes knock-down. Lose all adrenaline.,6,0,0,0,Hammer Mastery,Core
 Hamstring,Sword Attack. Inflicts Crippled condition (3...13...15 seconds).,0,10,0,15,Swordsmanship,Core
+Headbutt,Elite Touch Skill. Deals 40...88...100 damage. You are Dazed (5...17...20 seconds).,0,15,0.75,20,Strength,Nightfall
 Healing Signet,Signet. You gain 82...154...172 Health. You have -40 armor while using this skill.,0,0,2,4,Tactics,Core
 Heavy Blow,Hammer Attack. Deals +1...24...30 damage and causes knock-down if target foe is Weakened. Lose all adrenaline.,5,0,0,0,Hammer Mastery,Core
 Hundred Blades,Elite Skill. (15 seconds.) Deals 10...22...25 slashing damage to all adjacent foes whenever you attack with a sword.,0,5,0,25,Swordsmanship,Core
 Irresistible Blow,Hammer Attack. Deals +5...17...20 damage. Deals 5...17...20 damage and causes knock-down if blocked.,0,5,0,6,Hammer Mastery,Core
+Jaizhenju Strike,Sword Attack. Deals +1...24...30 damage. Unblockable unless you are in a stance.,0,5,0,8,Swordsmanship,Factions
+Keen Chop,Axe Attack. Always a critical hit.,3,0,0,0,Axe Mastery,Eye of the North
+Knee Cutter,Sword Attack. You gain 2...6...7 Energy and 1...3...3 adrenaline if target foe is Crippled.,5,0,0,1,Swordsmanship,Eye of the North
+Lacerating Chop,Axe Attack. Deals +5...17...20 damage. Inflicts Bleeding condition (5...17...20 seconds) if target foe is knocked-down.,5,0,0,0,Axe Mastery,Factions
+Leviathan's Sweep,Melee Attack. Deals +5...17...20 damage. Causes knock-down and deals 10...29...34 damage if blocked.,0,5,0,8,Strength,Factions
+Lion's Comfort,Skill. You are healed for 50...98...110 and gain 0...2...3 strikes of adrenaline. Disables your signets (12 seconds).,4,0,1,1,Strength,Nightfall
+Magehunter Strike,Elite Melee Attack. Deals +5...17...20 damage. Unblockable if target foe is enchanted.,0,5,0.5,3,Strength,Nightfall
+Magehunter's Smash,Elite Hammer Attack. Causes knock-down. Unblockable if target foe is enchanted.,8,0,0,0,Hammer Mastery,Nightfall
 Mighty Blow,Hammer Attack. Deals +10...34...40 damage.,7,0,0,0,Hammer Mastery,Core
+Mokele Smash,Hammer Attack. Deals +5...17...20 damage and you gain 2 strikes of adrenaline.,0,5,0,12,Hammer Mastery,Nightfall
+Overbearing Smash,Hammer Attack. Deals +1...16...20 damage. If target foe is knocked down, they are Dazed (1...7...8 seconds).,0,5,0,20,Hammer Mastery,Nightfall
+Penetrating Blow,Axe Attack. Deals +5...17...20 damage. 20% armor penetration.,5,0,0,0,Axe Mastery,Prophecies
+Penetrating Chop,Axe Attack. Deals +5...17...20 damage. 20% armor penetration.,5,0,0,0,Axe Mastery,Factions
 Power Attack,Melee Attack. Deals +10...34...40 damage.,0,5,0,3,Strength,Core
+Primal Rage,Elite Stance. (1...12...15 seconds.) You attack 33% faster and move 25% faster. You take double damage.,4,0,0,10,Strength,Factions
+Protector's Defense,Skill. (5...10...11 seconds.) Allies adjacent to you have 75% chance to block. Ends if you move.,0,5,0,30,Tactics,Factions
+Protector's Strike,Melee Attack. Deals +10...34...40 damage if target is moving.,0,5,0.5,3,Strength,Prophecies
+Pulverizing Smash,Hammer Attack. Inflicts Weakness and Deep Wound conditions (5...17...20 seconds) if target foe is knocked-down.,4,0,0,0,Hammer Mastery,Eye of the North
+Pure Strike,Sword Attack. Deals +1...24...30 damage. Unblockable unless you are in a stance.,0,5,0,8,Swordsmanship,Prophecies
+Quivering Blade,Elite Sword Attack. Deals +10...34...40 damage. Inflicts Dazed condition (5 seconds) if target foe was moving.,5,0,0,0,Swordsmanship,Factions
+Rage of the Ntouka,Elite Skill. You gain 1...6...7 adrenaline. For 10 seconds, adrenal skills have a 5 second recharge when used.,0,5,0,15,Strength,Nightfall
+Renewing Smash,Hammer Attack. Deals +10...34...40 damage. You gain 3 Energy and this attack recharges instantly if target foe was knocked down.,0,5,1,30,Hammer Mastery,Factions
+Renewing Smash (PvP),Hammer Attack. Deals +5...17...20 damage. You gain 3 energy and this attack recharges instantly if target foe was knocked down.,0,5,0,30,Hammer Mastery,Factions
+Riposte,Skill. (8 seconds). You block the next melee attack and your attacker takes 20...68...80 damage. No effect unless you have a sword equipped.,4,0,0,0,Tactics,Prophecies
+Rush,Stance. (8...18...20 seconds.) You move 25% faster.,4,0,0,0,Strength,Prophecies
 Savage Slash,Sword Attack. Interrupts an action. Interruption effect: deals +1...32...40 damage if action was a spell.,0,5,0.5,15,Swordsmanship,Core
 Seeking Blade,Sword Attack. Deals +1...16...20 damage. Deals 1...16...20 damage and inflicts Bleeding condition (25 seconds) if blocked.,0,5,0,4,Swordsmanship,Core
 Seven Weapons Stance,Elite Stance. (3...17...20 seconds.) Weapon attributes are increased by +1...12...15. You attack 33% faster. PvE Skill,0,5,0,20,Strength,Core
 Sever Artery,Sword Attack. Inflicts Bleeding condition (5...21...25 seconds).,4,0,0,0,Swordsmanship,Core
-Shield Bash,Skill. (5...10...11 seconds.) You block of next attack skill. Causes knock-down and +15 second recharge if it was a melee skill. No effect unless you are wielding a shield.,0,5,0,20,Strength,Core
+Shield Bash,Skill. (5...10...11 seconds.) You block the next attack skill. Causes knock-down and +15 second recharge if it was a melee skill. No effect unless you are wielding a shield.,0,5,0,20,Strength,Core
+Shield Stance,Stance. (1...5...6 seconds.) You have 75% chance to block. Damage is reduced by 2 for each rank of Strength (maximum 15 damage reduction). No effect unless you have a shield equipped.,0,5,0,15,Tactics,Prophecies
+Shove,Elite Touch Skill. Causes knockdown. Initial effect: ends foe's stance and deals 15...63...75 damage if target foe is moving.,0,5,0.75,15,Tactics,Factions
+Signet of Stamina,Signet. You have +50...250...300 maximum Health. Ends if you hit with an attack.,0,0,0.25,20,Strength,Nightfall
+Signet of Strength,Signet. Your attacks deal +5 damage. Ends after 1...13...16 attacks.,0,0,1,45,Strength,Factions
+Silverwing Slash,Sword Attack. Deals +1...32...40 damage.,8,0,0,0,Swordsmanship,Factions
+Skull Crack,Elite Melee Attack. Interrupts an action. Inflicts Dazed condition (10 seconds) if target is casting a spell.,9,0,0.5,0,,Prophecies
+Soldier's Defense,Stance. (1...5...6 seconds.) You have 75% chance to block while under the effects of a shout or chant. Block effect: gain 1 adrenaline.,0,5,0,15,Tactics,Nightfall
+Soldier's Speed,Stance. (3...15...18 seconds.) You move 15% faster and an additional 15% while affected by a chant or shout.,0,5,0,12,Tactics,Eye of the North
+Soldier's Stance,Elite Stance. (5...13...15 seconds.) You have a 75% chance to block. You attack 33% faster while under the effects of a chant or shout.,0,5,0,15,Tactics,Nightfall
+Soldier's Stance (PvP),Elite Stance. (4...9...10 seconds.) You attack 33% faster while under the effects of a shout or chant.,0,5,0,8,Tactics,Nightfall
+Soldier's Strike,Melee Attack. Deals +10...34...40 damage. Unblockable if you are under the effects of a chant or shout.,0,5,0,4,Tactics,Nightfall
 Sprint,Stance. (8...13...14 seconds.) You move 25% faster.,0,5,0,15,Strength,Core
 Staggering Blow,Hammer Attack. Inflicts Weakness condition (5...17...20 seconds).,4,0,1,0,Hammer Mastery,Core
+Standing Slash,Sword Attack. Deals +5...17...20 damage. Deals 5...17...20 more damage if you are in a stance.,6,0,0,0,Swordsmanship,Factions
+Steady Stance,Elite Stance. (10 seconds.) The next time you would be knocked-down, you gain 1...3...3 adrenaline and 1...6...7 Energy instead.,0,5,0,6,Tactics,Nightfall
+Steelfang Slash,Sword Attack. Deals +1...25...31 damage. You gain 1...4...5 adrenaline if target foe is knocked down.,8,0,0,1,Swordsmanship,Nightfall
+Sun and Moon Slash,Sword Attack. You attack target foe twice. Unblockable.,8,0,0,0,Swordsmanship,Factions
 Swift Chop,Axe Attack. Deals +1...16...20 damage. Deals 1...16...20 damage and inflicts Deep Wound condition (20 seconds) if blocked.,0,5,0,4,Axe Mastery,Core
+Symbolic Strike,Melee Attack. Deals +12 damage (maximum 70) for each signet you have equipped.,4,0,0,0,,Eye of the North
 Thrill of Victory,Melee Attack. Deals +20...36...40 damage. If you have more Health than your target, you gain 1...2...2 adrenaline.,0,5,0,8,Tactics,Core
+Tiger Stance,Stance. (4...9...10 seconds.) You attack 33% faster. Ends if you fail to hit.,0,5,0,20,Strength,Factions
+Triple Chop,Elite Axe Attack. Deals +10...34...40 damage. Also hits adjacent foes.,0,5,0,10,Axe Mastery,Factions
 Warrior's Cunning,Skill. (5...10...11 seconds.) Your melee attacks are unblockable.,0,10,0,60,Strength,Core
+Warrior's Endurance,Elite Skill. (5...29...35 seconds.) You gain 3 Energy each time you hit with a melee attack. No Energy gain if you have more than 10...22...25 Energy.,0,5,0,30,Strength,Prophecies
+Warrior's Endurance (PvP),Elite Stance. (5...29...35 seconds.) You gain 3 Energy each time you hit with a melee attack. No Energy gain if you have more than 10...22...25 Energy.,0,5,0,30,Strength,Prophecies
+Wary Stance,Stance. (1...5...6 seconds). You block attack skills. Gain adrenaline and 5 Energy for each block. Ends if you use a skill.,0,10,0,10,Tactics,Prophecies
+Whirling Axe,Elite Axe Attack. Deals +5...17...20 damage and removes a stance. Unblockable.,4,0,0,0,Axe Mastery,Factions
+Whirlwind Attack,Melee Attack. Deals +13...20 damage to target and adjacent foes.,6,0,0,1,Sunspear rank,Nightfall
 Wild Blow,Melee Attack. Always a critical hit. Removes a stance. Unblockable. Lose all adrenaline.,0,5,0,8,,Core
+Yeti Smash,Hammer Attack. Attack all adjacent foes. Knocks down foes suffering from a condition. You lose all adrenaline. 50% failure chance unless Hammer Mastery is 5 or more.,6,0,0,0,Hammer Mastery,Factions
