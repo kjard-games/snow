@@ -1,5 +1,6 @@
 const types = @import("../types.zig");
 const Skill = types.Skill;
+const effects = @import("../../effects.zig");
 
 // ============================================================================
 // SHOVELER SKILLS - Tank/Defender (100-160 range)
@@ -37,6 +38,194 @@ const shoveler_numb = [_]types.ChillEffect{.{
     .stack_intensity = 1,
 }};
 
+// ============================================================================
+// EFFECT DEFINITIONS
+// ============================================================================
+
+// Dig In - +50 padding, immune to knockdown/movement
+const dig_in_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .armor_add,
+        .value = .{ .float = 50.0 },
+    },
+    .{
+        .effect_type = .immune_to_knockdown,
+        .value = .{ .int = 1 },
+    },
+};
+
+const DIG_IN_EFFECT = effects.Effect{
+    .name = "Dig In",
+    .description = "+50 padding and immune to knockdown",
+    .modifiers = &dig_in_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const dig_in_effects = [_]effects.Effect{DIG_IN_EFFECT};
+
+// Fortify - 50% less damage
+const fortify_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 0.50 }, // Take 50% less = multiply incoming by 0.5
+}};
+
+const FORTIFY_EFFECT = effects.Effect{
+    .name = "Fortify",
+    .description = "Take 50% less damage",
+    .modifiers = &fortify_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const fortify_effects = [_]effects.Effect{FORTIFY_EFFECT};
+
+// Retribution - reflect 25% damage
+const retribution_mods = [_]effects.Modifier{.{
+    .effect_type = .reflect_damage_percent,
+    .value = .{ .float = 0.25 },
+}};
+
+const RETRIBUTION_EFFECT = effects.Effect{
+    .name = "Retribution",
+    .description = "Reflect 25% of damage back to attackers",
+    .modifiers = &retribution_mods,
+    .timing = .on_take_damage,
+    .affects = .source_of_damage,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const retribution_effects = [_]effects.Effect{RETRIBUTION_EFFECT};
+
+// Stand Your Ground - immobile, +30% damage, 50% less damage taken
+const stand_your_ground_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.30 }, // Deal 30% more damage
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 0.0 }, // Cannot move
+    },
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 1.50 }, // 50% more effective armor = 50% less damage
+    },
+};
+
+const STAND_YOUR_GROUND_EFFECT = effects.Effect{
+    .name = "Stand Your Ground",
+    .description = "Cannot move, +30% damage, 50% less damage taken",
+    .modifiers = &stand_your_ground_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const stand_your_ground_effects = [_]effects.Effect{STAND_YOUR_GROUND_EFFECT};
+
+// Cover Fire - allies take 25% less damage
+const cover_fire_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_multiplier,
+    .value = .{ .float = 1.25 }, // 25% more effective armor
+}};
+
+const COVER_FIRE_EFFECT = effects.Effect{
+    .name = "Cover Fire",
+    .description = "Allies near you take 25% less damage",
+    .modifiers = &cover_fire_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const cover_fire_effects = [_]effects.Effect{COVER_FIRE_EFFECT};
+
+// Entrench - 60% less damage, 50% slower
+const entrench_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 2.5 }, // 60% less damage = 2.5x armor effectiveness
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 0.50 },
+    },
+};
+
+const ENTRENCH_EFFECT = effects.Effect{
+    .name = "Entrench",
+    .description = "Take 60% less damage, move 50% slower",
+    .modifiers = &entrench_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const entrench_effects = [_]effects.Effect{ENTRENCH_EFFECT};
+
+// Immovable Object - cannot die, cannot move, 75% less damage
+const immovable_object_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 4.0 }, // 75% less damage = 4x armor
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 0.0 }, // Cannot move
+    },
+    .{
+        .effect_type = .immune_to_knockdown,
+        .value = .{ .int = 1 },
+    },
+};
+
+const IMMOVABLE_OBJECT_EFFECT = effects.Effect{
+    .name = "Immovable Object",
+    .description = "Cannot die, cannot move, 75% less damage",
+    .modifiers = &immovable_object_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const immovable_object_effects = [_]effects.Effect{IMMOVABLE_OBJECT_EFFECT};
+
+// Earthquake - AoE knockdown
+const earthquake_mods = [_]effects.Modifier{.{
+    .effect_type = .knockdown,
+    .value = .{ .int = 1 },
+}};
+
+const EARTHQUAKE_EFFECT = effects.Effect{
+    .name = "Earthquake",
+    .description = "Knockdown for 3 seconds",
+    .modifiers = &earthquake_mods,
+    .timing = .on_hit,
+    .affects = .foes_near_target,
+    .condition = .always,
+    .duration_ms = 3000,
+    .is_buff = false,
+};
+
+const earthquake_effects = [_]effects.Effect{EARTHQUAKE_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Armor stance - damage reduction
     .{
@@ -50,6 +239,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
         .cozies = &bundled_up_cozy,
+        .effects = &dig_in_effects,
     },
 
     // 2. Health boost
@@ -64,6 +254,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 25000,
         .cozies = &frosty_fortitude_cozy,
+        .effects = &fortify_effects,
     },
 
     // 3. Build snow wall
@@ -97,7 +288,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 12000,
         .duration_ms = 8000,
-        // TODO: Reflect % damage back to attacker
+        .effects = &retribution_effects,
     },
 
     // 5. Taunt - force enemies to target you
@@ -208,6 +399,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 25000,
         .duration_ms = 10000,
+        .effects = &stand_your_ground_effects,
     },
 
     // 12. Protective Barrier - ally protection
@@ -257,6 +449,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 30000,
         .duration_ms = 15000,
         .cozies = &frosty_fortitude_cozy,
+        .effects = &entrench_effects,
     },
 
     // 15. Cover Fire - protect allies
@@ -273,6 +466,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 25000,
         .duration_ms = 8000,
+        .effects = &cover_fire_effects,
     },
 
     // 16. Regeneration - healing over time
@@ -326,6 +520,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 90000,
         .duration_ms = 8000,
         .is_ap = true,
+        .effects = &immovable_object_effects,
     },
 
     // AP 3: Guardian Angel - protect ally completely
@@ -360,5 +555,6 @@ pub const skills = [_]Skill{
         .aftercast_ms = 1000,
         .recharge_time_ms = 50000,
         .is_ap = true,
+        .effects = &earthquake_effects,
     },
 };

@@ -1,5 +1,6 @@
 const types = @import("../types.zig");
 const Skill = types.Skill;
+const effects = @import("../../effects.zig");
 
 // ============================================================================
 // ANIMATOR SKILLS - Summoner/Necromancer (180-240 range)
@@ -31,6 +32,154 @@ const animator_numb = [_]types.ChillEffect{.{
     .duration_ms = 6000,
     .stack_intensity = 1,
 }};
+
+// ============================================================================
+// EFFECT DEFINITIONS
+// ============================================================================
+
+// Unholy Strength - summons deal +50% damage
+const unholy_strength_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.50 },
+}};
+
+const UNHOLY_STRENGTH_EFFECT = effects.Effect{
+    .name = "Unholy Strength",
+    .description = "Summons deal +50% damage",
+    .modifiers = &unholy_strength_mods,
+    .timing = .while_active,
+    .affects = .all_summons,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const unholy_strength_effects = [_]effects.Effect{UNHOLY_STRENGTH_EFFECT};
+
+// Sap Will - steal energy
+const sap_will_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_steal_on_hit,
+    .value = .{ .float = 5.0 },
+}};
+
+const SAP_WILL_EFFECT = effects.Effect{
+    .name = "Sap Will",
+    .description = "Steal 5 energy from target",
+    .modifiers = &sap_will_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const sap_will_effects = [_]effects.Effect{SAP_WILL_EFFECT};
+
+// Death's Embrace - life steal (heal for damage dealt)
+// Note: Healing is already on skill, this effect is for documentation
+const deaths_embrace_mods = [_]effects.Modifier{.{
+    .effect_type = .healing_multiplier,
+    .value = .{ .float = 0.50 }, // Heal for 50% of damage dealt
+}};
+
+const DEATHS_EMBRACE_EFFECT = effects.Effect{
+    .name = "Life Drain",
+    .description = "Heal for 50% of damage dealt",
+    .modifiers = &deaths_embrace_mods,
+    .timing = .on_hit,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = true,
+};
+
+const deaths_embrace_effects = [_]effects.Effect{DEATHS_EMBRACE_EFFECT};
+
+// Dark Bargain - +25% damage buff after sacrifice
+const dark_bargain_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.25 },
+}};
+
+const DARK_BARGAIN_EFFECT = effects.Effect{
+    .name = "Dark Bargain",
+    .description = "+25% damage after sacrificing a snowman",
+    .modifiers = &dark_bargain_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const dark_bargain_effects = [_]effects.Effect{DARK_BARGAIN_EFFECT};
+
+// Weaken - target deals 20% less damage
+const weaken_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 0.80 },
+}};
+
+const WEAKEN_EFFECT = effects.Effect{
+    .name = "Weaken",
+    .description = "Target deals 20% less damage",
+    .modifiers = &weaken_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 6000,
+    .is_buff = false,
+};
+
+const weaken_effects = [_]effects.Effect{WEAKEN_EFFECT};
+
+// Master Animator - summons double damage, double health, +50% attack speed
+const master_animator_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 2.0 },
+    },
+    .{
+        .effect_type = .max_warmth_multiplier,
+        .value = .{ .float = 2.0 },
+    },
+    .{
+        .effect_type = .attack_speed_multiplier,
+        .value = .{ .float = 1.50 },
+    },
+};
+
+const MASTER_ANIMATOR_EFFECT = effects.Effect{
+    .name = "Master Animator",
+    .description = "Summons deal double damage, have double health, attack 50% faster",
+    .modifiers = &master_animator_mods,
+    .timing = .while_active,
+    .affects = .all_summons,
+    .condition = .always,
+    .duration_ms = 30000,
+    .is_buff = true,
+};
+
+const master_animator_effects = [_]effects.Effect{MASTER_ANIMATOR_EFFECT};
+
+// Plague of Frost - spreading curse damage
+const plague_of_frost_mods = [_]effects.Modifier{.{
+    .effect_type = .warmth_drain_per_second,
+    .value = .{ .float = 2.0 }, // DoT effect
+}};
+
+const PLAGUE_OF_FROST_EFFECT = effects.Effect{
+    .name = "Plague of Frost",
+    .description = "Curse spreads when target takes damage",
+    .modifiers = &plague_of_frost_mods,
+    .timing = .on_take_damage,
+    .affects = .foes_near_target,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = false,
+};
+
+const plague_of_frost_effects = [_]effects.Effect{PLAGUE_OF_FROST_EFFECT};
 
 pub const skills = [_]Skill{
     // 1. Basic summon - weak but cheap
@@ -91,7 +240,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
         .duration_ms = 10000,
-        // TODO: Summons deal +50% damage
+        .effects = &unholy_strength_effects,
     },
 
     // 5. Heal summons
@@ -147,7 +296,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
         .chills = &brain_freeze_chill,
-        // TODO: Steal 5 energy from target
+        .effects = &sap_will_effects,
     },
 
     // 9. TERRAIN: Grave Snow - create "graves" for snowman corpses
@@ -229,6 +378,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
+        .effects = &deaths_embrace_effects,
     },
 
     // 14. Summon Reinforcement - quick minion
@@ -260,6 +410,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 500,
         .recharge_time_ms = 15000,
         .grants_energy_on_hit = 10,
+        .effects = &dark_bargain_effects,
     },
 
     // 16. Weaken - debuff enemy
@@ -275,6 +426,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         .chills = &animator_numb,
+        .effects = &weaken_effects,
     },
 
     // ========================================================================
@@ -314,6 +466,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 40000,
         .duration_ms = 15000,
         .is_ap = true,
+        .effects = &plague_of_frost_effects,
     },
 
     // AP 3: Master Animator - empower all summons
@@ -329,6 +482,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 30000,
         .is_ap = true,
+        .effects = &master_animator_effects,
     },
 
     // AP 4: Death Nova - explode enemies on death

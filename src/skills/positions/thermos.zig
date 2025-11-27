@@ -1,5 +1,6 @@
 const types = @import("../types.zig");
 const Skill = types.Skill;
+const effects = @import("../../effects.zig");
 
 // ============================================================================
 // THERMOS SKILLS - Healer/Support (150-200 range)
@@ -49,6 +50,206 @@ const bundled_up_cozy = [_]types.CozyEffect{.{
     .stack_intensity = 1,
 }};
 
+// ============================================================================
+// EFFECT DEFINITIONS
+// ============================================================================
+
+// Hand Warmers - remove all chills from ally
+const hand_warmers_mods = [_]effects.Modifier{.{
+    .effect_type = .remove_all_chills,
+    .value = .{ .int = 1 },
+}};
+
+const HAND_WARMERS_EFFECT = effects.Effect{
+    .name = "Hand Warmers",
+    .description = "Remove all chills from target",
+    .modifiers = &hand_warmers_mods,
+    .timing = .on_cast,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = true,
+};
+
+const hand_warmers_effects = [_]effects.Effect{HAND_WARMERS_EFFECT};
+
+// Warm Embrace - remove 1-2 chills
+const warm_embrace_mods = [_]effects.Modifier{.{
+    .effect_type = .remove_random_chill,
+    .value = .{ .int = 2 },
+}};
+
+const WARM_EMBRACE_EFFECT = effects.Effect{
+    .name = "Warm Embrace",
+    .description = "Remove 1-2 chills from target",
+    .modifiers = &warm_embrace_mods,
+    .timing = .on_cast,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = true,
+};
+
+const warm_embrace_effects = [_]effects.Effect{WARM_EMBRACE_EFFECT};
+
+// Energy Bar - target gains energy
+const energy_bar_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_gain_per_second,
+    .value = .{ .float = 2.0 }, // Faster energy regen for duration
+}};
+
+const ENERGY_BAR_EFFECT = effects.Effect{
+    .name = "Energy Bar",
+    .description = "Target gains energy faster",
+    .modifiers = &energy_bar_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const energy_bar_effects = [_]effects.Effect{ENERGY_BAR_EFFECT};
+
+// Encouraging Words - +15% damage
+const encouraging_words_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.15 },
+}};
+
+const ENCOURAGING_WORDS_EFFECT = effects.Effect{
+    .name = "Encouraged",
+    .description = "+15% damage",
+    .modifiers = &encouraging_words_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const encouraging_words_effects = [_]effects.Effect{ENCOURAGING_WORDS_EFFECT};
+
+// Group Hug - +25% armor to allies
+const group_hug_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_multiplier,
+    .value = .{ .float = 1.25 },
+}};
+
+const GROUP_HUG_EFFECT = effects.Effect{
+    .name = "Group Hug",
+    .description = "+25% armor to allies",
+    .modifiers = &group_hug_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const group_hug_effects = [_]effects.Effect{GROUP_HUG_EFFECT};
+
+// Fortifying Brew - +30 max warmth
+const fortifying_brew_mods = [_]effects.Modifier{.{
+    .effect_type = .max_warmth_add,
+    .value = .{ .float = 30.0 },
+}};
+
+const FORTIFYING_BREW_EFFECT = effects.Effect{
+    .name = "Fortifying Brew",
+    .description = "+30 max warmth",
+    .modifiers = &fortifying_brew_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const fortifying_brew_effects = [_]effects.Effect{FORTIFYING_BREW_EFFECT};
+
+// Escape Route - +40% speed
+const escape_route_mods = [_]effects.Modifier{.{
+    .effect_type = .move_speed_multiplier,
+    .value = .{ .float = 1.40 },
+}};
+
+const ESCAPE_ROUTE_EFFECT = effects.Effect{
+    .name = "Escape Route",
+    .description = "+40% movement speed",
+    .modifiers = &escape_route_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const escape_route_effects = [_]effects.Effect{ESCAPE_ROUTE_EFFECT};
+
+// Miracle Worker - remove all chills from allies
+const miracle_worker_mods = [_]effects.Modifier{.{
+    .effect_type = .remove_all_chills,
+    .value = .{ .int = 1 },
+}};
+
+const MIRACLE_WORKER_EFFECT = effects.Effect{
+    .name = "Miracle Worker",
+    .description = "Remove all chills from allies",
+    .modifiers = &miracle_worker_mods,
+    .timing = .on_cast,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = true,
+};
+
+const miracle_worker_effects = [_]effects.Effect{MIRACLE_WORKER_EFFECT};
+
+// Sanctuary - heal 8/sec, 30% less damage
+const sanctuary_ally_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .warmth_gain_per_second,
+        .value = .{ .float = 8.0 },
+    },
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 1.43 }, // ~30% less damage = 1/0.7
+    },
+};
+
+const SANCTUARY_EFFECT = effects.Effect{
+    .name = "Sanctuary",
+    .description = "Heal 8/sec, take 30% less damage",
+    .modifiers = &sanctuary_ally_mods,
+    .timing = .while_active,
+    .affects = .allies_near_target,
+    .condition = .always,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+const sanctuary_effects = [_]effects.Effect{SANCTUARY_EFFECT};
+
+// Martyr - prevent ally death
+const martyr_mods = [_]effects.Modifier{.{
+    .effect_type = .healing_multiplier,
+    .value = .{ .float = 1.0 }, // Placeholder - actual logic is special
+}};
+
+const MARTYR_EFFECT = effects.Effect{
+    .name = "Martyr",
+    .description = "Prevent ally death at cost of your warmth",
+    .modifiers = &martyr_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const martyr_effects = [_]effects.Effect{MARTYR_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Single target heal - primary healing tool
     .{
@@ -93,6 +294,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
         .cozies = &hot_cocoa_cozy,
+        .effects = &hand_warmers_effects,
     },
 
     // 4. Protective buff - armor
@@ -121,7 +323,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
-        // TODO: Remove 1-2 chills from target
+        .effects = &warm_embrace_effects,
     },
 
     // 6. Energy support
@@ -136,7 +338,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         .cozies = &insulated_cozy,
-        // TODO: Target gains +5 energy immediately
+        .effects = &energy_bar_effects,
     },
 
     // 7. Defensive utility - blind
@@ -236,6 +438,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 12000,
         .duration_ms = 10000,
+        .effects = &encouraging_words_effects,
     },
 
     // 13. Quick Refill - instant ally heal
@@ -268,6 +471,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 20000,
         .duration_ms = 8000,
         .cozies = &bundled_up_cozy,
+        .effects = &group_hug_effects,
     },
 
     // 15. Fortifying Brew - max warmth buff
@@ -283,6 +487,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 18000,
         .cozies = &thermos_fortitude,
+        .effects = &fortifying_brew_effects,
     },
 
     // 16. Escape Route - ally mobility
@@ -299,6 +504,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 15000,
         .duration_ms = 8000,
         .cozies = &thermos_sure_footed,
+        .effects = &escape_route_effects,
     },
 
     // ========================================================================
@@ -320,6 +526,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 90000,
         .is_ap = true,
+        .effects = &miracle_worker_effects,
     },
 
     // AP 2: Spirit Link - share health pool
@@ -357,6 +564,7 @@ pub const skills = [_]Skill{
         .duration_ms = 20000,
         .terrain_effect = types.TerrainEffect.healingSlush(.circle),
         .is_ap = true,
+        .effects = &sanctuary_effects,
     },
 
     // AP 4: Martyr - take damage for allies
@@ -372,5 +580,6 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 15000,
         .is_ap = true,
+        .effects = &martyr_effects,
     },
 };

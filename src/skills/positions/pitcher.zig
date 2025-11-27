@@ -1,5 +1,6 @@
 const types = @import("../types.zig");
 const Skill = types.Skill;
+const effects = @import("../../effects.zig");
 
 // ============================================================================
 // PITCHER SKILLS - Long-range damage dealer (200-300 range)
@@ -31,6 +32,151 @@ const pitcher_frost_eyes = [_]types.ChillEffect{.{
     .stack_intensity = 1,
 }};
 
+// ============================================================================
+// EFFECT DEFINITIONS
+// ============================================================================
+
+// Ice Fastball - +15 damage if target has any chill
+const ice_fastball_bonus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 15.0 },
+}};
+
+const ICE_FASTBALL_BONUS = effects.Effect{
+    .name = "Chill Exploit",
+    .description = "+15 damage to chilled targets",
+    .modifiers = &ice_fastball_bonus_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_has_any_chill,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const ice_fastball_effects = [_]effects.Effect{ICE_FASTBALL_BONUS};
+
+// Headshot - +20 damage if target below 50% warmth
+const headshot_bonus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 20.0 },
+}};
+
+const HEADSHOT_BONUS = effects.Effect{
+    .name = "Execute",
+    .description = "+20 damage to low warmth targets",
+    .modifiers = &headshot_bonus_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_below_50_percent_warmth,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const headshot_effects = [_]effects.Effect{HEADSHOT_BONUS};
+
+// Pitcher's Focus - +25% damage buff
+const pitchers_focus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.25 },
+}};
+
+const PITCHERS_FOCUS_EFFECT = effects.Effect{
+    .name = "Pitcher's Focus",
+    .description = "+25% throw damage",
+    .modifiers = &pitchers_focus_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const pitchers_focus_effects = [_]effects.Effect{PITCHERS_FOCUS_EFFECT};
+
+// Called Shot - +15 damage if target below 50% warmth
+const called_shot_bonus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 15.0 },
+}};
+
+const CALLED_SHOT_BONUS = effects.Effect{
+    .name = "Called Shot",
+    .description = "+15 damage to low warmth targets",
+    .modifiers = &called_shot_bonus_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_below_50_percent_warmth,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const called_shot_effects = [_]effects.Effect{CALLED_SHOT_BONUS};
+
+// Perfect Game - recharge on kill
+const perfect_game_mods = [_]effects.Modifier{.{
+    .effect_type = .recharge_on_kill,
+    .value = .{ .int = 1 },
+}};
+
+const PERFECT_GAME_EFFECT = effects.Effect{
+    .name = "Perfect Game Reset",
+    .description = "Reset cooldown if target dies",
+    .modifiers = &perfect_game_mods,
+    .timing = .on_kill,
+    .affects = .self,
+    .condition = .if_target_died,
+    .duration_ms = 0,
+    .is_buff = true,
+};
+
+const perfect_game_effects = [_]effects.Effect{PERFECT_GAME_EFFECT};
+
+// Gatling Arm - no cast time, instant recharge, but fixed 8 damage
+const gatling_arm_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .cast_speed_multiplier,
+        .value = .{ .float = 100.0 }, // Effectively instant
+    },
+    .{
+        .effect_type = .cooldown_reduction_percent,
+        .value = .{ .float = 1.0 }, // 100% CDR = instant recharge
+    },
+};
+
+const GATLING_ARM_EFFECT = effects.Effect{
+    .name = "Gatling Arm",
+    .description = "Throws have no cast time and recharge instantly",
+    .modifiers = &gatling_arm_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const gatling_arm_effects = [_]effects.Effect{GATLING_ARM_EFFECT};
+
+// Sniper's Eye - double damage, 100% soak on next throw
+const snipers_eye_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .next_attack_damage_multiplier,
+        .value = .{ .float = 2.0 },
+    },
+};
+
+const SNIPERS_EYE_EFFECT = effects.Effect{
+    .name = "Sniper's Eye",
+    .description = "Next throw deals double damage and soaks all padding",
+    .modifiers = &snipers_eye_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+const snipers_eye_effects = [_]effects.Effect{SNIPERS_EYE_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Fast, reliable damage - your bread and butter
     .{
@@ -58,7 +204,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
-        // TODO: Add conditional: +15 damage if target has any chill
+        .effects = &ice_fastball_effects,
     },
 
     // 3. AoE pressure - hits adjacent foes
@@ -120,7 +266,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         .soak = 0.5,
-        // TODO: Add conditional: +20 damage if target below 50% health
+        .effects = &headshot_effects,
     },
 
     // 7. DoT application - sustained pressure
@@ -268,6 +414,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 20000,
         .duration_ms = 12000,
         .cozies = &pitcher_fire,
+        .effects = &pitchers_focus_effects,
     },
 
     // 16. Called Shot - bonus damage to marked target
@@ -283,6 +430,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1250,
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
+        .effects = &called_shot_effects,
     },
 
     // ========================================================================
@@ -303,6 +451,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .unblockable = true,
         .is_ap = true,
+        .effects = &perfect_game_effects,
     },
 
     // AP 2: Gatling Arm - rapid fire mode
@@ -318,6 +467,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 10000,
         .is_ap = true,
+        .effects = &gatling_arm_effects,
     },
 
     // AP 3: Artillery Strike - long range AoE
@@ -353,5 +503,6 @@ pub const skills = [_]Skill{
         .duration_ms = 20000,
         .soak = 1.0,
         .is_ap = true,
+        .effects = &snipers_eye_effects,
     },
 };

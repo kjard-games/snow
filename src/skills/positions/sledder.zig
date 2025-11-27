@@ -1,5 +1,6 @@
 const types = @import("../types.zig");
 const Skill = types.Skill;
+const effects = @import("../../effects.zig");
 
 // ============================================================================
 // SLEDDER SKILLS - Aggressive skirmisher (80-150 range)
@@ -36,6 +37,165 @@ const sledder_fire = [_]types.CozyEffect{.{
     .duration_ms = 6000,
     .stack_intensity = 1,
 }};
+
+// ============================================================================
+// EFFECT DEFINITIONS
+// ============================================================================
+
+// Adrenaline Rush - +50% damage, +33% speed
+const adrenaline_rush_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.50 },
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.33 },
+    },
+};
+
+const ADRENALINE_RUSH_EFFECT = effects.Effect{
+    .name = "Adrenaline Rush",
+    .description = "+50% damage and +33% speed",
+    .modifiers = &adrenaline_rush_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 8000,
+    .is_buff = true,
+};
+
+const adrenaline_rush_effects = [_]effects.Effect{ADRENALINE_RUSH_EFFECT};
+
+// Crushing Blow - knockdown
+const crushing_blow_mods = [_]effects.Modifier{.{
+    .effect_type = .knockdown,
+    .value = .{ .int = 1 },
+}};
+
+const CRUSHING_BLOW_EFFECT = effects.Effect{
+    .name = "Knockdown",
+    .description = "Target is knocked down",
+    .modifiers = &crushing_blow_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 2000, // 2 second knockdown
+    .is_buff = false,
+};
+
+const crushing_blow_effects = [_]effects.Effect{CRUSHING_BLOW_EFFECT};
+
+// Reckless Charge - self-damage
+const reckless_charge_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = -10.0 }, // Negative = self damage (conceptually)
+}};
+
+const RECKLESS_CHARGE_EFFECT = effects.Effect{
+    .name = "Reckless Impact",
+    .description = "You take 10 damage",
+    .modifiers = &reckless_charge_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const reckless_charge_effects = [_]effects.Effect{RECKLESS_CHARGE_EFFECT};
+
+// Speed Demon - +100% speed
+const speed_demon_mods = [_]effects.Modifier{.{
+    .effect_type = .move_speed_multiplier,
+    .value = .{ .float = 2.0 }, // 100% faster = 2x speed
+}};
+
+const SPEED_DEMON_EFFECT = effects.Effect{
+    .name = "Speed Demon",
+    .description = "Move 100% faster",
+    .modifiers = &speed_demon_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const speed_demon_effects = [_]effects.Effect{SPEED_DEMON_EFFECT};
+
+// Pursuit Hunter - +50% damage to moving targets, +30% speed
+const pursuit_hunter_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.30 },
+    },
+};
+
+const PURSUIT_HUNTER_EFFECT = effects.Effect{
+    .name = "Pursuit Hunter",
+    .description = "Move 30% faster toward enemies",
+    .modifiers = &pursuit_hunter_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+// Bonus damage to moving targets
+const pursuit_bonus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.50 },
+}};
+
+const PURSUIT_BONUS_EFFECT = effects.Effect{
+    .name = "Chase Down",
+    .description = "+50% damage to moving targets",
+    .modifiers = &pursuit_bonus_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_moving,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const pursuit_hunter_effects = [_]effects.Effect{ PURSUIT_HUNTER_EFFECT, PURSUIT_BONUS_EFFECT };
+
+// Sled Crash - knockdown self and target
+const sled_crash_target_mods = [_]effects.Modifier{.{
+    .effect_type = .knockdown,
+    .value = .{ .int = 1 },
+}};
+
+const SLED_CRASH_TARGET_EFFECT = effects.Effect{
+    .name = "Sled Crash Knockdown",
+    .description = "Target knocked down for 3 seconds",
+    .modifiers = &sled_crash_target_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 3000,
+    .is_buff = false,
+};
+
+const sled_crash_self_mods = [_]effects.Modifier{.{
+    .effect_type = .knockdown,
+    .value = .{ .int = 1 },
+}};
+
+const SLED_CRASH_SELF_EFFECT = effects.Effect{
+    .name = "Sled Crash Recovery",
+    .description = "You are knocked down for 1 second",
+    .modifiers = &sled_crash_self_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 1000,
+    .is_buff = false,
+};
+
+const sled_crash_effects = [_]effects.Effect{ SLED_CRASH_TARGET_EFFECT, SLED_CRASH_SELF_EFFECT };
 
 pub const skills = [_]Skill{
     // 1. Gap closer - mobility + damage
@@ -94,6 +254,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 15000,
         .cozies = &fire_inside_cozy,
+        .effects = &adrenaline_rush_effects,
     },
 
     // 5. Sliding attack - move while attacking
@@ -139,6 +300,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
         .chills = &numb_chill,
+        .effects = &crushing_blow_effects,
     },
 
     // 8. Speed boost stance
@@ -273,7 +435,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
-        // TODO: Self-damage on cast
+        .effects = &reckless_charge_effects,
     },
 
     // 16. Second Strike - follow-up attack
@@ -322,6 +484,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .duration_ms = 15000,
         .is_ap = true,
+        .effects = &speed_demon_effects,
     },
 
     // AP 3: Pursuit Hunter - anti-escape
@@ -338,6 +501,7 @@ pub const skills = [_]Skill{
         .duration_ms = 20000,
         .cozies = &sledder_fire,
         .is_ap = true,
+        .effects = &pursuit_hunter_effects,
     },
 
     // AP 4: Sled Crash - massive melee hit
@@ -353,5 +517,6 @@ pub const skills = [_]Skill{
         .aftercast_ms = 1000, // Self knockdown
         .recharge_time_ms = 30000,
         .is_ap = true,
+        .effects = &sled_crash_effects,
     },
 };

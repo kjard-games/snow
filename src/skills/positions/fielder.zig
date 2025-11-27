@@ -1,5 +1,6 @@
 const types = @import("../types.zig");
 const Skill = types.Skill;
+const effects = @import("../../effects.zig");
 
 // ============================================================================
 // FIELDER SKILLS - Balanced generalist (150-220 range)
@@ -31,6 +32,229 @@ const fielder_soggy = [_]types.ChillEffect{.{
     .stack_intensity = 1,
 }};
 
+// ============================================================================
+// EFFECT DEFINITIONS
+// ============================================================================
+
+// Dive Roll - evasion effect
+const dive_roll_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .evasion_percent,
+        .value = .{ .float = 0.75 }, // 75% evade chance
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.25 }, // +25% speed
+    },
+};
+
+const DIVE_ROLL_EFFECT = effects.Effect{
+    .name = "Dive Roll",
+    .description = "Evading attacks and moving faster",
+    .modifiers = &dive_roll_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 6000,
+    .is_buff = true,
+};
+
+const dive_roll_effects = [_]effects.Effect{DIVE_ROLL_EFFECT};
+
+// Point Blank - +10 damage if within melee range
+const point_blank_bonus_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 10.0 },
+}};
+
+const POINT_BLANK_BONUS = effects.Effect{
+    .name = "Point Blank",
+    .description = "+10 damage at close range",
+    .modifiers = &point_blank_bonus_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_near_foe, // Close range check
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const point_blank_effects = [_]effects.Effect{POINT_BLANK_BONUS};
+
+// Shake It Off - remove one chill
+const shake_it_off_mods = [_]effects.Modifier{.{
+    .effect_type = .remove_random_chill,
+    .value = .{ .int = 1 },
+}};
+
+const SHAKE_IT_OFF_EFFECT = effects.Effect{
+    .name = "Shake It Off",
+    .description = "Remove one chill",
+    .modifiers = &shake_it_off_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = true,
+};
+
+const shake_it_off_effects = [_]effects.Effect{SHAKE_IT_OFF_EFFECT};
+
+// Rally - +5 damage to allies
+const rally_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 5.0 },
+}};
+
+const RALLY_EFFECT = effects.Effect{
+    .name = "Rally",
+    .description = "+5 damage to allies",
+    .modifiers = &rally_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const rally_effects = [_]effects.Effect{RALLY_EFFECT};
+
+// Team Player - +20% damage, +15% armor
+const team_player_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.20 },
+    },
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 1.15 },
+    },
+};
+
+const TEAM_PLAYER_EFFECT = effects.Effect{
+    .name = "Team Player",
+    .description = "+20% damage and +15% armor",
+    .modifiers = &team_player_mods,
+    .timing = .while_active,
+    .affects = .target, // Single ally target
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const team_player_effects = [_]effects.Effect{TEAM_PLAYER_EFFECT};
+
+// Defensive Slide - 30% less damage, 20% faster
+const defensive_slide_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 0.70 }, // Take 30% less damage
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.20 },
+    },
+};
+
+const DEFENSIVE_SLIDE_EFFECT = effects.Effect{
+    .name = "Defensive Slide",
+    .description = "Take 30% less damage, move 20% faster",
+    .modifiers = &defensive_slide_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 6000,
+    .is_buff = true,
+};
+
+const defensive_slide_effects = [_]effects.Effect{DEFENSIVE_SLIDE_EFFECT};
+
+// MVP - +30% everything
+const mvp_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.30 },
+    },
+    .{
+        .effect_type = .armor_multiplier,
+        .value = .{ .float = 1.30 },
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.30 },
+    },
+    .{
+        .effect_type = .energy_regen_multiplier,
+        .value = .{ .float = 1.30 },
+    },
+};
+
+const MVP_EFFECT = effects.Effect{
+    .name = "MVP",
+    .description = "+30% damage, armor, speed, energy regen",
+    .modifiers = &mvp_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const mvp_effects = [_]effects.Effect{MVP_EFFECT};
+
+// Utility Belt - -30% effectiveness
+const utility_belt_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 0.70 },
+}};
+
+const UTILITY_BELT_EFFECT = effects.Effect{
+    .name = "Utility Belt",
+    .description = "Skills at -30% effectiveness",
+    .modifiers = &utility_belt_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+const utility_belt_effects = [_]effects.Effect{UTILITY_BELT_EFFECT};
+
+// Center Field - allies +20% damage, enemies take +20% damage
+const center_field_ally_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.20 },
+}};
+
+const CENTER_FIELD_ALLY_EFFECT = effects.Effect{
+    .name = "Center Field Boost",
+    .description = "Allies deal +20% damage",
+    .modifiers = &center_field_ally_mods,
+    .timing = .while_active,
+    .affects = .allies_near_target,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const center_field_enemy_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.20 }, // Take 20% more damage
+}};
+
+const CENTER_FIELD_ENEMY_EFFECT = effects.Effect{
+    .name = "Center Field Debuff",
+    .description = "Enemies take +20% damage",
+    .modifiers = &center_field_enemy_mods,
+    .timing = .while_active,
+    .affects = .foes_near_target,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = false,
+};
+
+const center_field_effects = [_]effects.Effect{ CENTER_FIELD_ALLY_EFFECT, CENTER_FIELD_ENEMY_EFFECT };
+
 pub const skills = [_]Skill{
     // 1. Versatile throw - good at everything
     .{
@@ -59,7 +283,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 10000,
         .cozies = &sure_footed_cozy,
-        // TODO: Add dash/evade mechanic
+        .effects = &dive_roll_effects,
     },
 
     // 3. Control tool - slows enemies
@@ -103,7 +327,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 500,
         .aftercast_ms = 750,
         .recharge_time_ms = 7000,
-        // TODO: Bonus damage if within 100 range
+        .effects = &point_blank_effects,
     },
 
     // 6. Utility trick - removes chill from self
@@ -117,7 +341,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        // TODO: Remove 1 chill from self
+        .effects = &shake_it_off_effects,
     },
 
     // 7. Team call - provides minor buff
@@ -134,7 +358,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
-        // TODO: Grant minor cozy to allies
+        .effects = &rally_effects,
     },
 
     // 8. Fast response - instant cast
@@ -245,6 +469,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 18000,
         .duration_ms = 10000,
+        .effects = &team_player_effects,
     },
 
     // 15. Defensive Slide - movement + defense
@@ -260,6 +485,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 15000,
         .duration_ms = 6000,
         .cozies = &fielder_bundled,
+        .effects = &defensive_slide_effects,
     },
 
     // 16. Double Play - attack two targets
@@ -294,6 +520,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 15000,
         .is_ap = true,
+        .effects = &mvp_effects,
     },
 
     // AP 2: Utility Belt - use any skill type at reduced power
@@ -309,6 +536,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .duration_ms = 20000,
         .is_ap = true,
+        .effects = &utility_belt_effects,
     },
 
     // AP 3: Center Field - massive AoE presence
@@ -327,6 +555,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 50000,
         .duration_ms = 15000,
         .is_ap = true,
+        .effects = &center_field_effects,
     },
 
     // AP 4: Grand Slam - powerful finisher
