@@ -260,6 +260,7 @@ pub const BehaviorResponse = union(enum) {
     // ========== Replacement ==========
     heal_percent: struct {
         percent: f32, // Heal to this % of max warmth
+        grant_effect: ?*const effects.Effect = null, // Optional effect to grant after healing
     },
     grant_effect: *const effects.Effect, // Apply an effect instead
     deal_damage: struct {
@@ -317,22 +318,14 @@ pub const Behavior = struct {
     }
 
     /// Prevent Death: When you would die, heal to X% instead
+    /// Optionally grants an effect (like invulnerability) after healing
     pub fn preventDeath(heal_to_percent: f32, invuln_effect: ?*const effects.Effect) Behavior {
-        // If we have an invuln effect to grant, chain it
-        if (invuln_effect) |effect| {
-            return .{
-                .trigger = .on_would_die,
-                .response = .{ .chain = &Behavior{
-                    .trigger = .on_would_die,
-                    .response = .{ .grant_effect = effect },
-                    .max_activations = 1,
-                } },
-                .max_activations = 1,
-            };
-        }
         return .{
             .trigger = .on_would_die,
-            .response = .{ .heal_percent = .{ .percent = heal_to_percent } },
+            .response = .{ .heal_percent = .{
+                .percent = heal_to_percent,
+                .grant_effect = invuln_effect,
+            } },
             .max_activations = 1,
         };
     }
@@ -368,7 +361,7 @@ pub const Behavior = struct {
             .trigger = .on_hit_by_projectile,
             .response = .{ .deal_damage = .{
                 .amount = return_damage,
-                .to = .source,
+                .to = .source_of_damage,
             } },
             .max_activations = 1,
         };

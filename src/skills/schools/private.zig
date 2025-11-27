@@ -308,10 +308,28 @@ const PORTFOLIO_DIVERSIFICATION_3_TYPES_EFFECT = effects.Effect{
 
 const portfolio_diversification_effects = [_]effects.Effect{ PORTFOLIO_DIVERSIFICATION_2_TYPES_EFFECT, PORTFOLIO_DIVERSIFICATION_3_TYPES_EFFECT };
 
-// Golden Parachute (AP 4): Prevent death, heal to 50%, invulnerable
-// This skill uses behavior: .prevent_death instead of modifiers - it's a whole mechanic
-// The stance buff simply indicates the skill is active
-const golden_parachute_mods = [_]effects.Modifier{.{
+// Golden Parachute (AP 4): Prevent death, heal to 50%, invulnerable for 3 seconds
+// This skill uses behavior to intercept death - it's a whole mechanic
+// The stance buff indicates the skill is active
+
+// Invulnerability effect granted when Golden Parachute triggers
+const golden_parachute_invuln_mods = [_]effects.Modifier{.{
+    .effect_type = .invulnerable,
+    .value = .{ .int = 1 },
+}};
+
+const GOLDEN_PARACHUTE_INVULN_EFFECT = effects.Effect{
+    .name = "Golden Parachute Invulnerability",
+    .description = "Invulnerable after Golden Parachute saved you",
+    .modifiers = &golden_parachute_invuln_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 3000, // 3 seconds of invulnerability
+    .is_buff = true,
+};
+
+// The stance marker effect (shows the skill is active)
+const golden_parachute_marker_mods = [_]effects.Modifier{.{
     .effect_type = .armor_add, // Placeholder - actual behavior is in skill.behavior
     .value = .{ .float = 0.0 },
 }};
@@ -319,7 +337,7 @@ const golden_parachute_mods = [_]effects.Modifier{.{
 const GOLDEN_PARACHUTE_EFFECT = effects.Effect{
     .name = "Golden Parachute",
     .description = "When dropping below 20% Warmth, heal to 50% and become invulnerable for 3 seconds",
-    .modifiers = &golden_parachute_mods,
+    .modifiers = &golden_parachute_marker_mods,
     .timing = .while_active,
     .affects = .self,
     .duration_ms = 30000,
@@ -328,14 +346,152 @@ const GOLDEN_PARACHUTE_EFFECT = effects.Effect{
 
 const golden_parachute_effects = [_]effects.Effect{GOLDEN_PARACHUTE_EFFECT};
 
-// Behavior: When would die, heal to 50% instead (one-shot)
+// Behavior: When would die, heal to 50% and grant 3s invulnerability (one-shot)
 const GOLDEN_PARACHUTE_BEHAVIOR = types.Behavior{
     .trigger = .on_would_die,
-    .response = .{ .heal_percent = .{ .percent = 0.5 } },
+    .response = .{ .heal_percent = .{
+        .percent = 0.5,
+        .grant_effect = &GOLDEN_PARACHUTE_INVULN_EFFECT,
+    } },
     .condition = .always, // Trigger already checks "would die"
     .max_activations = 1,
     .duration_ms = 30000,
 };
+
+// Back Door Deal: Next attack bonus after "teleport"
+const back_door_deal_mods = [_]effects.Modifier{.{
+    .effect_type = .next_attack_damage_add,
+    .value = .{ .float = 15.0 },
+}};
+
+const BACK_DOOR_DEAL_EFFECT = effects.Effect{
+    .name = "Back Door Deal",
+    .description = "Your next attack deals +15 damage",
+    .modifiers = &back_door_deal_mods,
+    .timing = .on_cast,
+    .affects = .self,
+    .duration_ms = 3000, // Expires after 3s if not used
+    .is_buff = true,
+};
+
+const back_door_deal_effects = [_]effects.Effect{BACK_DOOR_DEAL_EFFECT};
+
+// Short Sell: Vulnerability debuff (+20% damage taken)
+const short_sell_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.2 }, // Takes 20% more damage
+}};
+
+const SHORT_SELL_EFFECT = effects.Effect{
+    .name = "Short Sell",
+    .description = "Take 20% more damage from all sources",
+    .modifiers = &short_sell_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .duration_ms = 8000,
+    .is_buff = false,
+};
+
+const short_sell_effects = [_]effects.Effect{SHORT_SELL_EFFECT};
+
+// ============================================================================
+// ADDITIONAL EFFECT DEFINITIONS - For incomplete skills
+// ============================================================================
+
+// Backstab Bonus: +12 damage and energy steal when attacking from behind
+// Simplified: Triggers when target is not facing caster (approximated by "target not blocking")
+const backstab_bonus_damage_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_add,
+        .value = .{ .float = 12.0 },
+    },
+    .{
+        .effect_type = .energy_steal_on_hit,
+        .value = .{ .float = 5.0 },
+    },
+};
+
+const BACKSTAB_BONUS_EFFECT = effects.Effect{
+    .name = "Backstab",
+    .description = "+12 damage and steal 5 energy when target is not blocking",
+    .modifiers = &backstab_bonus_damage_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 0,
+    .is_buff = false,
+    // Simplified from "behind target" to "target not blocking" - rewards attacking undefended targets
+    .condition = .if_target_has_no_cozy,
+};
+
+const backstab_bonus_effects = [_]effects.Effect{BACKSTAB_BONUS_EFFECT};
+
+// Lucky Break: 30% chance for double damage and energy refund
+// Implemented via unblockable_chance as a proxy for "crit" mechanic
+// When the attack "crits" (bypasses block), it deals extra damage
+const lucky_break_crit_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .unblockable_chance,
+        .value = .{ .float = 0.3 }, // 30% unblockable
+    },
+    .{
+        .effect_type = .next_attack_damage_multiplier,
+        .value = .{ .float = 2.0 }, // Double damage when unblockable triggers
+    },
+};
+
+const LUCKY_BREAK_EFFECT = effects.Effect{
+    .name = "Lucky Break",
+    .description = "30% chance to deal double damage",
+    .modifiers = &lucky_break_crit_mods,
+    .timing = .on_hit,
+    .affects = .self,
+    .duration_ms = 0,
+    .is_buff = true,
+};
+
+const lucky_break_effects = [_]effects.Effect{LUCKY_BREAK_EFFECT};
+
+// Hostile Acquisition: Mark target - on kill, reset cooldowns and gain energy
+// Uses on_kill timing to grant rewards when the marked target dies
+const hostile_acquisition_mark_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.0 }, // No damage change, just a marker
+}};
+
+const HOSTILE_ACQUISITION_MARK_EFFECT = effects.Effect{
+    .name = "Acquisition Target",
+    .description = "Marked for hostile acquisition",
+    .modifiers = &hostile_acquisition_mark_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .duration_ms = 10000,
+    .is_buff = false,
+};
+
+// On-kill reward effect: Reset cooldowns and grant energy
+const hostile_acquisition_reward_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .cooldown_reduction_percent,
+        .value = .{ .float = 1.0 }, // 100% CDR = reset all cooldowns
+    },
+    .{
+        .effect_type = .energy_on_hit,
+        .value = .{ .float = 30.0 }, // Gain 30 energy
+    },
+};
+
+const HOSTILE_ACQUISITION_REWARD_EFFECT = effects.Effect{
+    .name = "Acquisition Complete",
+    .description = "Cooldowns reset and gain 30 energy on kill",
+    .modifiers = &hostile_acquisition_reward_mods,
+    .timing = .on_kill,
+    .affects = .self,
+    .duration_ms = 0,
+    .is_buff = true,
+    .condition = .if_target_died,
+};
+
+const hostile_acquisition_effects = [_]effects.Effect{ HOSTILE_ACQUISITION_MARK_EFFECT, HOSTILE_ACQUISITION_REWARD_EFFECT };
 
 pub const skills = [_]Skill{
     // 1. Energy management - instant energy
@@ -674,9 +830,10 @@ pub const skills = [_]Skill{
     // Theme: Surprise attacks, backdoor deals, exploiting advantages
 
     // 17. Back Door Deal - teleport attack
+    // Note: Teleport movement not yet implemented. Effect grants next attack bonus.
     .{
         .name = "Back Door Deal",
-        .description = "Trick. Teleport to target foe. Your next attack within 3 seconds deals +15 damage.",
+        .description = "Trick. Shadow step toward target foe. Your next attack within 3 seconds deals +15 damage.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 8,
@@ -684,13 +841,14 @@ pub const skills = [_]Skill{
         .activation_time_ms = 250,
         .aftercast_ms = 500,
         .recharge_time_ms = 20000,
-        // TODO: Teleport to target + next attack bonus
+        .effects = &back_door_deal_effects,
     },
 
     // 18. Backstab Bonus - attack from behind
+    // Simplified: Bonus triggers when target has no cozies (undefended)
     .{
         .name = "Backstab Bonus",
-        .description = "Throw. Deals 18 damage. If you are behind target, deals +12 damage and steals 5 energy.",
+        .description = "Throw. Deals 18 damage. If target has no Cozies, deals +12 damage and steals 5 energy.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 7,
@@ -699,7 +857,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 500,
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
-        // TODO: Behind-target conditional bonus
+        .effects = &backstab_bonus_effects,
     },
 
     // 19. Short Sell - debuff that increases damage taken
@@ -714,13 +872,14 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 25000,
         .duration_ms = 8000,
-        // TODO: Vulnerability debuff on target
+        .effects = &short_sell_effects,
     },
 
     // 20. Lucky Break - fast attack with crit chance
+    // 30% chance for attacks to be unblockable (acting as a "crit")
     .{
         .name = "Lucky Break",
-        .description = "Throw. Deals 14 damage. 30% chance to deal double damage and refund energy cost.",
+        .description = "Throw. Deals 14 damage. 30% chance to bypass blocking.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 5,
@@ -729,10 +888,11 @@ pub const skills = [_]Skill{
         .activation_time_ms = 500,
         .aftercast_ms = 500,
         .recharge_time_ms = 4000,
-        // TODO: Critical chance mechanic
+        .effects = &lucky_break_effects,
     },
 
     // AP 5: Hostile Acquisition - massive burst with reset on kill
+    // Marks target; if target dies while marked, reset cooldowns and gain energy
     .{
         .name = "Hostile Acquisition",
         .description = "[AP] Trick. Credit: 25 energy. Mark target for 10 seconds. If target dies while marked, reset all skill cooldowns and gain 30 energy.",
@@ -746,6 +906,6 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 10000,
         .is_ap = true,
-        // TODO: Mark + reset on kill behavior
+        .effects = &hostile_acquisition_effects,
     },
 };

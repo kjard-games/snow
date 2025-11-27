@@ -239,6 +239,117 @@ const MARTYRDOM_EFFECT = effects.Effect{
 
 const martyrdom_effects = [_]effects.Effect{MARTYRDOM_EFFECT};
 
+// ============================================================================
+// MESMER-ANALOG EFFECT DEFINITIONS - Energy Denial/Inspiration Focus
+// ============================================================================
+
+// Mind Numbing - target loses 15 energy (energy burn)
+const mind_numbing_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_burn,
+    .value = .{ .float = 15.0 },
+}};
+
+const MIND_NUMBING_EFFECT = effects.Effect{
+    .name = "Mind Numbing",
+    .description = "Target loses 15 energy",
+    .modifiers = &mind_numbing_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const mind_numbing_effects = [_]effects.Effect{MIND_NUMBING_EFFECT};
+
+// Empty Thoughts - +20 damage if target below 25% energy
+const empty_thoughts_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_if_target_low_energy,
+    .value = .{ .float = 20.0 },
+}};
+
+const EMPTY_THOUGHTS_EFFECT = effects.Effect{
+    .name = "Empty Thoughts",
+    .description = "+20 damage if target below 25% energy",
+    .modifiers = &empty_thoughts_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always, // Condition check happens at damage time
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const empty_thoughts_effects = [_]effects.Effect{EMPTY_THOUGHTS_EFFECT};
+
+// Aura of Exhaustion - nearby foes lose 2 energy/sec
+const aura_of_exhaustion_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_drain_per_second_aoe,
+    .value = .{ .float = 2.0 },
+}};
+
+const AURA_OF_EXHAUSTION_EFFECT = effects.Effect{
+    .name = "Aura of Exhaustion",
+    .description = "Nearby foes lose 2 energy per second",
+    .modifiers = &aura_of_exhaustion_mods,
+    .timing = .while_active,
+    .affects = .foes_in_earshot,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = false,
+};
+
+const aura_of_exhaustion_effects = [_]effects.Effect{AURA_OF_EXHAUSTION_EFFECT};
+
+// Intellectual Theft - next skill costs double if brought below 10 energy
+const intellectual_theft_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .energy_steal_on_hit,
+        .value = .{ .float = 12.0 },
+    },
+    .{
+        .effect_type = .next_skill_cost_multiplier,
+        .value = .{ .float = 2.0 }, // Conditional: only if below 10 energy
+    },
+};
+
+const INTELLECTUAL_THEFT_EFFECT = effects.Effect{
+    .name = "Intellectual Theft",
+    .description = "Steal 12 energy. Next skill costs double if target below 10 energy.",
+    .modifiers = &intellectual_theft_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 8000, // Next skill cost debuff duration
+    .is_buff = false,
+};
+
+const intellectual_theft_effects = [_]effects.Effect{INTELLECTUAL_THEFT_EFFECT};
+
+// Mental Collapse - AoE energy burn, damage = energy lost
+const mental_collapse_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .energy_burn,
+        .value = .{ .float = 20.0 },
+    },
+    .{
+        .effect_type = .damage_per_current_energy, // Damage scales with energy burned
+        .value = .{ .float = 1.0 }, // 1:1 ratio - damage = energy lost
+    },
+};
+
+const MENTAL_COLLAPSE_EFFECT = effects.Effect{
+    .name = "Mental Collapse",
+    .description = "All foes in area lose 20 energy. Deals damage equal to energy lost.",
+    .modifiers = &mental_collapse_mods,
+    .timing = .on_hit,
+    .affects = .foes_in_earshot, // AoE
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const mental_collapse_effects = [_]effects.Effect{MENTAL_COLLAPSE_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Warmth for damage
     .{
@@ -394,7 +505,8 @@ pub const skills = [_]Skill{
         .wall_height = 45.0, // Very tall wall - paid in blood
         .wall_thickness = 22.0,
         .wall_distance_from_caster = 45.0,
-        // TODO: Wall damages enemies who touch it (life steal theme)
+        // KNOWN SIMPLIFICATION: Damaging walls require wall collision damage system.
+        // Currently creates standard wall without touch damage.
     },
 
     // 10. Dark Knowledge - sacrifice for energy and damage buff
@@ -603,7 +715,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        // TODO: Target loses 15 energy (energy burn, not steal)
+        .effects = &mind_numbing_effects,
     },
 
     // 18. Punishment for low energy - bonus damage
@@ -620,7 +732,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
-        // TODO: +20 damage if target below 25% energy
+        .effects = &empty_thoughts_effects,
     },
 
     // 19. Energy drain aura - nearby foes lose energy over time
@@ -639,7 +751,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 30000,
         .duration_ms = 15000,
-        // TODO: Nearby foes lose 2 energy/sec
+        .effects = &aura_of_exhaustion_effects,
     },
 
     // 20. Energy steal + skill disable combo
@@ -656,8 +768,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1500,
         .aftercast_ms = 750,
         .recharge_time_ms = 18000,
-        .grants_energy_on_hit = 12,
-        // TODO: Next skill costs double if brought below 10 energy
+        .effects = &intellectual_theft_effects,
     },
 
     // AP 5: Energy Surge analog - AoE energy burn + damage
@@ -676,6 +787,6 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 40000,
         .is_ap = true,
-        // TODO: AoE energy burn, damage = energy lost
+        .effects = &mental_collapse_effects,
     },
 };

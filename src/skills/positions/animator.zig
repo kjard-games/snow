@@ -263,6 +263,119 @@ const ARMY_OF_SNOW_BEHAVIOR = types.Behavior.summonCreature(.{
     .damage_per_attack = 8.0,
 });
 
+// ============================================================================
+// MESMER-ANALOG EFFECT/BEHAVIOR DEFINITIONS
+// ============================================================================
+
+// Snow Decoy - absorbs next attack targeting caster
+const snow_decoy_mods = [_]effects.Modifier{.{
+    .effect_type = .absorb_next_attack,
+    .value = .{ .int = 1 },
+}};
+
+const SNOW_DECOY_EFFECT = effects.Effect{
+    .name = "Snow Decoy",
+    .description = "A decoy absorbs the next attack targeting you",
+    .modifiers = &snow_decoy_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const snow_decoy_effects = [_]effects.Effect{SNOW_DECOY_EFFECT};
+
+// Vengeful Snowman - damages attackers
+const vengeful_snowman_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_attackers,
+    .value = .{ .float = 10.0 },
+}};
+
+const VENGEFUL_SNOWMAN_EFFECT = effects.Effect{
+    .name = "Vengeful Snowman",
+    .description = "Enemies take 10 damage when attacking the phantasm",
+    .modifiers = &vengeful_snowman_mods,
+    .timing = .on_take_damage,
+    .affects = .source_of_damage,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = false,
+};
+
+const vengeful_snowman_effects = [_]effects.Effect{VENGEFUL_SNOWMAN_EFFECT};
+
+// Mirror Snowmen - 33% chance attacks hit illusion instead
+const mirror_snowmen_mods = [_]effects.Modifier{.{
+    .effect_type = .attack_redirect_chance,
+    .value = .{ .float = 0.33 },
+}};
+
+const MIRROR_SNOWMEN_EFFECT = effects.Effect{
+    .name = "Mirror Snowmen",
+    .description = "33% chance attacks hit an illusion instead",
+    .modifiers = &mirror_snowmen_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const mirror_snowmen_effects = [_]effects.Effect{MIRROR_SNOWMEN_EFFECT};
+
+// Snow Blur - untargetable + summon damage reduction
+const snow_blur_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .untargetable,
+        .value = .{ .int = 1 },
+    },
+    .{
+        .effect_type = .summon_damage_reduction,
+        .value = .{ .float = 0.50 }, // Summons take 50% less damage
+    },
+};
+
+const SNOW_BLUR_EFFECT = effects.Effect{
+    .name = "Snow Blur",
+    .description = "Cannot be targeted. Summons take 50% less damage.",
+    .modifiers = &snow_blur_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 3000,
+    .is_buff = true,
+};
+
+const snow_blur_effects = [_]effects.Effect{SNOW_BLUR_EFFECT};
+
+// Confusing Swarm - on target attack: blind + damage + create decoy
+const confusing_swarm_blind = [_]types.ChillEffect{.{
+    .chill = .frost_eyes, // Frost eyes = blindness
+    .duration_ms = 3000,
+    .stack_intensity = 1,
+}};
+
+const confusing_swarm_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_add,
+        .value = .{ .float = 15.0 },
+    },
+};
+
+const CONFUSING_SWARM_EFFECT = effects.Effect{
+    .name = "Confusing Swarm",
+    .description = "When target attacks: blind 3s, 15 damage",
+    .modifiers = &confusing_swarm_mods,
+    .timing = .on_deal_damage, // Triggers when target attacks
+    .affects = .target, // Affects the target who has this debuff
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = false,
+};
+
+const confusing_swarm_effects = [_]effects.Effect{CONFUSING_SWARM_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Basic summon - weak but cheap
     .{
@@ -329,17 +442,21 @@ pub const skills = [_]Skill{
     },
 
     // 5. Heal summons
+    // Note: Summon-only targeting requires target_type = .summon (not yet implemented).
+    // Currently heals any ally. Summon-only targeting is a known simplification.
     .{
         .name = "Restore Construct",
+        .description = "Trick. Heals target snowman for 60 Warmth.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 8,
         .healing = 60.0,
         .cast_range = 240.0,
+        .target_type = .ally, // Simplified: heals any ally until summon targeting implemented
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
-        // TODO: Target allied summon only
+        // KNOWN SIMPLIFICATION: Summon-only targeting requires target_type = .summon.
     },
 
     // 6. Energy boost - synergy with summons
@@ -610,7 +727,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 500,
         .recharge_time_ms = 12000,
         .duration_ms = 10000,
-        // TODO: Decoy absorbs next attack targeting caster
+        .effects = &snow_decoy_effects,
     },
 
     // 18. Phantasm - damages attackers
@@ -627,7 +744,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 18000,
         .duration_ms = 15000,
-        // TODO: Summon that damages attackers
+        .effects = &vengeful_snowman_effects,
     },
 
     // 19. Mirror Image - split targeting chance
@@ -642,7 +759,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 25000,
         .duration_ms = 12000,
-        // TODO: 33% chance attacks hit illusion instead
+        .effects = &mirror_snowmen_effects,
     },
 
     // 20. Distortion analog - brief invulnerability
@@ -657,7 +774,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 30000,
         .duration_ms = 3000,
-        // TODO: Untargetable + summon damage reduction
+        .effects = &snow_blur_effects,
     },
 
     // AP 5: Ineptitude analog - punish attacks with blindness
@@ -674,6 +791,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 35000,
         .duration_ms = 15000,
         .is_ap = true,
-        // TODO: On target attack: blind 3s, 15 damage, create decoy
+        .chills = &confusing_swarm_blind,
+        .effects = &confusing_swarm_effects,
     },
 };

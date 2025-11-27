@@ -15,6 +15,7 @@ const validation = @import("combat_validation.zig");
 const damage = @import("combat_damage.zig");
 const healing = @import("combat_healing.zig");
 const combat_terrain = @import("combat_terrain.zig");
+const combat_behavior = @import("combat_behavior.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
@@ -235,7 +236,7 @@ fn executeTargetedSkill(
 
         // Apply damage
         if (dmg_result.final_damage > 0) {
-            applyDamageToTarget(caster, tgt, skill, dmg_result.final_damage, vfx_manager, telem);
+            applyDamageToTarget(caster, tgt, skill, dmg_result.final_damage, vfx_manager, telem, null);
             skill_hit = true;
         }
     } else {
@@ -267,6 +268,17 @@ fn executeTargetedSkill(
     applyCozies(tgt, skill, caster);
     applyEffects(caster, tgt, skill);
 
+    // Apply behavior if skill has one (e.g., Team Spirit on ally)
+    if (skill.behavior != null) {
+        // For ally-targeted skills, behavior goes on target
+        // For enemy-targeted skills, behavior might go on caster (depends on design)
+        if (skill.target_type == .ally) {
+            if (tgt.addBehaviorFromSkill(skill, caster.id)) {
+                print("{s} granted behavior from {s} to {s}!\n", .{ caster.name, skill.name, tgt.name });
+            }
+        }
+    }
+
     // Handle AoE (TODO)
     if (skill.aoe_type == .adjacent) {
         // TODO: implement adjacent target finding
@@ -288,6 +300,13 @@ fn executeSelfTargetedSkill(
 
     // Apply self-buffs (cozies)
     applyCozies(caster, skill, null);
+
+    // Apply behavior if skill has one (e.g., Golden Parachute)
+    if (skill.behavior != null) {
+        if (caster.addBehaviorFromSkill(skill, caster.id)) {
+            print("{s} activated behavior from {s}!\n", .{ caster.name, skill.name });
+        }
+    }
 
     // Apply self-debuffs (chills) - some skills have drawbacks
     for (skill.chills) |chill_effect| {
@@ -361,6 +380,7 @@ fn recordSkillCastTelemetry(caster: *Character, skill: *const Skill, telem: ?*Ma
 }
 
 /// Apply damage to target with all side effects
+/// Now includes behavior checks for damage interception and death prevention
 fn applyDamageToTarget(
     caster: *Character,
     target: *Character,
@@ -368,25 +388,68 @@ fn applyDamageToTarget(
     final_damage: f32,
     vfx_manager: *vfx.VFXManager,
     telem: ?*MatchTelemetry,
+    all_characters: ?[]Character,
 ) void {
-    target.takeDamage(final_damage);
+    var damage_to_apply = final_damage;
+
+    // Check for damage interception behaviors (on_take_damage)
+    if (all_characters) |chars| {
+        damage_to_apply = combat_behavior.checkDamageInterception(
+            target,
+            caster,
+            final_damage,
+            chars,
+            vfx_manager,
+            &target.behaviors,
+        );
+    }
+
+    // If all damage was intercepted, we're done
+    if (damage_to_apply <= 0) return;
+
+    // Check if this damage would be lethal
+    const would_be_lethal = damage_to_apply >= target.stats.warmth;
+
+    if (would_be_lethal) {
+        // Check for death prevention behaviors (on_would_die)
+        if (all_characters) |chars| {
+            const death_prevented = combat_behavior.checkDeathPrevention(
+                target,
+                chars,
+                vfx_manager,
+                &target.behaviors,
+            );
+            if (death_prevented) {
+                // Death was prevented - target survives
+                // The behavior handler already set their warmth
+                // Record that we "dealt" the damage for telemetry but target lived
+                if (telem) |tel| {
+                    tel.recordDamage(caster.id, target.id, damage_to_apply, target.getTotalPadding(), "physical");
+                }
+                return;
+            }
+        }
+    }
+
+    // Apply damage normally
+    target.takeDamage(damage_to_apply);
 
     // Record damage source for damage monitor
     target.recordDamageSource(skill, caster.id);
 
     // Record telemetry
     if (telem) |tel| {
-        tel.recordDamage(caster.id, target.id, final_damage, target.getTotalPadding(), "physical");
+        tel.recordDamage(caster.id, target.id, damage_to_apply, target.getTotalPadding(), "physical");
     }
 
     // Spawn damage number
-    vfx_manager.spawnDamageNumber(final_damage, target.position, .damage);
+    vfx_manager.spawnDamageNumber(damage_to_apply, target.position, .damage);
 
     print("{s} used {s} on {s} for {d:.1} damage! ({d:.1}/{d:.1} HP)\n", .{
         caster.name,
         skill.name,
         target.name,
-        final_damage,
+        damage_to_apply,
         target.stats.warmth,
         target.stats.max_warmth,
     });

@@ -112,6 +112,48 @@ pub const EffectModifier = enum {
 
     // Invulnerability (duration-based, not trigger-based)
     invulnerable, // value: int (1 = cannot take damage while active)
+
+    // ========================================================================
+    // PHASE 2 ADDITIONS - Interrupt/Energy mechanics for incomplete skills
+    // ========================================================================
+
+    // Energy burn (not steal - target loses, caster doesn't gain)
+    energy_burn, // value: f32 (target loses X energy)
+    energy_burn_on_interrupt, // value: f32 (target loses X energy if interrupted)
+
+    // Skill disable mechanics (for interrupt punishment)
+    skill_disable_duration_ms, // value: int (duration to disable interrupted skill)
+    skill_type_disable_duration_ms, // value: int (disable ALL skills of interrupted type)
+
+    // Daze application on interrupt
+    daze_on_interrupt_duration_ms, // value: int (apply daze for X ms if interrupt succeeds)
+
+    // Conditional damage bonuses (applied via effect timing/condition)
+    damage_if_target_moving, // value: f32 (bonus damage if target is moving)
+    damage_if_target_casting, // value: f32 (bonus damage if target was casting)
+    damage_if_target_low_energy, // value: f32 (bonus damage if target below 25% energy)
+
+    // Energy cost manipulation
+    next_skill_cost_multiplier, // value: f32 (multiply cost of target's next skill)
+
+    // AoE energy drain
+    energy_drain_per_second_aoe, // value: f32 (nearby foes lose X energy/sec)
+
+    // Terrain bonuses
+    damage_bonus_on_elevated, // value: f32 (bonus damage when on elevated terrain)
+    healing_bonus_on_natural, // value: f32 (bonus healing on natural terrain)
+    evasion_on_terrain, // value: f32 (evasion bonus when on specific terrain)
+
+    // Summon/decoy mechanics
+    absorb_next_attack, // value: int (1 = absorb next attack targeting caster)
+    damage_attackers, // value: f32 (damage dealt to anyone who attacks this)
+    attack_redirect_chance, // value: f32 (chance attacks redirect to illusion)
+    untargetable, // value: int (1 = cannot be targeted)
+    summon_damage_reduction, // value: f32 (summons take X% less damage)
+
+    // Instant cast charges
+    instant_cast_charges, // value: int (number of skills that cast instantly)
+    interrupt_on_next_attacks, // value: int (next X attacks interrupt)
 };
 
 /// A modifier value can be a float or integer depending on context
@@ -2127,4 +2169,151 @@ pub fn calculateCastSpeedMultiplier(active_effects: []const ?ActiveEffect, effec
     }
 
     return multiplier;
+}
+
+// ============================================================================
+// ENERGY BURN/STEAL MECHANICS (Homeschool Mesmer-analog skills)
+// ============================================================================
+
+/// Calculate total energy burn to apply to target from skill effects
+/// Energy burn: target loses energy, caster doesn't gain it
+pub fn calculateEnergyBurn(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_burn: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .energy_burn)) |value| {
+                if (value == .float) {
+                    total_burn += value.float;
+                }
+            }
+        }
+    }
+
+    return total_burn;
+}
+
+/// Calculate energy steal amount from skill effects
+/// Energy steal: target loses energy, caster gains it
+pub fn calculateEnergyStealOnHit(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var total_steal: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .energy_steal_on_hit)) |value| {
+                if (value == .float) {
+                    total_steal += value.float;
+                }
+            }
+        }
+    }
+
+    return total_steal;
+}
+
+/// Get conditional damage bonus if target is casting
+pub fn getDamageIfTargetCasting(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var bonus: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .damage_if_target_casting)) |value| {
+                if (value == .float) {
+                    bonus += value.float;
+                }
+            }
+        }
+    }
+
+    return bonus;
+}
+
+/// Get conditional damage bonus if target has low energy
+pub fn getDamageIfTargetLowEnergy(active_effects: []const ?ActiveEffect, effect_count: u8) f32 {
+    var bonus: f32 = 0.0;
+
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .damage_if_target_low_energy)) |value| {
+                if (value == .float) {
+                    bonus += value.float;
+                }
+            }
+        }
+    }
+
+    return bonus;
+}
+
+/// Check for instant cast charges (next N skills are instant)
+pub fn getInstantCastCharges(active_effects: []const ?ActiveEffect, effect_count: u8) i32 {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .instant_cast_charges)) |value| {
+                if (value == .int) {
+                    return value.int;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+/// Check for interrupt charges on next attacks
+pub fn getInterruptOnNextAttacks(active_effects: []const ?ActiveEffect, effect_count: u8) i32 {
+    for (active_effects[0..effect_count]) |maybe_effect| {
+        if (maybe_effect) |active| {
+            if (getModifier(active.effect, .interrupt_on_next_attacks)) |value| {
+                if (value == .int) {
+                    return value.int;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+// ============================================================================
+// RESOURCE SCALING CALCULATIONS (Rhythm/Grit consumption bonuses)
+// ============================================================================
+
+/// Calculate bonus damage from skill's rhythm consumption
+/// Used for Waldorf skills like Crescendo that scale with consumed rhythm
+pub fn calculateRhythmScaledDamage(
+    base_damage: f32,
+    rhythm_consumed: u8,
+    damage_per_rhythm: f32,
+) f32 {
+    return base_damage + (@as(f32, @floatFromInt(rhythm_consumed)) * damage_per_rhythm);
+}
+
+/// Calculate bonus healing from skill's rhythm consumption
+pub fn calculateRhythmScaledHealing(
+    base_healing: f32,
+    rhythm_consumed: u8,
+    healing_per_rhythm: f32,
+) f32 {
+    return base_healing + (@as(f32, @floatFromInt(rhythm_consumed)) * healing_per_rhythm);
+}
+
+/// Calculate bonus damage from skill's grit consumption
+/// Used for Public School finisher skills
+pub fn calculateGritScaledDamage(
+    base_damage: f32,
+    grit_consumed: u8,
+    damage_per_grit: f32,
+) f32 {
+    return base_damage + (@as(f32, @floatFromInt(grit_consumed)) * damage_per_grit);
+}
+
+/// Calculate warmth sacrifice damage (Homeschool skills)
+/// Damage scales with percentage of current warmth sacrificed
+pub fn calculateSacrificeDamage(
+    current_warmth: f32,
+    sacrifice_percent: f32,
+    damage_multiplier: f32,
+) struct { damage: f32, warmth_cost: f32 } {
+    const warmth_cost = current_warmth * sacrifice_percent;
+    const damage = warmth_cost * damage_multiplier;
+    return .{ .damage = damage, .warmth_cost = warmth_cost };
 }

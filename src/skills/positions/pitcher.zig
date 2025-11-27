@@ -215,6 +215,124 @@ const ARTILLERY_STRIKE_EFFECT = effects.Effect{
 
 const artillery_strike_effects = [_]effects.Effect{ARTILLERY_STRIKE_EFFECT};
 
+// ============================================================================
+// INTERRUPT/PUNISHMENT EFFECT DEFINITIONS
+// ============================================================================
+
+// Punishing Throw - target loses 8 energy on successful interrupt
+const punishing_throw_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_burn_on_interrupt,
+    .value = .{ .float = 8.0 },
+}};
+
+const PUNISHING_THROW_EFFECT = effects.Effect{
+    .name = "Punishing Interrupt",
+    .description = "Target loses 8 energy if interrupted",
+    .modifiers = &punishing_throw_mods,
+    .timing = .on_interrupt,
+    .affects = .target,
+    .condition = .if_this_skill_interrupted,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const punishing_throw_effects = [_]effects.Effect{PUNISHING_THROW_EFFECT};
+
+// Distracting Throw - disable interrupted skill for 15 seconds
+const distracting_throw_mods = [_]effects.Modifier{.{
+    .effect_type = .skill_disable_duration_ms,
+    .value = .{ .int = 15000 },
+}};
+
+const DISTRACTING_THROW_EFFECT = effects.Effect{
+    .name = "Skill Disruption",
+    .description = "Interrupted skill disabled for 15 seconds",
+    .modifiers = &distracting_throw_mods,
+    .timing = .on_interrupt,
+    .affects = .target,
+    .condition = .if_this_skill_interrupted,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const distracting_throw_effects = [_]effects.Effect{DISTRACTING_THROW_EFFECT};
+
+// Tracking Shot - +12 damage if target is moving
+const tracking_shot_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_if_target_moving,
+    .value = .{ .float = 12.0 },
+}};
+
+const TRACKING_SHOT_EFFECT = effects.Effect{
+    .name = "Moving Target Bonus",
+    .description = "+12 damage if target is moving",
+    .modifiers = &tracking_shot_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_moving,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const tracking_shot_effects = [_]effects.Effect{TRACKING_SHOT_EFFECT};
+
+// Concussion Throw - apply Dazed for 5 seconds on interrupt
+const concussion_throw_mods = [_]effects.Modifier{.{
+    .effect_type = .daze_on_interrupt_duration_ms,
+    .value = .{ .int = 5000 },
+}};
+
+const CONCUSSION_THROW_EFFECT = effects.Effect{
+    .name = "Concussion",
+    .description = "Target is Dazed for 5 seconds if interrupted",
+    .modifiers = &concussion_throw_mods,
+    .timing = .on_interrupt,
+    .affects = .target,
+    .condition = .if_this_skill_interrupted,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const concussion_throw_effects = [_]effects.Effect{CONCUSSION_THROW_EFFECT};
+
+// Silencing Strike - apply 8s Daze if target was casting
+const silencing_strike_mods = [_]effects.Modifier{.{
+    .effect_type = .daze_on_interrupt_duration_ms,
+    .value = .{ .int = 8000 },
+}};
+
+const SILENCING_STRIKE_EFFECT = effects.Effect{
+    .name = "Silencing Strike",
+    .description = "Target is Dazed for 8 seconds if they were casting",
+    .modifiers = &silencing_strike_mods,
+    .timing = .on_interrupt,
+    .affects = .target,
+    .condition = .if_target_was_interrupted,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const silencing_strike_effects = [_]effects.Effect{SILENCING_STRIKE_EFFECT};
+
+// Pitcher's Mound - damage bonus on elevated terrain
+const pitchers_mound_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_bonus_on_elevated,
+    .value = .{ .float = 10.0 }, // +10 damage when on elevated terrain
+}};
+
+const PITCHERS_MOUND_EFFECT = effects.Effect{
+    .name = "High Ground",
+    .description = "+10 damage when on elevated terrain",
+    .modifiers = &pitchers_mound_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always, // Terrain check happens at damage time
+    .duration_ms = 30000, // Mound persists for 30s
+    .is_buff = true,
+};
+
+const pitchers_mound_effects = [_]effects.Effect{PITCHERS_MOUND_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Fast, reliable damage - your bread and butter
     .{
@@ -391,7 +509,7 @@ pub const skills = [_]Skill{
     // 12. WALL: Pitcher's Mound - elevated pitching platform
     .{
         .name = "Pitcher's Mound",
-        .description = "Gesture. Build an elevated mound. Grants high ground advantage.",
+        .description = "Gesture. Build an elevated mound. Grants high ground advantage (+10 damage from elevated terrain).",
         .skill_type = .gesture,
         .mechanic = .ready,
         .energy_cost = 8,
@@ -407,7 +525,7 @@ pub const skills = [_]Skill{
         .wall_distance_from_caster = 20.0, // Legacy field (unused with ground targeting)
         .terrain_effect = types.TerrainEffect.packedSnow(.circle),
         .aoe_radius = 40.0,
-        // TODO: Grant damage buff when standing on elevated terrain
+        .effects = &pitchers_mound_effects,
     },
 
     // 13. Curveball - hard to block
@@ -565,7 +683,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
         .interrupts = true,
-        // TODO: Target loses 8 energy on successful interrupt
+        .effects = &punishing_throw_effects,
     },
 
     // 18. Distracting Shot analog - disables skill on interrupt
@@ -581,7 +699,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         .interrupts = true,
-        // TODO: Disable interrupted skill for 15s
+        .effects = &distracting_throw_effects,
     },
 
     // 19. Savage Shot analog - bonus damage if target moving
@@ -597,7 +715,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 8000,
         .unblockable = true,
-        // TODO: +12 damage if target moving (needs runtime check)
+        .effects = &tracking_shot_effects,
     },
 
     // 20. Concussion Shot analog - daze on interrupt
@@ -613,7 +731,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
         .interrupts = true,
-        // TODO: Apply Dazed on successful interrupt
+        .effects = &concussion_throw_effects,
     },
 
     // AP 5: Broad Head Arrow analog - daze on any hit while casting
@@ -631,6 +749,6 @@ pub const skills = [_]Skill{
         .interrupts = true,
         .unblockable = true,
         .is_ap = true,
-        // TODO: Apply 8s Dazed if target was casting
+        .effects = &silencing_strike_effects,
     },
 };

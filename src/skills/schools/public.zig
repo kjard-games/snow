@@ -308,6 +308,71 @@ const RALLY_THE_TROOPS_EFFECT = effects.Effect{
 
 const rally_the_troops_effects = [_]effects.Effect{RALLY_THE_TROOPS_EFFECT};
 
+// Team Spirit grit gain effect (single instant grit grant)
+const team_spirit_grit_mods = [_]effects.Modifier{.{
+    .effect_type = .grit_on_hit, // Grants 1 grit when triggered
+    .value = .{ .float = 1.0 },
+}};
+
+const TEAM_SPIRIT_GRIT_EFFECT = effects.Effect{
+    .name = "Team Spirit Grit",
+    .description = "Gain 1 Grit",
+    .modifiers = &team_spirit_grit_mods,
+    .timing = .on_cast, // Instant trigger when behavior activates
+    .affects = .self,
+    .duration_ms = 0,
+    .is_buff = true,
+};
+
+// Team Spirit: Behavior that grants grit when allies take damage
+// Uses the Behavior system to intercept ally damage events and grant grit to self
+const TEAM_SPIRIT_BEHAVIOR = types.Behavior{
+    .trigger = .on_ally_take_damage,
+    .response = .{ .grant_effect = &TEAM_SPIRIT_GRIT_EFFECT },
+    .target = .allies_in_earshot, // Monitor allies in earshot
+    .duration_ms = 12000,
+    .cooldown_ms = 500, // Prevent grit spam from AoE - 0.5s internal cooldown
+};
+
+// Suppressing Throw: Ally armor buff effect
+const suppressing_throw_armor_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_multiplier,
+    .value = .{ .float = 1.25 }, // +25% armor
+}};
+
+const SUPPRESSING_THROW_ARMOR_EFFECT = effects.Effect{
+    .name = "Suppressing Fire",
+    .description = "Protected by covering fire - +25% armor",
+    .modifiers = &suppressing_throw_armor_mods,
+    .timing = .on_cast, // Applied when skill is cast
+    .affects = .allies_in_earshot, // Applies to nearby allies (simplified from single target)
+    .duration_ms = 5000,
+    .is_buff = true,
+};
+
+const suppressing_throw_effects = [_]effects.Effect{SUPPRESSING_THROW_ARMOR_EFFECT};
+
+// All Together Now: Team damage buff that scales with grit consumed
+// Note: The per-grit scaling (+5% per grit) is handled by the skill's
+// damage_per_grit_consumed field for enemy damage. The ally buff uses a
+// fixed +50% damage (approximating 10 grit spent at 5% each).
+const all_together_now_ally_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.5 }, // +50% damage (fixed approximation)
+}};
+
+const ALL_TOGETHER_NOW_ALLY_EFFECT = effects.Effect{
+    .name = "All Together Now",
+    .description = "Fighting as one - +50% damage",
+    .modifiers = &all_together_now_ally_mods,
+    .timing = .on_cast,
+    .affects = .allies_in_earshot,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const all_together_now_effects = [_]effects.Effect{ALL_TOGETHER_NOW_ALLY_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Grit builder - spam attack
     .{
@@ -551,6 +616,8 @@ pub const skills = [_]Skill{
     },
 
     // 16. Never Give Up - resistance to conditions
+    // Note: Energy gain per chill removed requires runtime counting in combat_conditions.zig.
+    // The remove_all_chills effect is functional; energy bonus is a known simplification.
     .{
         .name = "Never Give Up",
         .description = "Call. Costs 5 Grit. Remove all Chills from yourself. Gain 2 energy per Chill removed.",
@@ -563,7 +630,8 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
         .effects = &never_give_up_effects,
-        // TODO: Gain 2 energy per chill removed (requires runtime counting)
+        // KNOWN SIMPLIFICATION: Energy gain per chill removed requires runtime counting.
+        // Currently only removes chills without energy refund.
     },
 
     // ========================================================================
@@ -682,6 +750,7 @@ pub const skills = [_]Skill{
     },
 
     // 19. Team Spirit - grit generation when allies take damage
+    // Uses behavior system to react to ally damage events
     .{
         .name = "Team Spirit",
         .description = "Stance. (12 seconds.) Gain 1 Grit whenever any ally takes damage.",
@@ -693,13 +762,14 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 25000,
         .duration_ms = 12000,
-        // TODO: Grit on ally damage taken
+        .behavior = &TEAM_SPIRIT_BEHAVIOR,
     },
 
-    // 20. Suppressing Throw - attack that also protects ally
+    // 20. Suppressing Throw - attack that also protects nearby allies
+    // Simplified: Grants armor buff to all nearby allies when cast.
     .{
         .name = "Suppressing Throw",
-        .description = "Throw. Deals 16 damage. Target ally gains +25% armor for 5 seconds.",
+        .description = "Throw. Deals 16 damage. Nearby allies gain +25% armor for 5 seconds.",
         .skill_type = .throw,
         .mechanic = .windup,
         .energy_cost = 7,
@@ -709,16 +779,19 @@ pub const skills = [_]Skill{
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
-        // TODO: Secondary target ally gets armor buff
+        .effects = &suppressing_throw_effects,
     },
 
     // AP 5: All Together Now - team grit explosion
+    // Ally buff is fixed at +50% damage (approximating 10 grit at +5% each).
+    // Enemy damage scales with grit via damage_per_grit_consumed.
     .{
         .name = "All Together Now",
-        .description = "[AP] Call. Spend all Grit (min 8). All allies gain +5% damage per Grit spent for 15 seconds. Enemies nearby take 3 damage per Grit spent.",
+        .description = "[AP] Call. Spend all Grit (min 8). All allies gain +50% damage for 15 seconds. Enemies nearby take 3 damage per Grit spent.",
         .skill_type = .call,
         .mechanic = .shout,
         .energy_cost = 10,
+        .damage = 0.0, // Base damage, scaled by grit
         .target_type = .ally,
         .aoe_type = .area,
         .aoe_radius = 300.0,
@@ -729,6 +802,7 @@ pub const skills = [_]Skill{
         .is_ap = true,
         .requires_grit_stacks = 8,
         .consumes_all_grit = true,
-        // TODO: Damage per grit to enemies, buff per grit to allies
+        .damage_per_grit_consumed = 3.0, // Enemy damage: 3 damage per grit to nearby foes
+        .effects = &all_together_now_effects,
     },
 };

@@ -14,6 +14,7 @@ pub const character_casting = @import("character_casting.zig");
 pub const character_conditions = @import("character_conditions.zig");
 pub const character_school_resources = @import("character_school_resources.zig");
 pub const character_combat = @import("character_combat.zig");
+pub const combat_behavior = @import("combat_behavior.zig");
 
 const print = std.debug.print;
 
@@ -51,6 +52,8 @@ pub const DamageSource = character_combat.DamageSource;
 pub const DamageMonitor = character_combat.DamageMonitor;
 pub const AutoAttackState = character_combat.AutoAttackState;
 pub const MeleeLungeState = character_combat.MeleeLungeState;
+pub const BehaviorState = combat_behavior.BehaviorState;
+pub const ActiveBehavior = combat_behavior.ActiveBehavior;
 
 // Re-export constants
 pub const MAX_SKILLS: usize = character_casting.MAX_SKILLS;
@@ -104,6 +107,9 @@ pub const Character = struct {
 
     // === COMBAT STATE (embedded component) ===
     combat: CombatState = .{},
+
+    // === BEHAVIOR STATE (embedded component) ===
+    behaviors: BehaviorState = .{},
 
     // === DEATH STATE ===
     is_dead: bool = false,
@@ -505,5 +511,21 @@ pub const Character = struct {
 
     pub fn hasRangedAutoAttack(self: Character) bool {
         return character_combat.hasRangedAutoAttack(self.main_hand);
+    }
+
+    // ========================================================================
+    // BEHAVIORS
+    // ========================================================================
+
+    pub fn addBehaviorFromSkill(self: *Character, skill_with_behavior: *const Skill, source_id: ?EntityId) bool {
+        return self.behaviors.addFromSkill(skill_with_behavior, source_id);
+    }
+
+    pub fn updateBehaviors(self: *Character, delta_time_ms: u32) void {
+        self.behaviors.update(delta_time_ms);
+    }
+
+    pub fn clearBehaviors(self: *Character) void {
+        self.behaviors.clear();
     }
 };

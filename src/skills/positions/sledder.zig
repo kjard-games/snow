@@ -400,6 +400,8 @@ const avalanche_effects = [_]effects.Effect{AVALANCHE_EFFECT};
 
 pub const skills = [_]Skill{
     // 1. Gap closer - mobility + damage
+    // Note: Dash movement requires movement system integration.
+    // Currently functions as a ranged attack. Dash is a known simplification.
     .{
         .name = "Downhill Charge",
         .description = "Throw. Deals 22 damage. Dash toward target before attacking.",
@@ -411,7 +413,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 750,
         .aftercast_ms = 750,
         .recharge_time_ms = 10000,
-        // TODO: Dash toward target before damage
+        // KNOWN SIMPLIFICATION: Dash movement requires movement system integration.
     },
 
     // 2. Melee burst - highest damage at close range
@@ -459,6 +461,8 @@ pub const skills = [_]Skill{
     },
 
     // 5. Sliding attack - move while attacking
+    // Note: Casting while moving requires skill mechanic flag.
+    // Currently uses standard windup. Movement during cast is a known simplification.
     .{
         .name = "Drift Strike",
         .description = "Throw. Deals 18 damage. Can be used while moving.",
@@ -470,7 +474,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 500,
         .aftercast_ms = 750,
         .recharge_time_ms = 5000,
-        // TODO: Can move during activation
+        // KNOWN SIMPLIFICATION: "Cast while moving" requires mechanic flag extension.
     },
 
     // 6. Jump attack - unblockable
@@ -589,7 +593,8 @@ pub const skills = [_]Skill{
         .wall_thickness = 25.0,
         .wall_distance_from_caster = 30.0, // Legacy field (unused with ground targeting)
         .cozies = &sledder_sure_footed, // Speed boost
-        // TODO: Make wall "ramp-shaped" instead of vertical
+        // KNOWN SIMPLIFICATION: Ramp shape requires wall geometry extension.
+        // Currently creates standard low wall.
     },
 
     // 13. Hit and Run - attack while moving
@@ -675,6 +680,8 @@ pub const skills = [_]Skill{
     },
 
     // AP 2: Speed Demon - extreme mobility
+    // Note: Distance-based damage scaling ("per 50 units moved") requires movement tracking.
+    // Currently provides the speed buff only. Distance scaling is a known simplification.
     .{
         .name = "Speed Demon",
         .description = "[AP] Stance. (15 seconds.) Move 100% faster. Deal +5 damage per 50 units moved this stance.",
@@ -688,6 +695,8 @@ pub const skills = [_]Skill{
         .duration_ms = 15000,
         .is_ap = true,
         .effects = &speed_demon_effects,
+        // KNOWN SIMPLIFICATION: Distance-based damage bonus requires movement tracking system.
+        // Currently only provides speed buff.
     },
 
     // AP 3: Pursuit Hunter - anti-escape

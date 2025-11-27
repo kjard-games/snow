@@ -288,6 +288,92 @@ const ENSEMBLE_CAST_EFFECT = effects.Effect{
 
 const ensemble_cast_effects = [_]effects.Effect{ENSEMBLE_CAST_EFFECT};
 
+// ============================================================================
+// INTERRUPT/PUNISHMENT EFFECT DEFINITIONS
+// ============================================================================
+
+// Mistimed - +18 damage if target was casting
+const mistimed_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_if_target_casting,
+    .value = .{ .float = 18.0 },
+}};
+
+const MISTIMED_EFFECT = effects.Effect{
+    .name = "Mistimed Strike",
+    .description = "+18 damage if target was casting",
+    .modifiers = &mistimed_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_casting,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const mistimed_effects = [_]effects.Effect{MISTIMED_EFFECT};
+
+// Stage Fright - disable interrupted skill for 10 seconds
+const stage_fright_mods = [_]effects.Modifier{.{
+    .effect_type = .skill_disable_duration_ms,
+    .value = .{ .int = 10000 },
+}};
+
+const STAGE_FRIGHT_EFFECT = effects.Effect{
+    .name = "Stage Fright",
+    .description = "Interrupted skill disabled for 10 seconds",
+    .modifiers = &stage_fright_mods,
+    .timing = .on_interrupt,
+    .affects = .target,
+    .condition = .if_this_skill_interrupted,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const stage_fright_effects = [_]effects.Effect{STAGE_FRIGHT_EFFECT};
+
+// Dramatic Pause - disable ALL skills of interrupted type for 8 seconds
+const dramatic_pause_mods = [_]effects.Modifier{.{
+    .effect_type = .skill_type_disable_duration_ms,
+    .value = .{ .int = 8000 },
+}};
+
+const DRAMATIC_PAUSE_EFFECT = effects.Effect{
+    .name = "Dramatic Pause",
+    .description = "All skills of interrupted type disabled for 8 seconds",
+    .modifiers = &dramatic_pause_mods,
+    .timing = .on_interrupt,
+    .affects = .target,
+    .condition = .if_this_skill_interrupted,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const dramatic_pause_effects = [_]effects.Effect{DRAMATIC_PAUSE_EFFECT};
+
+// Ready Response - instant cast charges + interrupt
+const ready_response_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .instant_cast_charges,
+        .value = .{ .int = 2 },
+    },
+    .{
+        .effect_type = .interrupt_on_next_attacks,
+        .value = .{ .int = 2 },
+    },
+};
+
+const READY_RESPONSE_EFFECT = effects.Effect{
+    .name = "Ready Response",
+    .description = "Next 2 Throws are instant and interrupt",
+    .modifiers = &ready_response_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const ready_response_effects = [_]effects.Effect{READY_RESPONSE_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Rhythm buff - core mechanic
     .{
@@ -443,7 +529,7 @@ pub const skills = [_]Skill{
         .wall_distance_from_caster = 45.0,
         .grants_rhythm_on_cast = 1,
         .cozies = &waldorf_hot_cocoa, // Healing aura near wall
-        // TODO: AOE healing aura around the wall for allies
+        .aoe_radius = 100.0, // AoE radius for hot_cocoa effect near wall
     },
 
     // 10. Tempo Change - speed manipulation
@@ -663,7 +749,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 8000,
         .interrupts = true,
         .grants_rhythm_on_cast = 1,
-        // TODO: +18 damage if target was casting (needs runtime check)
+        .effects = &mistimed_effects,
     },
 
     // 18. Cry of Frustration analog - AoE damage when you interrupt
@@ -696,7 +782,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 25000,
         .duration_ms = 15000,
         .grants_rhythm_on_cast = 1,
-        // TODO: Next 2 throws instant + interrupt (needs runtime tracking)
+        .effects = &ready_response_effects,
     },
 
     // 20. Diversion analog - disable skills on interrupt
@@ -713,7 +799,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 20000,
         .interrupts = true,
         .grants_rhythm_on_cast = 2,
-        // TODO: Disable interrupted skill for 10s (needs runtime implementation)
+        .effects = &stage_fright_effects,
     },
 
     // AP 5: Power Block analog - massive interrupt punishment
@@ -731,6 +817,6 @@ pub const skills = [_]Skill{
         .interrupts = true,
         .grants_rhythm_on_cast = 3,
         .is_ap = true,
-        // TODO: Disable all skills of interrupted type for 8s
+        .effects = &dramatic_pause_effects,
     },
 };
