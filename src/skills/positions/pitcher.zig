@@ -1,0 +1,357 @@
+const types = @import("../types.zig");
+const Skill = types.Skill;
+
+// ============================================================================
+// PITCHER SKILLS - Long-range damage dealer (200-300 range)
+// ============================================================================
+// Synergizes with: Throw buffs, damage amplifiers, energy management
+// Counterplay: Close the gap, interrupt long casts, drain energy
+
+const windburn_chill = [_]types.ChillEffect{.{
+    .chill = .windburn,
+    .duration_ms = 5000,
+    .stack_intensity = 1,
+}};
+
+const soggy_chill = [_]types.ChillEffect{.{
+    .chill = .soggy,
+    .duration_ms = 6000,
+    .stack_intensity = 1,
+}};
+
+const pitcher_fire = [_]types.CozyEffect{.{
+    .cozy = .fire_inside,
+    .duration_ms = 10000,
+    .stack_intensity = 1,
+}};
+
+const pitcher_frost_eyes = [_]types.ChillEffect{.{
+    .chill = .frost_eyes,
+    .duration_ms = 4000,
+    .stack_intensity = 1,
+}};
+
+pub const skills = [_]Skill{
+    // 1. Fast, reliable damage - your bread and butter
+    .{
+        .name = "Fastball",
+        .description = "Throw. Deals 18 damage.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 5,
+        .damage = 18.0,
+        .cast_range = 250.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 4000,
+    },
+
+    // 2. Conditional burst - high damage if target is chilled
+    .{
+        .name = "Ice Fastball",
+        .description = "Throw. Deals 15 damage. Deals +15 damage if target foe has a chill.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 8,
+        .damage = 15.0, // +15 more if target has a chill = 30 total
+        .cast_range = 250.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 8000,
+        // TODO: Add conditional: +15 damage if target has any chill
+    },
+
+    // 3. AoE pressure - hits adjacent foes
+    .{
+        .name = "Slushball Barrage",
+        .description = "Throw. Deals 12 damage to target and adjacent foes. Inflicts Soggy condition (6 seconds).",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 10,
+        .damage = 12.0,
+        .cast_range = 260.0,
+        .activation_time_ms = 1250,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000,
+        .aoe_type = .adjacent,
+        .chills = &soggy_chill,
+    },
+
+    // 4. Interrupt tool - fast cast, low damage, disrupts
+    .{
+        .name = "Snipe",
+        .description = "Throw. Interrupts an action. Deals 10 damage.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 7,
+        .damage = 10.0,
+        .cast_range = 280.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 10000,
+        .interrupts = true,
+    },
+
+    // 5. Maximum range poke - safe but slow, arcs over walls
+    .{
+        .name = "Lob",
+        .description = "Throw. Deals 14 damage. Maximum range. Arcs over walls (ignores cover).",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 6,
+        .damage = 14.0,
+        .cast_range = 300.0,
+        .activation_time_ms = 1500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 6000,
+        .projectile_type = .arcing, // Ignores cover
+    },
+
+    // 6. Execute - bonus damage vs low health
+    .{
+        .name = "Headshot",
+        .description = "Throw. Deals 20 damage. Deals +20 damage if target foe is below 50% Health. Soaks through half their padding.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 12,
+        .damage = 20.0, // +20 more if target below 50% = 40 total
+        .cast_range = 240.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 15000,
+        .soak = 0.5,
+        // TODO: Add conditional: +20 damage if target below 50% health
+    },
+
+    // 7. DoT application - sustained pressure
+    .{
+        .name = "Windburn Throw",
+        .description = "Throw. Deals 10 damage. Inflicts Windburn condition (5 seconds).",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 8,
+        .damage = 10.0,
+        .cast_range = 250.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 8000,
+        .chills = &windburn_chill,
+    },
+
+    // 8. Energy efficient spam - low cost, low cooldown
+    .{
+        .name = "Quick Toss",
+        .description = "Throw. Deals 12 damage.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 3,
+        .damage = 12.0,
+        .cast_range = 220.0,
+        .activation_time_ms = 500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 3000,
+    },
+
+    // 9. TERRAIN: Powder Burst - create deep snow at range
+    .{
+        .name = "Powder Burst",
+        .description = "Throw. Deals 8 damage. Creates deep powder on impact, slowing foes in the area.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 10,
+        .damage = 8.0,
+        .cast_range = 280.0,
+        .target_type = .ground,
+        .aoe_radius = 80.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 15000,
+        .terrain_effect = types.TerrainEffect.deepSnow(.circle),
+    },
+
+    // 10. TERRAIN: Ice Shot - create icy ground at range
+    .{
+        .name = "Ice Shot",
+        .description = "Throw. Creates an icy patch. Foes on ice move faster but are easier to knock down.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 8,
+        .cast_range = 250.0,
+        .target_type = .ground,
+        .aoe_radius = 70.0,
+        .activation_time_ms = 1250,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 20000,
+        .terrain_effect = types.TerrainEffect.ice(.circle),
+    },
+
+    // 11. WALL BREAKER: Demolition - destroy walls with powerful AOE
+    .{
+        .name = "Demolition",
+        .description = "Trick. Deals 25 damage in area. Deals triple damage to walls.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
+        .energy_cost = 12,
+        .damage = 25.0,
+        .cast_range = 260.0,
+        .target_type = .ground,
+        .aoe_type = .area,
+        .aoe_radius = 100.0,
+        .activation_time_ms = 2000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .destroys_walls = true,
+        .wall_damage_multiplier = 3.0,
+    },
+
+    // 12. WALL: Pitcher's Mound - elevated pitching platform
+    .{
+        .name = "Pitcher's Mound",
+        .description = "Gesture. Build an elevated mound. Grants high ground advantage.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
+        .energy_cost = 8,
+        .target_type = .ground,
+        .cast_range = 150.0, // Increased for ground targeting
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 25000,
+        .creates_wall = true,
+        .wall_length = 80.0, // Increased from 40 - more useful mound
+        .wall_height = 20.0,
+        .wall_thickness = 30.0, // Wider base
+        .wall_distance_from_caster = 20.0, // Legacy field (unused with ground targeting)
+        .terrain_effect = types.TerrainEffect.packedSnow(.circle),
+        .aoe_radius = 40.0,
+        // TODO: Grant damage buff when standing on elevated terrain
+    },
+
+    // 13. Curveball - hard to block
+    .{
+        .name = "Curveball",
+        .description = "Throw. Deals 16 damage. 50% chance to be unblockable.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 6,
+        .damage = 16.0,
+        .cast_range = 240.0,
+        .activation_time_ms = 1000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 6000,
+    },
+
+    // 14. Blinding Throw - utility
+    .{
+        .name = "Blinding Throw",
+        .description = "Throw. Deals 10 damage. Inflicts Frost Eyes (4 seconds).",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 7,
+        .damage = 10.0,
+        .cast_range = 260.0,
+        .activation_time_ms = 750,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000,
+        .chills = &pitcher_frost_eyes,
+    },
+
+    // 15. Pitcher's Focus - damage buff
+    .{
+        .name = "Pitcher's Focus",
+        .description = "Stance. (12 seconds.) Your throws deal +25% damage and have +10% range.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 6,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 20000,
+        .duration_ms = 12000,
+        .cozies = &pitcher_fire,
+    },
+
+    // 16. Called Shot - bonus damage to marked target
+    .{
+        .name = "Called Shot",
+        .description = "Throw. Deals 25 damage. +15 damage if target is below 50% Warmth.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 10,
+        .damage = 25.0,
+        .bonus_damage_if_foe_below_50_warmth = 15.0,
+        .cast_range = 250.0,
+        .activation_time_ms = 1250,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 12000,
+    },
+
+    // ========================================================================
+    // PITCHER AP SKILLS (4 AP skills for 20% of 20 total)
+    // ========================================================================
+
+    // AP 1: Perfect Game - massive single-target damage
+    .{
+        .name = "Perfect Game",
+        .description = "[AP] Throw. Deals 60 damage. Cannot be blocked or evaded. If target dies, reset cooldown.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 15,
+        .damage = 60.0,
+        .cast_range = 280.0,
+        .activation_time_ms = 2000,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 45000,
+        .unblockable = true,
+        .is_ap = true,
+    },
+
+    // AP 2: Gatling Arm - rapid fire mode
+    .{
+        .name = "Gatling Arm",
+        .description = "[AP] Stance. (10 seconds.) Your throws have no cast time and recharge instantly, but deal only 8 damage.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 15,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 60000,
+        .duration_ms = 10000,
+        .is_ap = true,
+    },
+
+    // AP 3: Artillery Strike - long range AoE
+    .{
+        .name = "Artillery Strike",
+        .description = "[AP] Throw. Maximum range. Deals 30 damage to all foes in area. Arcs over walls.",
+        .skill_type = .throw,
+        .mechanic = .windup,
+        .energy_cost = 18,
+        .damage = 30.0,
+        .cast_range = 350.0,
+        .target_type = .ground,
+        .aoe_type = .area,
+        .aoe_radius = 120.0,
+        .activation_time_ms = 2500,
+        .aftercast_ms = 750,
+        .recharge_time_ms = 35000,
+        .projectile_type = .arcing,
+        .is_ap = true,
+    },
+
+    // AP 4: Sniper's Eye - guaranteed critical on next throw
+    .{
+        .name = "Sniper's Eye",
+        .description = "[AP] Stance. (20 seconds.) Your next throw deals double damage and soaks through all padding. After that throw, stance ends.",
+        .skill_type = .stance,
+        .mechanic = .shift,
+        .energy_cost = 10,
+        .target_type = .self,
+        .activation_time_ms = 0,
+        .aftercast_ms = 0,
+        .recharge_time_ms = 40000,
+        .duration_ms = 20000,
+        .soak = 1.0,
+        .is_ap = true,
+    },
+};
