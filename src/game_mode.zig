@@ -4,9 +4,25 @@ const game_state = @import("game_state.zig");
 const factory = @import("factory.zig");
 const skills = @import("skills.zig");
 const school = @import("school.zig");
+const campaign = @import("campaign.zig");
+const campaign_ui = @import("campaign_ui.zig");
+const skill_capture = @import("skill_capture.zig");
+const entity = @import("entity.zig");
+const palette = @import("color_palette.zig");
 
 const GameState = game_state.GameState;
 const Character = @import("character.zig").Character;
+const CampaignState = campaign.CampaignState;
+const CampaignUIState = campaign_ui.CampaignUIState;
+const SkillCaptureUIState = skill_capture.SkillCaptureUIState;
+const SkillCaptureChoice = campaign.SkillCaptureChoice;
+const EncounterNode = campaign.EncounterNode;
+const EncounterConfig = campaign.EncounterConfig;
+const GoalType = campaign.GoalType;
+const School = school.School;
+const Position = @import("position.zig").Position;
+
+const MAX_COMBAT_CHARS: usize = 16; // Max characters in a single encounter
 
 // ============================================
 // GAME MODE INTERFACE
@@ -55,7 +71,7 @@ pub const Phase = enum {
     match_active, // Combat in progress
     match_result, // Victory/defeat screen
 
-    // Roguelike phases
+    // Roguelike phases (legacy - being replaced by campaign)
     run_start, // New run begins
     encounter_select, // Choose next encounter
     encounter_active, // In combat
@@ -63,6 +79,14 @@ pub const Phase = enum {
     shop, // Buy items
     run_complete, // Successfully completed
     run_failed, // Permadeath
+
+    // Campaign phases (new roguelike with overworld)
+    campaign_setup, // Choose goal, name party
+    campaign_overworld, // Viewing map, selecting encounters
+    campaign_encounter, // In combat encounter
+    campaign_skill_capture, // Post-boss skill capture reward
+    campaign_victory, // Goal achieved
+    campaign_defeat, // Party wiped or faction lost
 
     // Arc (Nightreign) phases
     act_intro, // Story/cutscene
@@ -200,6 +224,12 @@ pub const GameMode = struct {
     run_state: RunState,
     arc_state: ArcState,
 
+    // Campaign state (new roguelike system)
+    campaign_state: ?*CampaignState,
+    campaign_ui_state: CampaignUIState,
+    skill_capture_ui_state: ?SkillCaptureUIState,
+    current_encounter_node: ?EncounterNode,
+
     // Match tracking
     matches_played: u32,
     matches_won: u32,
@@ -208,9 +238,15 @@ pub const GameMode = struct {
     selected_menu_item: usize,
     countdown_timer: f32,
 
+    // RNG for campaign
+    prng: std.Random.DefaultPrng,
+
     const Self = @This();
 
     pub fn init(allocator: std.mem.Allocator, mode_type: ModeType) Self {
+        // Use timestamp or fixed seed for RNG
+        const seed: u64 = @intCast(std.time.milliTimestamp() & 0xFFFFFFFF);
+
         return .{
             .allocator = allocator,
             .mode_type = mode_type,
@@ -221,10 +257,15 @@ pub const GameMode = struct {
             .draft_rules = .none,
             .run_state = .{},
             .arc_state = .{},
+            .campaign_state = null,
+            .campaign_ui_state = .{},
+            .skill_capture_ui_state = null,
+            .current_encounter_node = null,
             .matches_played = 0,
             .matches_won = 0,
             .selected_menu_item = 0,
             .countdown_timer = 0,
+            .prng = std.Random.DefaultPrng.init(seed),
         };
     }
 
@@ -233,6 +274,11 @@ pub const GameMode = struct {
             gs.deinit();
             self.allocator.destroy(gs);
             self.game_state = null;
+        }
+        if (self.campaign_state) |cs| {
+            cs.deinit();
+            self.allocator.destroy(cs);
+            self.campaign_state = null;
         }
     }
 
@@ -531,65 +577,108 @@ pub const GameMode = struct {
     }
 
     // ========================================
-    // ROGUELIKE MODE
+    // ROGUELIKE MODE (Campaign System)
     // ========================================
 
     fn updateRoguelike(self: *Self) void {
         switch (self.phase) {
             .initializing => {
-                self.run_state.reset();
-                self.phase = .run_start;
-            },
-            .run_start => {
-                // Press to begin run
-                if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
-                    self.phase = .encounter_select;
-                }
-                if (rl.isKeyPressed(.escape)) {
+                // Initialize campaign state
+                self.initCampaign() catch {
+                    std.log.err("Failed to initialize campaign", .{});
                     self.result = .{ .transition = .{ .target_mode = .main_menu } };
-                }
+                    return;
+                };
+                // Start character creation
+                self.campaign_ui_state.startCharacterCreation();
+                self.phase = .campaign_setup;
             },
-            .encounter_select => {
-                // For prototype: auto-start combat encounter
-                if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
-                    self.startRoguelikeEncounter();
+            .campaign_setup => {
+                // Character creation UI
+                if (campaign_ui.handleCharacterCreationInput(&self.campaign_ui_state)) {
+                    // Creation complete - setup party with selected options
+                    if (self.campaign_state) |cs| {
+                        cs.setupPartyWithPositions(
+                            "Hero",
+                            self.campaign_ui_state.selected_school,
+                            self.campaign_ui_state.selected_position,
+                            "Buddy",
+                            self.campaign_ui_state.friend_school,
+                            self.campaign_ui_state.friend_position,
+                        );
+                    }
+                    self.campaign_ui_state.mode = .overworld;
+                    self.phase = .campaign_overworld;
                 }
-                if (rl.isKeyPressed(.escape)) {
-                    self.result = .{ .transition = .{ .target_mode = .main_menu } };
-                }
-            },
-            .encounter_active => {
-                if (self.game_state) |gs| {
-                    gs.update();
 
-                    if (gs.combat_state != .active) {
-                        if (gs.combat_state == .victory) {
-                            self.run_state.score += 100;
-                            self.run_state.current_floor += 1;
-                            self.cleanupMatch();
-                            self.phase = .upgrade_select;
-                        } else {
-                            // Permadeath!
-                            self.phase = .run_failed;
+                // Back to menu
+                if (rl.isKeyPressed(.escape) and self.campaign_ui_state.creation_step == 0) {
+                    self.cleanupCampaign();
+                    self.result = .{ .transition = .{ .target_mode = .main_menu } };
+                }
+            },
+            .campaign_overworld, .run_start, .encounter_select => {
+                // Handle campaign UI input
+                if (self.campaign_state) |cs| {
+                    if (campaign_ui.handleCampaignInput(cs, &self.campaign_ui_state)) |node_id| {
+                        // Player selected an encounter - start it
+                        if (cs.overworld.getNode(node_id)) |node| {
+                            self.current_encounter_node = node;
+                            self.startCampaignEncounter(node);
                         }
                     }
                 }
-            },
-            .upgrade_select => {
-                // TODO: Show upgrade choices
-                // For now, just continue
-                if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
-                    self.phase = .encounter_select;
+
+                // Back to menu
+                if (rl.isKeyPressed(.escape)) {
+                    self.cleanupCampaign();
+                    self.result = .{ .transition = .{ .target_mode = .main_menu } };
                 }
             },
-            .run_failed => {
+            .campaign_encounter, .encounter_active => {
+                // Update combat
+                if (self.game_state) |gs| {
+                    gs.update();
+
+                    // Check if combat ended
+                    if (gs.combat_state != .active) {
+                        self.handleEncounterResult(gs.combat_state == .victory);
+                    }
+                }
+            },
+            .campaign_skill_capture, .upgrade_select => {
+                // Update skill capture UI animation
+                if (self.skill_capture_ui_state) |*ui_state| {
+                    ui_state.update(rl.getFrameTime());
+
+                    // Handle input
+                    if (skill_capture.handleSkillCaptureInput(ui_state)) {
+                        // Choice confirmed - apply it
+                        if (self.campaign_state) |cs| {
+                            skill_capture.applySkillCaptureChoice(cs, ui_state);
+                        }
+                        self.skill_capture_ui_state = null;
+                        self.advanceCampaignTurn();
+                    }
+                } else {
+                    // No skill capture, just advance
+                    self.advanceCampaignTurn();
+                }
+            },
+            .campaign_victory, .run_complete => {
                 if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
-                    self.cleanupMatch();
-                    self.run_state.reset();
-                    self.phase = .run_start;
+                    self.cleanupCampaign();
+                    self.result = .{ .transition = .{ .target_mode = .main_menu } };
+                }
+            },
+            .campaign_defeat, .run_failed => {
+                if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
+                    // Restart campaign
+                    self.cleanupCampaign();
+                    self.phase = .initializing;
                 }
                 if (rl.isKeyPressed(.escape)) {
-                    self.cleanupMatch();
+                    self.cleanupCampaign();
                     self.result = .{ .transition = .{ .target_mode = .main_menu } };
                 }
             },
@@ -597,41 +686,286 @@ pub const GameMode = struct {
         }
     }
 
-    fn startRoguelikeEncounter(self: *Self) void {
+    /// Initialize a new campaign
+    fn initCampaign(self: *Self) !void {
+        // Clean up any existing campaign
+        self.cleanupCampaign();
+
+        // Create campaign state
+        const cs_ptr = try self.allocator.create(CampaignState);
+        const seed = self.prng.random().int(u64);
+        cs_ptr.* = try CampaignState.init(self.allocator, seed, .find_brother);
+
+        self.campaign_state = cs_ptr;
+        self.campaign_ui_state.reset();
+    }
+
+    /// Clean up campaign state
+    fn cleanupCampaign(self: *Self) void {
+        self.cleanupMatch();
+        if (self.campaign_state) |cs| {
+            cs.deinit();
+            self.allocator.destroy(cs);
+            self.campaign_state = null;
+        }
+        self.campaign_ui_state.reset();
+        self.skill_capture_ui_state = null;
+        self.current_encounter_node = null;
+    }
+
+    /// Start a campaign encounter from a node
+    fn startCampaignEncounter(self: *Self, node: EncounterNode) void {
         self.cleanupMatch();
 
-        const gs_ptr = self.allocator.create(GameState) catch {
-            std.log.err("Failed to allocate GameState", .{});
+        const cs = self.campaign_state orelse {
+            std.log.err("No campaign state for encounter", .{});
             return;
         };
 
-        // Scale difficulty with floor
-        const enemies_per_team: usize = @min(4, 1 + self.run_state.current_floor / 3);
+        const gs_ptr = self.allocator.create(GameState) catch {
+            std.log.err("Failed to allocate GameState for encounter", .{});
+            return;
+        };
 
+        // Generate encounter config
+        const config = EncounterConfig.fromNode(node, cs.party);
+
+        // Build combined character array
+        var id_gen = entity.EntityIdGenerator{};
+        var all_chars: [MAX_COMBAT_CHARS]Character = undefined;
+        var char_count: usize = 0;
+
+        // Create party characters (blue team) with their skill bars
+        const party_chars = cs.party.createCombatCharacters(
+            &cs.skill_pool,
+            .blue,
+            &id_gen,
+        );
+
+        for (party_chars) |char| {
+            if (char_count >= MAX_COMBAT_CHARS) break;
+            all_chars[char_count] = char;
+            char_count += 1;
+        }
+
+        // Create enemy characters (red team)
+        const enemy_spawn_positions = [_]rl.Vector3{
+            .{ .x = -80, .y = 0, .z = -400 },
+            .{ .x = 80, .y = 0, .z = -400 },
+            .{ .x = -120, .y = 0, .z = -500 },
+            .{ .x = 0, .y = 0, .z = -550 },
+            .{ .x = 120, .y = 0, .z = -500 },
+            .{ .x = -160, .y = 0, .z = -600 },
+            .{ .x = 160, .y = 0, .z = -600 },
+            .{ .x = 0, .y = 0, .z = -700 },
+        };
+
+        for (0..config.enemy_team_size) |i| {
+            if (char_count >= MAX_COMBAT_CHARS) break;
+
+            const pos_idx = @min(i, enemy_spawn_positions.len - 1);
+            const pos = enemy_spawn_positions[pos_idx];
+            const enemy_school = config.enemy_schools[@min(i, config.enemy_schools.len - 1)];
+            const enemy_position = config.enemy_positions[@min(i, config.enemy_positions.len - 1)];
+            const is_boss = config.has_boss and i == 0;
+            const enemy_name: [:0]const u8 = if (is_boss) "Boss" else "Enemy";
+
+            var enemy = Character{
+                .id = id_gen.generate(),
+                .name = enemy_name,
+                .team = .red,
+                .position = pos,
+                .previous_position = pos,
+                .radius = if (is_boss) 15 else 10,
+                .color = palette.getCharacterColor(enemy_school, enemy_position),
+                .school_color = palette.getSchoolColor(enemy_school),
+                .position_color = palette.getPositionColor(enemy_position),
+                .school = enemy_school,
+                .player_position = enemy_position,
+            };
+
+            // Set enemy stats with difficulty multipliers
+            const base_warmth: f32 = if (is_boss) 200.0 else 150.0;
+            enemy.stats.max_warmth = base_warmth * config.enemy_warmth_multiplier;
+            enemy.stats.warmth = enemy.stats.max_warmth;
+            enemy.stats.energy = enemy_school.getMaxEnergy();
+            enemy.stats.max_energy = enemy_school.getMaxEnergy();
+
+            // Load default skills for enemies
+            loadEnemySkills(&enemy);
+
+            all_chars[char_count] = enemy;
+            char_count += 1;
+        }
+
+        // Build game state with our characters
         var builder = game_state.GameStateBuilder.init(self.allocator);
         _ = builder.withRendering(true);
         _ = builder.withPlayerControl(true);
-        _ = builder.withCharactersPerTeam(enemies_per_team);
+        _ = builder.withCharacters(all_chars[0..char_count]);
 
         gs_ptr.* = builder.build() catch {
-            std.log.err("Failed to build GameState", .{});
+            std.log.err("Failed to build GameState for encounter", .{});
             self.allocator.destroy(gs_ptr);
             return;
         };
 
         self.game_state = gs_ptr;
-        self.phase = .encounter_active;
+        self.phase = .campaign_encounter;
+    }
+
+    /// Load default skills for enemy characters
+    fn loadEnemySkills(char: *Character) void {
+        const position_skills = char.player_position.getSkills();
+        const school_skills = char.school.getSkills();
+
+        // Load position skills in slots 0-3
+        for (position_skills, 0..) |*skill, i| {
+            if (i >= 4) break;
+            char.casting.skills[i] = skill;
+        }
+
+        // Load school skills in slots 4-7
+        for (school_skills, 0..) |*skill, i| {
+            if (i >= 4) break;
+            char.casting.skills[4 + i] = skill;
+        }
+    }
+
+    /// Sync warmth from combat characters back to party members
+    fn syncWarmthToParty(self: *Self) void {
+        const gs = self.game_state orelse return;
+        const cs = self.campaign_state orelse return;
+
+        // Find blue team characters and match them to party members by index
+        var blue_idx: usize = 0;
+        for (&gs.entities) |*combat_char| {
+            if (combat_char.team != .blue) continue;
+
+            // Match to party member by index (party members spawn in order)
+            var party_idx: usize = 0;
+            for (&cs.party.members) |*maybe_member| {
+                if (maybe_member.*) |*member| {
+                    if (!member.is_alive) continue;
+
+                    if (party_idx == blue_idx) {
+                        // Sync warmth as percentage
+                        if (combat_char.is_dead or combat_char.stats.warmth <= 0) {
+                            member.warmth_percent = 0;
+                            member.is_alive = false;
+                        } else {
+                            member.warmth_percent = combat_char.stats.warmth / combat_char.stats.max_warmth;
+                        }
+                        break;
+                    }
+                    party_idx += 1;
+                }
+            }
+            blue_idx += 1;
+        }
+    }
+
+    /// Handle the result of a completed encounter
+    fn handleEncounterResult(self: *Self, victory: bool) void {
+        // Sync warmth from combat back to party BEFORE cleanup
+        self.syncWarmthToParty();
+
+        const node = self.current_encounter_node orelse {
+            // No node context, just go back to overworld
+            self.cleanupMatch();
+            self.phase = .campaign_overworld;
+            return;
+        };
+
+        if (self.campaign_state) |cs| {
+            // Process result in campaign state
+            cs.processEncounterResult(node, victory, self.prng.random());
+
+            // Check campaign status
+            const status = cs.getStatus();
+            if (status == .victory) {
+                self.cleanupMatch();
+                self.phase = .campaign_victory;
+                return;
+            } else if (status.isDefeat()) {
+                self.cleanupMatch();
+                self.phase = .campaign_defeat;
+                return;
+            }
+
+            if (victory) {
+                self.matches_won += 1;
+
+                // Check for skill capture reward
+                if (node.skill_capture_tier != .none) {
+                    const choice = SkillCaptureChoice.generate(
+                        node.skill_capture_tier,
+                        self.prng.random(),
+                        if (node.encounter_type == .boss_capture) .public_school else null,
+                    );
+
+                    if (choice.hasApOption() or choice.hasBundleOption()) {
+                        self.skill_capture_ui_state = SkillCaptureUIState.init(
+                            choice,
+                            .public_school,
+                            .fielder,
+                        );
+                        self.cleanupMatch();
+                        self.phase = .campaign_skill_capture;
+                        return;
+                    }
+                }
+
+                // No skill capture, advance turn
+                self.cleanupMatch();
+                self.advanceCampaignTurn();
+            } else {
+                // Lost encounter - in campaign mode, party persists (with damage)
+                // For now, check if party wiped
+                if (cs.party.isWiped()) {
+                    self.cleanupMatch();
+                    self.phase = .campaign_defeat;
+                } else {
+                    self.cleanupMatch();
+                    self.advanceCampaignTurn();
+                }
+            }
+        } else {
+            self.cleanupMatch();
+            self.phase = .campaign_overworld;
+        }
+
+        self.matches_played += 1;
+        self.current_encounter_node = null;
+    }
+
+    /// Advance the campaign by one turn and return to overworld
+    fn advanceCampaignTurn(self: *Self) void {
+        if (self.campaign_state) |cs| {
+            cs.advanceTurn();
+
+            // Check campaign status after turn advancement
+            const status = cs.getStatus();
+            if (status == .victory) {
+                self.phase = .campaign_victory;
+                return;
+            } else if (status.isDefeat()) {
+                self.phase = .campaign_defeat;
+                return;
+            }
+        }
+        self.phase = .campaign_overworld;
     }
 
     fn drawRoguelike(self: *Self) void {
         switch (self.phase) {
-            .encounter_active => {
+            .campaign_encounter, .encounter_active => {
                 if (self.game_state) |gs| {
                     gs.draw();
                 }
             },
             else => {
-                rl.clearBackground(rl.Color.init(25, 30, 40, 255));
+                // Campaign UI handles its own background
             },
         }
     }
@@ -640,66 +974,121 @@ pub const GameMode = struct {
         const screen_width = rl.getScreenWidth();
         const screen_height = rl.getScreenHeight();
         const center_x = @divTrunc(screen_width, 2);
+        const center_y = @divTrunc(screen_height, 2);
 
         switch (self.phase) {
-            .run_start => {
-                const title = "ENDLESS CAMPAIGN";
+            .initializing, .run_start => {
+                rl.clearBackground(rl.Color.init(25, 30, 40, 255));
+                const title = "SNOWBALL CAMPAIGN";
                 const title_width = rl.measureText(title, 50);
                 rl.drawText(title, center_x - @divTrunc(title_width, 2), 100, 50, rl.Color.white);
 
-                const desc = "Survive as long as you can. Death is permanent.";
-                const desc_width = rl.measureText(desc, 20);
-                rl.drawText(desc, center_x - @divTrunc(desc_width, 2), 180, 20, rl.Color.gray);
+                const subtitle = "\"Saving Private Ryan\" in a snowball war";
+                const subtitle_width = rl.measureText(subtitle, 20);
+                rl.drawText(subtitle, center_x - @divTrunc(subtitle_width, 2), 160, 20, rl.Color.gray);
 
-                rl.drawText("[Enter] Begin Run", center_x - 80, 300, 20, rl.Color.white);
-                rl.drawText("[Esc] Back", center_x - 50, 340, 20, rl.Color.gray);
+                const desc = "Find your brother in an endless suburban warzone";
+                const desc_width = rl.measureText(desc, 16);
+                rl.drawText(desc, center_x - @divTrunc(desc_width, 2), 200, 16, rl.Color.init(180, 180, 180, 255));
+
+                rl.drawText("Loading...", center_x - 40, 300, 20, rl.Color.white);
             },
-            .encounter_select => {
-                var floor_buf: [64:0]u8 = undefined;
-                const floor_text = std.fmt.bufPrintZ(&floor_buf, "Floor {d}", .{self.run_state.current_floor}) catch "Floor ???";
-                const floor_width = rl.measureText(floor_text, 40);
-                rl.drawText(floor_text, center_x - @divTrunc(floor_width, 2), 100, 40, rl.Color.white);
-
-                var score_buf: [64:0]u8 = undefined;
-                const score_text = std.fmt.bufPrintZ(&score_buf, "Score: {d}", .{self.run_state.score}) catch "Score: ???";
-                rl.drawText(score_text, 20, 20, 20, rl.Color.yellow);
-
-                rl.drawText("[Enter] Next Encounter", center_x - 100, 200, 20, rl.Color.white);
+            .campaign_setup => {
+                // Character creation UI
+                campaign_ui.drawCharacterCreation(&self.campaign_ui_state);
             },
-            .encounter_active => {
+            .campaign_overworld, .encounter_select => {
+                // Use campaign UI system
+                if (self.campaign_state) |cs| {
+                    campaign_ui.drawCampaignUI(cs, &self.campaign_ui_state);
+                } else {
+                    rl.clearBackground(rl.Color.init(25, 30, 40, 255));
+                    rl.drawText("Campaign not initialized", center_x - 100, center_y, 20, rl.Color.red);
+                }
+            },
+            .campaign_encounter, .encounter_active => {
                 if (self.game_state) |gs| {
                     gs.drawUI();
                 }
-                // Overlay run info
-                var floor_buf: [64:0]u8 = undefined;
-                const floor_text = std.fmt.bufPrintZ(&floor_buf, "Floor {d} | Score: {d}", .{
-                    self.run_state.current_floor,
-                    self.run_state.score,
-                }) catch "Floor ???";
-                rl.drawText(floor_text, 20, 20, 20, rl.Color.yellow);
+                // Overlay encounter info
+                if (self.current_encounter_node) |node| {
+                    var buf: [128:0]u8 = undefined;
+                    const text = std.fmt.bufPrintZ(&buf, "{s} - Difficulty {d}", .{
+                        node.name,
+                        node.challenge_rating,
+                    }) catch "Encounter";
+                    rl.drawText(text, 20, 20, 20, rl.Color.yellow);
+                }
             },
-            .upgrade_select => {
-                const title = "VICTORY!";
-                const title_width = rl.measureText(title, 50);
-                rl.drawText(title, center_x - @divTrunc(title_width, 2), 100, 50, rl.Color.green);
-
-                rl.drawText("(Upgrades coming soon)", center_x - 100, 200, 20, rl.Color.gray);
-                rl.drawText("[Enter] Continue", center_x - 70, 280, 20, rl.Color.white);
+            .campaign_skill_capture, .upgrade_select => {
+                // Draw overworld dimmed in background
+                if (self.campaign_state) |cs| {
+                    campaign_ui.drawCampaignUI(cs, &self.campaign_ui_state);
+                }
+                // Draw skill capture overlay
+                if (self.skill_capture_ui_state) |*ui_state| {
+                    skill_capture.drawSkillCaptureScreen(ui_state);
+                } else {
+                    // Fallback: simple "continue" message
+                    rl.drawRectangle(0, 0, screen_width, screen_height, rl.Color.init(0, 0, 0, 180));
+                    const title = "VICTORY!";
+                    const title_width = rl.measureText(title, 50);
+                    rl.drawText(title, center_x - @divTrunc(title_width, 2), center_y - 50, 50, rl.Color.green);
+                    rl.drawText("[Enter] Continue", center_x - 70, center_y + 30, 20, rl.Color.white);
+                }
             },
-            .run_failed => {
-                const title = "RUN OVER";
+            .campaign_victory, .run_complete => {
+                rl.clearBackground(rl.Color.init(25, 30, 40, 255));
+                const title = "CAMPAIGN COMPLETE!";
                 const title_width = rl.measureText(title, 50);
-                rl.drawText(title, center_x - @divTrunc(title_width, 2), 100, 50, rl.Color.red);
+                rl.drawText(title, center_x - @divTrunc(title_width, 2), center_y - 80, 50, rl.Color.gold);
 
-                var score_buf: [128:0]u8 = undefined;
-                const score_text = std.fmt.bufPrintZ(&score_buf, "Final Score: {d} | Reached Floor {d}", .{
-                    self.run_state.score,
-                    self.run_state.current_floor,
-                }) catch "Final Score: ???";
-                const score_width = rl.measureText(score_text, 25);
-                rl.drawText(score_text, center_x - @divTrunc(score_width, 2), 180, 25, rl.Color.white);
+                if (self.campaign_state) |cs| {
+                    const goal_name = cs.goal_type.getName();
+                    var goal_buf: [128:0]u8 = undefined;
+                    const goal_text = std.fmt.bufPrintZ(&goal_buf, "Goal: {s} - ACHIEVED!", .{goal_name}) catch "Goal Achieved!";
+                    const goal_width = rl.measureText(goal_text, 20);
+                    rl.drawText(goal_text, center_x - @divTrunc(goal_width, 2), center_y - 20, 20, rl.Color.green);
 
-                rl.drawText("[Enter] Try Again  [Esc] Menu", center_x - 140, screen_height - 100, 20, rl.Color.gray);
+                    var stats_buf: [128:0]u8 = undefined;
+                    const stats_text = std.fmt.bufPrintZ(&stats_buf, "Turns: {d}  Encounters Won: {d}  Skills Captured: {d}", .{
+                        cs.turn,
+                        cs.encounters_won,
+                        cs.skills_captured,
+                    }) catch "Stats unavailable";
+                    const stats_width = rl.measureText(stats_text, 16);
+                    rl.drawText(stats_text, center_x - @divTrunc(stats_width, 2), center_y + 20, 16, rl.Color.white);
+                }
+
+                rl.drawText("[Enter] Main Menu", center_x - 80, screen_height - 100, 20, rl.Color.gray);
+            },
+            .campaign_defeat, .run_failed => {
+                rl.clearBackground(rl.Color.init(25, 30, 40, 255));
+                const title = "CAMPAIGN OVER";
+                const title_width = rl.measureText(title, 50);
+                rl.drawText(title, center_x - @divTrunc(title_width, 2), center_y - 80, 50, rl.Color.red);
+
+                if (self.campaign_state) |cs| {
+                    const status = cs.getStatus();
+                    const reason = switch (status) {
+                        .defeat_party_wiped => "Your party was wiped out.",
+                        .defeat_faction_lost => "Your faction was eliminated from the war.",
+                        else => "The campaign has ended.",
+                    };
+                    const reason_width = rl.measureText(reason, 20);
+                    rl.drawText(reason, center_x - @divTrunc(reason_width, 2), center_y - 20, 20, rl.Color.init(200, 100, 100, 255));
+
+                    var stats_buf: [128:0]u8 = undefined;
+                    const stats_text = std.fmt.bufPrintZ(&stats_buf, "Turns Survived: {d}  Encounters: {d}W / {d}L", .{
+                        cs.turn,
+                        cs.encounters_won,
+                        cs.encounters_lost,
+                    }) catch "Stats unavailable";
+                    const stats_width = rl.measureText(stats_text, 16);
+                    rl.drawText(stats_text, center_x - @divTrunc(stats_width, 2), center_y + 20, 16, rl.Color.white);
+                }
+
+                rl.drawText("[Enter] Try Again  [Esc] Menu", center_x - 130, screen_height - 100, 20, rl.Color.gray);
             },
             else => {},
         }
