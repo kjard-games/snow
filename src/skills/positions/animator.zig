@@ -5,9 +5,8 @@ const effects = @import("../../effects.zig");
 // ============================================================================
 // ANIMATOR SKILLS - Summoner/Necromancer (180-240 range)
 // ============================================================================
-// Synergizes with: Summon buffs, corpse mechanics, isolation bonuses
+// Synergizes with: Summon buffs, snowman synergies, isolation bonuses
 // Counterplay: AoE damage, focus summons first, dispel
-// TODO: Implement proper summon mechanics
 
 const brain_freeze_chill = [_]types.ChillEffect{.{
     .chill = .brain_freeze,
@@ -181,10 +180,52 @@ const PLAGUE_OF_FROST_EFFECT = effects.Effect{
 
 const plague_of_frost_effects = [_]effects.Effect{PLAGUE_OF_FROST_EFFECT};
 
+// Snowman Rally - gain energy when your snowmen are nearby
+// Thematically: your animated snowmen inspire you
+const snowman_rally_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_regen_multiplier,
+    .value = .{ .float = 2.0 }, // Double energy regen while active
+}};
+
+const SNOWMAN_RALLY_EFFECT = effects.Effect{
+    .name = "Snowman Rally",
+    .description = "Double energy regeneration while you have active snowmen",
+    .modifiers = &snowman_rally_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const snowman_rally_effects = [_]effects.Effect{SNOWMAN_RALLY_EFFECT};
+
+// Death Nova - curse that explodes on death
+const death_nova_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_add,
+        .value = .{ .float = 40.0 }, // 40 damage on death
+    },
+};
+
+const DEATH_NOVA_EFFECT = effects.Effect{
+    .name = "Death Nova",
+    .description = "If target dies within 20 seconds, explodes for 40 AoE damage",
+    .modifiers = &death_nova_mods,
+    .timing = .on_kill,
+    .affects = .foes_near_target,
+    .condition = .always,
+    .duration_ms = 20000,
+    .is_buff = false,
+};
+
+const death_nova_effects = [_]effects.Effect{DEATH_NOVA_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Basic summon - weak but cheap
     .{
         .name = "Snowman Minion",
+        .description = "Trick. Summon a level 5 snowman that attacks for 5 damage. Lasts 30 seconds.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 8,
@@ -194,12 +235,19 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
         .duration_ms = 30000,
-        // TODO: Summon level 1-5 snowman, attacks for 5 damage
+        .behavior = .{ .summon = .{
+            .summon_type = .snowman,
+            .count = 1,
+            .level = 5,
+            .duration_ms = 30000,
+            .damage_per_attack = 5.0,
+        } },
     },
 
     // 2. Elite summon - powerful but expensive
     .{
         .name = "Grotesque Abomination",
+        .description = "Trick. Summon a level 15 abomination that attacks for 15 damage. Lasts 45 seconds.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 15,
@@ -209,12 +257,19 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 45000,
         .duration_ms = 45000,
-        // TODO: Summon level 10-15 abomination, attacks for 15 damage
+        .behavior = .{ .summon = .{
+            .summon_type = .abomination,
+            .count = 1,
+            .level = 15,
+            .duration_ms = 45000,
+            .damage_per_attack = 15.0,
+        } },
     },
 
     // 3. Exploding summon - dies and damages
     .{
         .name = "Suicide Snowman",
+        .description = "Trick. Summon a snowman that explodes on death for 25 AoE damage. Lasts 15 seconds.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 10,
@@ -224,7 +279,15 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 20000,
         .duration_ms = 15000,
-        // TODO: Summon snowman that explodes on death for AoE damage
+        .behavior = .{ .summon = .{
+            .summon_type = .suicide_snowman,
+            .count = 1,
+            .level = 1,
+            .duration_ms = 15000,
+            .damage_per_attack = 0.0,
+            .explode_damage = 25.0,
+            .explode_radius = 100.0,
+        } },
     },
 
     // 4. Buff summons
@@ -257,17 +320,19 @@ pub const skills = [_]Skill{
         // TODO: Target allied summon only
     },
 
-    // 6. Corpse exploitation - use dead bodies
+    // 6. Energy boost - synergy with summons
     .{
-        .name = "Soul Harvest",
-        .skill_type = .trick,
-        .mechanic = .concentrate,
+        .name = "Snowman Rally",
+        .description = "Gesture. (10 seconds.) Double energy regeneration while you have active snowmen.",
+        .skill_type = .gesture,
+        .mechanic = .ready,
         .energy_cost = 5,
-        .cast_range = 200.0,
-        .activation_time_ms = 1000,
-        .aftercast_ms = 750,
-        .recharge_time_ms = 5000,
-        // TODO: Gain energy from nearby corpses (3 per corpse)
+        .target_type = .self,
+        .activation_time_ms = 500,
+        .aftercast_ms = 500,
+        .recharge_time_ms = 15000,
+        .duration_ms = 10000,
+        .effects = &snowman_rally_effects,
     },
 
     // 7. Crippling curse
@@ -440,7 +505,6 @@ pub const skills = [_]Skill{
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 20,
-        .damage = 8.0,
         .target_type = .ground,
         .cast_range = 100.0,
         .aoe_type = .area,
@@ -450,6 +514,13 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 20000,
         .is_ap = true,
+        .behavior = .{ .summon = .{
+            .summon_type = .snowman,
+            .count = 5,
+            .level = 5,
+            .duration_ms = 20000,
+            .damage_per_attack = 8.0,
+        } },
     },
 
     // AP 2: Plague of Frost - spreading DoT
@@ -501,5 +572,6 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 35000,
         .duration_ms = 20000,
         .is_ap = true,
+        .effects = &death_nova_effects,
     },
 };

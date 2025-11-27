@@ -269,6 +269,45 @@ const RELENTLESS_EFFECT = effects.Effect{
 
 const relentless_effects = [_]effects.Effect{RELENTLESS_EFFECT};
 
+// Final Push (AP 2): consumes all grit, bonus damage per grit, reset on kill
+// Note: Uses skill fields for grit mechanics, effect only handles the recharge_on_kill
+const final_push_mods = [_]effects.Modifier{.{
+    .effect_type = .recharge_on_kill,
+    .value = .{ .int = 1 },
+}};
+
+const FINAL_PUSH_EFFECT = effects.Effect{
+    .name = "Final Push",
+    .description = "Resets cooldown if target dies",
+    .modifiers = &final_push_mods,
+    .timing = .on_hit,
+    .affects = .self,
+    .duration_ms = 0, // Instant
+    .is_buff = true,
+    .condition = .if_target_died,
+};
+
+const final_push_effects = [_]effects.Effect{FINAL_PUSH_EFFECT};
+
+// Rally the Troops (AP 3): Team grit buff + grit on ally hits
+// Note: grit_gain_per_second approximates "gain grit when allies hit"
+const rally_the_troops_mods = [_]effects.Modifier{.{
+    .effect_type = .grit_gain_per_second,
+    .value = .{ .float = 0.5 }, // Passive grit generation while buff is active
+}};
+
+const RALLY_THE_TROOPS_EFFECT = effects.Effect{
+    .name = "Rally the Troops",
+    .description = "All allies generate Grit over time",
+    .modifiers = &rally_the_troops_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .duration_ms = 12000,
+    .is_buff = true,
+};
+
+const rally_the_troops_effects = [_]effects.Effect{RALLY_THE_TROOPS_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Grit builder - spam attack
     .{
@@ -560,12 +599,16 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 30000,
         .is_ap = true,
+        .requires_grit_stacks = 5,
+        .consumes_all_grit = true,
+        .damage_per_grit_consumed = 8.0,
+        .effects = &final_push_effects,
     },
 
     // AP 3: Rally the Troops - team grit sharing
     .{
         .name = "Rally the Troops",
-        .description = "[AP] Call. All allies gain 5 Grit. For 12 seconds, when any ally hits a foe, all allies gain 1 Grit.",
+        .description = "[AP] Call. All allies gain 5 Grit. For 12 seconds, allies passively generate Grit.",
         .skill_type = .call,
         .mechanic = .shout,
         .energy_cost = 15,
@@ -577,6 +620,8 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 50000,
         .duration_ms = 12000,
         .is_ap = true,
+        .grants_grit_to_allies_on_cast = 5,
+        .effects = &rally_the_troops_effects,
     },
 
     // AP 4: Unstoppable Force - immune to control while attacking

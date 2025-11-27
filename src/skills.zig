@@ -23,3 +23,12 @@ pub const TerrainEffect = types.TerrainEffect;
 pub const ActiveChill = types.ActiveChill;
 pub const ActiveCozy = types.ActiveCozy;
 pub const Skill = types.Skill;
+
+// Skill behavior types
+pub const SkillBehavior = types.SkillBehavior;
+pub const SummonType = types.SummonType;
+pub const SummonParams = types.SummonParams;
+pub const LinkParams = types.LinkParams;
+pub const RedirectParams = types.RedirectParams;
+pub const ProjectileReturnParams = types.ProjectileReturnParams;
+pub const PreventDeathParams = types.PreventDeathParams;

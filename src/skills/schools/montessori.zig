@@ -240,6 +240,194 @@ const PEER_TEACHING_ALLY_EFFECT = effects.Effect{
 
 const peer_teaching_effects = [_]effects.Effect{ PEER_TEACHING_SELF_EFFECT, PEER_TEACHING_ALLY_EFFECT };
 
+// Improvise (skill 3): Versatile buff - multiple small bonuses
+// Instead of "random", we give a balanced mix of benefits
+const improvise_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.15 }, // +15% damage
+    },
+    .{
+        .effect_type = .move_speed_multiplier,
+        .value = .{ .float = 1.15 }, // +15% speed
+    },
+    .{
+        .effect_type = .energy_regen_multiplier,
+        .value = .{ .float = 1.25 }, // +25% energy regen
+    },
+};
+
+const IMPROVISE_EFFECT = effects.Effect{
+    .name = "Improvise",
+    .description = "Gain +15% damage, +15% speed, +25% energy regen",
+    .modifiers = &improvise_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const improvise_effects = [_]effects.Effect{IMPROVISE_EFFECT};
+
+// Flexible Response (skill 7): Heal ally OR damage foe
+const flexible_response_heal_mods = [_]effects.Modifier{.{
+    .effect_type = .healing_multiplier,
+    .value = .{ .float = 1.0 },
+}};
+
+const FLEXIBLE_RESPONSE_HEAL_EFFECT = effects.Effect{
+    .name = "Flexible Response (Heal)",
+    .description = "Heals ally for 30 Warmth",
+    .modifiers = &flexible_response_heal_mods,
+    .timing = .on_cast,
+    .affects = .target,
+    .duration_ms = 0,
+    .is_buff = true,
+    .condition = .if_target_is_ally,
+};
+
+const flexible_response_damage_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.0 },
+}};
+
+const FLEXIBLE_RESPONSE_DAMAGE_EFFECT = effects.Effect{
+    .name = "Flexible Response (Damage)",
+    .description = "Deals 20 damage to foe",
+    .modifiers = &flexible_response_damage_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 0,
+    .is_buff = false,
+    .condition = .if_target_is_foe,
+};
+
+const flexible_response_effects = [_]effects.Effect{ FLEXIBLE_RESPONSE_HEAL_EFFECT, FLEXIBLE_RESPONSE_DAMAGE_EFFECT };
+
+// Fresh Perspective (skill 8): Energy boost when using variety
+// Uses condition: bonus when used different skill type recently
+const fresh_perspective_mods = [_]effects.Modifier{.{
+    .effect_type = .energy_gain_per_second,
+    .value = .{ .float = 3.0 }, // Strong energy regen
+}};
+
+const FRESH_PERSPECTIVE_EFFECT = effects.Effect{
+    .name = "Fresh Perspective",
+    .description = "Gain rapid energy regen for using variety",
+    .modifiers = &fresh_perspective_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 5000,
+    .is_buff = true,
+    .condition = .if_caster_used_different_type,
+};
+
+const fresh_perspective_effects = [_]effects.Effect{FRESH_PERSPECTIVE_EFFECT};
+
+// Try Everything (skill 12): Stacking buff while active
+// Each second gives a small cumulative bonus
+const try_everything_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.05 }, // +5% damage
+    },
+    .{
+        .effect_type = .attack_speed_multiplier,
+        .value = .{ .float = 1.05 }, // +5% attack speed
+    },
+};
+
+const TRY_EVERYTHING_EFFECT = effects.Effect{
+    .name = "Try Everything",
+    .description = "Small stacking buff while active",
+    .modifiers = &try_everything_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 10000,
+    .is_buff = true,
+    .max_stacks = 5, // Stacks up to 5 times
+    .stack_behavior = .add_intensity,
+};
+
+const try_everything_effects = [_]effects.Effect{TRY_EVERYTHING_EFFECT};
+
+// Mastery Through Practice (AP 1): Bonus when using variety
+// Triggers when you've used multiple different skill types
+const mastery_through_practice_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.50 }, // +50% damage
+}};
+
+const MASTERY_THROUGH_PRACTICE_EFFECT = effects.Effect{
+    .name = "Mastery Through Practice",
+    .description = "+50% damage when you've used variety",
+    .modifiers = &mastery_through_practice_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 30000,
+    .is_buff = true,
+    .condition = .if_last_three_skills_different_types, // Triggers when using variety
+};
+
+const mastery_through_practice_effects = [_]effects.Effect{MASTERY_THROUGH_PRACTICE_EFFECT};
+
+// Polymath (AP 2): Universal skill boost when using variety
+// Instead of "unlock all skills" (too complex), we give a universal power boost
+const polymath_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.25 }, // +25% damage
+    },
+    .{
+        .effect_type = .healing_multiplier,
+        .value = .{ .float = 1.25 }, // +25% healing
+    },
+    .{
+        .effect_type = .cooldown_reduction_percent,
+        .value = .{ .float = 0.20 }, // 20% CDR
+    },
+};
+
+const POLYMATH_EFFECT = effects.Effect{
+    .name = "Polymath",
+    .description = "+25% damage, +25% healing, 20% CDR",
+    .modifiers = &polymath_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+const polymath_effects = [_]effects.Effect{POLYMATH_EFFECT};
+
+// Prepared Environment (AP 4): Zone buffs
+const prepared_environment_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .damage_multiplier,
+        .value = .{ .float = 1.20 }, // +20% damage
+    },
+    .{
+        .effect_type = .cooldown_reduction_percent,
+        .value = .{ .float = 0.30 }, // +30% skill recharge
+    },
+    .{
+        .effect_type = .warmth_gain_per_second,
+        .value = .{ .float = 3.0 }, // Heal 3/sec
+    },
+};
+
+const PREPARED_ENVIRONMENT_EFFECT = effects.Effect{
+    .name = "Prepared Environment",
+    .description = "+20% damage, +30% recharge, heal 3/sec",
+    .modifiers = &prepared_environment_mods,
+    .timing = .while_active,
+    .affects = .allies_near_target,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+const prepared_environment_effects = [_]effects.Effect{PREPARED_ENVIRONMENT_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Variety buff - core mechanic
     .{
@@ -284,7 +472,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
-        // TODO: Random beneficial effect based on situation
+        .effects = &improvise_effects,
     },
 
     // 4. Movement skill
@@ -345,7 +533,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        // TODO: Heal ally OR damage enemy based on target
+        .effects = &flexible_response_effects,
     },
 
     // 8. Bonus if haven't repeated skills
@@ -359,7 +547,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 750,
         .recharge_time_ms = 15000,
-        // TODO: Gain energy equal to number of different skill types used recently
+        .effects = &fresh_perspective_effects,
     },
 
     // 9. WALL: Adaptive Barrier - wall that changes based on situation
@@ -424,6 +612,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
         .duration_ms = 10000,
+        .effects = &try_everything_effects,
     },
 
     // 13. Hands-On Learning - close range power spike
@@ -507,6 +696,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .duration_ms = 30000,
         .is_ap = true,
+        .effects = &mastery_through_practice_effects,
     },
 
     // AP 2: Polymath - use skills from other schools
@@ -522,6 +712,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 20000,
         .is_ap = true,
+        .effects = &polymath_effects,
     },
 
     // AP 3: Emergent Curriculum - adapt to enemy weaknesses
@@ -557,5 +748,6 @@ pub const skills = [_]Skill{
         .duration_ms = 20000,
         .terrain_effect = types.TerrainEffect.packedSnow(.circle),
         .is_ap = true,
+        .effects = &prepared_environment_effects,
     },
 };

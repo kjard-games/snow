@@ -102,6 +102,16 @@ pub const EffectModifier = enum {
 
     // Energy stealing
     energy_steal_on_hit, // value: f32 (steal X energy from target on hit)
+
+    // Special attack modifiers
+    unblockable_chance, // value: f32 (e.g., 0.5 = 50% chance to be unblockable)
+    damage_per_current_energy, // value: f32 (damage scales with current energy)
+    ignore_cover, // value: int (1 = projectile ignores cover/walls)
+    piercing, // value: int (1 = attack hits all targets in a line/cone)
+    damage_increase_per_foe_hit, // value: f32 (bonus damage for each additional foe hit in AoE)
+
+    // Invulnerability (duration-based, not trigger-based)
+    invulnerable, // value: int (1 = cannot take damage while active)
 };
 
 /// A modifier value can be a float or integer depending on context
@@ -218,6 +228,7 @@ pub const EffectCondition = enum {
     if_caster_above_50_percent_warmth,
     if_caster_below_50_percent_warmth,
     if_caster_below_25_percent_warmth,
+    if_caster_below_20_percent_warmth,
 
     // Relative warmth
     if_target_has_more_warmth,
@@ -342,6 +353,7 @@ pub const EffectCondition = enum {
     if_caster_has_numerical_advantage, // More allies than foes nearby
     if_target_is_ally, // For dual-purpose skills (heal ally OR damage enemy)
     if_target_is_enemy, // For dual-purpose skills
+    if_target_is_foe, // Alias for if_target_is_enemy (for readability)
 
     // Variety tracking (Montessori)
     if_last_two_skills_different_types, // Used different types for last 2 skills
@@ -354,6 +366,9 @@ pub const EffectCondition = enum {
 
     // Kill conditions
     if_target_died, // Target was killed by this skill
+
+    // Recent hit tracking
+    if_target_recently_hit_by_caster, // Target was hit by caster within last few seconds
 };
 
 /// Main effect structure - composable modifiers with duration
@@ -590,6 +605,9 @@ pub const ConditionContext = struct {
     // Interrupt/kill tracking
     target_was_interrupted: bool = false,
     target_died: bool = false,
+
+    // Recent hit tracking
+    target_recently_hit_by_caster: bool = false,
 };
 
 /// Full condition evaluation with complete context
@@ -607,6 +625,7 @@ pub fn evaluateConditionFull(condition: EffectCondition, ctx: ConditionContext) 
         .if_caster_above_50_percent_warmth => ctx.caster_warmth_percent >= 0.5,
         .if_caster_below_50_percent_warmth => ctx.caster_warmth_percent < 0.5,
         .if_caster_below_25_percent_warmth => ctx.caster_warmth_percent < 0.25,
+        .if_caster_below_20_percent_warmth => ctx.caster_warmth_percent < 0.20,
         .if_target_has_more_warmth => ctx.target_warmth_percent > ctx.caster_warmth_percent,
         .if_target_has_less_warmth => ctx.target_warmth_percent < ctx.caster_warmth_percent,
 
@@ -717,6 +736,7 @@ pub fn evaluateConditionFull(condition: EffectCondition, ctx: ConditionContext) 
         .if_caster_has_numerical_advantage => ctx.nearby_allies_count > ctx.nearby_foes_count,
         .if_target_is_ally => ctx.target_is_ally,
         .if_target_is_enemy => ctx.target_is_enemy,
+        .if_target_is_foe => ctx.target_is_enemy, // Alias
 
         // Variety tracking (Montessori)
         .if_last_two_skills_different_types => blk: {
@@ -736,6 +756,9 @@ pub fn evaluateConditionFull(condition: EffectCondition, ctx: ConditionContext) 
         .if_target_was_interrupted => ctx.target_was_interrupted,
         .if_this_skill_interrupted => ctx.target_was_interrupted,
         .if_target_died => ctx.target_died,
+
+        // Recent hit tracking
+        .if_target_recently_hit_by_caster => ctx.target_recently_hit_by_caster,
     };
 }
 

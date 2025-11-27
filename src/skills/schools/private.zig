@@ -255,6 +255,79 @@ const HEDGE_FUND_ALLY_EFFECT = effects.Effect{
 
 const hedge_fund_effects = [_]effects.Effect{ HEDGE_FUND_SELF_EFFECT, HEDGE_FUND_ALLY_EFFECT };
 
+// Compound Interest (skill 12): +1 damage per current energy
+const compound_interest_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_per_current_energy,
+    .value = .{ .float = 1.0 }, // +1 damage per energy
+}};
+
+const COMPOUND_INTEREST_EFFECT = effects.Effect{
+    .name = "Compound Interest",
+    .description = "+1 damage per current energy",
+    .modifiers = &compound_interest_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const compound_interest_effects = [_]effects.Effect{COMPOUND_INTEREST_EFFECT};
+
+// Portfolio Diversification (skill 14): +10% damage after using 2 different skill types, +20% after 3 different
+const portfolio_diversification_2_types_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.1 }, // +10% damage
+}};
+
+const PORTFOLIO_DIVERSIFICATION_2_TYPES_EFFECT = effects.Effect{
+    .name = "Diversified",
+    .description = "+10% damage (used 2 different skill types)",
+    .modifiers = &portfolio_diversification_2_types_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 20000,
+    .is_buff = true,
+    .condition = .if_last_two_skills_different_types,
+};
+
+const portfolio_diversification_3_types_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.2 }, // +20% damage
+}};
+
+const PORTFOLIO_DIVERSIFICATION_3_TYPES_EFFECT = effects.Effect{
+    .name = "Highly Diversified",
+    .description = "+20% damage (used 3 different skill types)",
+    .modifiers = &portfolio_diversification_3_types_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 20000,
+    .is_buff = true,
+    .condition = .if_last_three_skills_different_types,
+};
+
+const portfolio_diversification_effects = [_]effects.Effect{ PORTFOLIO_DIVERSIFICATION_2_TYPES_EFFECT, PORTFOLIO_DIVERSIFICATION_3_TYPES_EFFECT };
+
+// Golden Parachute (AP 4): Prevent death, heal to 50%, invulnerable
+// This skill uses behavior: .prevent_death instead of modifiers - it's a whole mechanic
+// The stance buff simply indicates the skill is active
+const golden_parachute_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_add, // Placeholder - actual behavior is in skill.behavior
+    .value = .{ .float = 0.0 },
+}};
+
+const GOLDEN_PARACHUTE_EFFECT = effects.Effect{
+    .name = "Golden Parachute",
+    .description = "When dropping below 20% Warmth, heal to 50% and become invulnerable for 3 seconds",
+    .modifiers = &golden_parachute_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .duration_ms = 30000,
+    .is_buff = true,
+};
+
+const golden_parachute_effects = [_]effects.Effect{GOLDEN_PARACHUTE_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Energy management - instant energy
     .{
@@ -445,7 +518,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 12000,
-        // NOTE: +1 damage per current energy requires runtime calculation
+        .effects = &compound_interest_effects,
     },
 
     // 13. Tax Return - energy drain
@@ -477,6 +550,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 30000,
         .duration_ms = 20000,
         .cozies = &private_fire_inside,
+        .effects = &portfolio_diversification_effects,
     },
 
     // 15. Hedge Fund - defensive investment
@@ -581,5 +655,11 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 90000,
         .duration_ms = 30000,
         .is_ap = true,
+        .behavior = .{ .prevent_death = .{
+            .heal_to_percent = 0.5,
+            .invulnerable_ms = 3000,
+            .trigger_below_percent = 0.2,
+        } },
+        .effects = &golden_parachute_effects,
     },
 };

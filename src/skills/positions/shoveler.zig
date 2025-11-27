@@ -226,6 +226,46 @@ const EARTHQUAKE_EFFECT = effects.Effect{
 
 const earthquake_effects = [_]effects.Effect{EARTHQUAKE_EFFECT};
 
+// Challenge - taunt effect, forces foe to target you
+// This skill uses behavior: .taunt instead of modifiers - it's a whole mechanic
+const challenge_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_add, // Placeholder - actual behavior is in skill.behavior
+    .value = .{ .float = 0.0 },
+}};
+
+const CHALLENGE_EFFECT = effects.Effect{
+    .name = "Challenge",
+    .description = "Target must attack you",
+    .modifiers = &challenge_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 5000,
+    .is_buff = false,
+};
+
+const challenge_effects = [_]effects.Effect{CHALLENGE_EFFECT};
+
+// Guardian Angel - redirect damage from ally to self
+// This skill uses behavior: .damage_redirect instead of modifiers - it's a whole mechanic
+const guardian_angel_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_add, // Placeholder - actual behavior is in skill.behavior
+    .value = .{ .float = 0.0 },
+}};
+
+const GUARDIAN_ANGEL_EFFECT = effects.Effect{
+    .name = "Guardian Angel",
+    .description = "All damage target would take hits you instead",
+    .modifiers = &guardian_angel_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const guardian_angel_effects = [_]effects.Effect{GUARDIAN_ANGEL_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Armor stance - damage reduction
     .{
@@ -304,7 +344,10 @@ pub const skills = [_]Skill{
         .activation_time_ms = 0,
         .aftercast_ms = 0,
         .recharge_time_ms = 20000,
-        // TODO: Taunt mechanic
+        .behavior = .{ .taunt = .{
+            .duration_ms = 5000,
+        } },
+        .effects = &challenge_effects,
     },
 
     // 6. Moderate damage throw
@@ -537,6 +580,12 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 45000,
         .duration_ms = 15000,
         .is_ap = true,
+        .behavior = .{ .damage_redirect = .{
+            .redirect_percent = 1.0,
+            .to_caster = true,
+            .duration_ms = 15000,
+        } },
+        .effects = &guardian_angel_effects,
     },
 
     // AP 4: Earthquake - massive AoE knockdown

@@ -197,6 +197,54 @@ const SLED_CRASH_SELF_EFFECT = effects.Effect{
 
 const sled_crash_effects = [_]effects.Effect{ SLED_CRASH_TARGET_EFFECT, SLED_CRASH_SELF_EFFECT };
 
+// Second Strike - bonus damage if target was recently hit
+const second_strike_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add,
+    .value = .{ .float = 12.0 },
+}};
+
+const SECOND_STRIKE_EFFECT = effects.Effect{
+    .name = "Second Strike",
+    .description = "+12 damage if target was hit by you in last 3 seconds",
+    .modifiers = &second_strike_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .if_target_recently_hit_by_caster,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const second_strike_effects = [_]effects.Effect{SECOND_STRIKE_EFFECT};
+
+// Avalanche - damage increases per foe hit
+const avalanche_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .piercing,
+        .value = .{ .int = 1 }, // Hit all in path
+    },
+    .{
+        .effect_type = .damage_increase_per_foe_hit,
+        .value = .{ .float = 10.0 }, // +10 damage per foe
+    },
+    .{
+        .effect_type = .immune_to_interrupt,
+        .value = .{ .int = 1 }, // Cannot be stopped
+    },
+};
+
+const AVALANCHE_EFFECT = effects.Effect{
+    .name = "Avalanche",
+    .description = "Hit all foes in path. +10 damage per foe hit. Cannot be stopped.",
+    .modifiers = &avalanche_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const avalanche_effects = [_]effects.Effect{AVALANCHE_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Gap closer - mobility + damage
     .{
@@ -450,6 +498,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 500,
         .aftercast_ms = 750,
         .recharge_time_ms = 5000,
+        .effects = &second_strike_effects,
     },
 
     // ========================================================================
@@ -469,6 +518,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 40000,
         .is_ap = true,
+        .effects = &avalanche_effects,
     },
 
     // AP 2: Speed Demon - extreme mobility

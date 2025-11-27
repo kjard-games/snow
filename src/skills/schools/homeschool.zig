@@ -165,6 +165,44 @@ const LONE_WOLF_EFFECT = effects.Effect{
 
 const lone_wolf_effects = [_]effects.Effect{LONE_WOLF_EFFECT};
 
+// Soul Bargain (AP 2): Damage = 50% of current warmth sacrificed
+// Note: Actual damage calculation requires runtime, effect documents the mechanic
+const soul_bargain_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_multiplier,
+    .value = .{ .float = 1.0 }, // Base multiplier, actual damage from warmth sacrifice
+}};
+
+const SOUL_BARGAIN_EFFECT = effects.Effect{
+    .name = "Soul Bargain",
+    .description = "Deal damage equal to 50% of sacrificed Warmth",
+    .modifiers = &soul_bargain_mods,
+    .timing = .on_cast,
+    .affects = .target,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const soul_bargain_effects = [_]effects.Effect{SOUL_BARGAIN_EFFECT};
+
+// Infectious Isolation (AP 3): Apply chills to nearby foes when target takes damage
+// This is simplified from "spread chills" to "apply chill debuffs to nearby foes"
+const infectious_isolation_mods = [_]effects.Modifier{.{
+    .effect_type = .damage_add, // Placeholder - main effect is via timing/affects
+    .value = .{ .float = 0.0 },
+}};
+
+const INFECTIOUS_ISOLATION_EFFECT = effects.Effect{
+    .name = "Infectious Isolation",
+    .description = "When target takes damage, apply debuff to nearby foes",
+    .modifiers = &infectious_isolation_mods,
+    .timing = .on_take_damage,
+    .affects = .foes_near_target,
+    .duration_ms = 15000,
+    .is_buff = false,
+};
+
+const infectious_isolation_effects = [_]effects.Effect{INFECTIOUS_ISOLATION_EFFECT};
+
 // Dark Knowledge (skill 10): Next attack +50% damage
 const dark_knowledge_mods = [_]effects.Modifier{.{
     .effect_type = .next_attack_damage_multiplier,
@@ -510,6 +548,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 30000,
         .is_ap = true,
+        .effects = &soul_bargain_effects,
     },
 
     // AP 3: Infectious Isolation - spread debuffs
@@ -525,6 +564,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 40000,
         .duration_ms = 15000,
         .is_ap = true,
+        .effects = &infectious_isolation_effects,
     },
 
     // AP 4: Lone Wolf - massive solo power

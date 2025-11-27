@@ -177,6 +177,44 @@ const SNIPERS_EYE_EFFECT = effects.Effect{
 
 const snipers_eye_effects = [_]effects.Effect{SNIPERS_EYE_EFFECT};
 
+// Curveball - 50% chance to be unblockable
+const curveball_mods = [_]effects.Modifier{.{
+    .effect_type = .unblockable_chance,
+    .value = .{ .float = 0.50 }, // 50% unblockable
+}};
+
+const CURVEBALL_EFFECT = effects.Effect{
+    .name = "Curveball",
+    .description = "50% chance to be unblockable",
+    .modifiers = &curveball_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const curveball_effects = [_]effects.Effect{CURVEBALL_EFFECT};
+
+// Artillery Strike - massive AoE
+const artillery_strike_mods = [_]effects.Modifier{.{
+    .effect_type = .ignore_cover,
+    .value = .{ .int = 1 },
+}};
+
+const ARTILLERY_STRIKE_EFFECT = effects.Effect{
+    .name = "Artillery Strike",
+    .description = "Arcs over walls and cover",
+    .modifiers = &artillery_strike_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const artillery_strike_effects = [_]effects.Effect{ARTILLERY_STRIKE_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Fast, reliable damage - your bread and butter
     .{
@@ -384,6 +422,7 @@ pub const skills = [_]Skill{
         .activation_time_ms = 1000,
         .aftercast_ms = 750,
         .recharge_time_ms = 6000,
+        .effects = &curveball_effects,
     },
 
     // 14. Blinding Throw - utility
@@ -487,6 +526,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 35000,
         .projectile_type = .arcing,
         .is_ap = true,
+        .effects = &artillery_strike_effects,
     },
 
     // AP 4: Sniper's Eye - guaranteed critical on next throw

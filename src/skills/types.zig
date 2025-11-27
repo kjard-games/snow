@@ -173,6 +173,82 @@ pub const TerrainEffect = struct {
     }
 };
 
+// ============================================================================
+// SKILL BEHAVIORS - Complex mechanics that aren't stat modifiers
+// ============================================================================
+// These are whole mechanics that require special handling in the combat system.
+// They are NOT composable modifiers - they're complete behaviors that need
+// dedicated implementation. A skill can have at most ONE behavior.
+//
+// Philosophy: Effects modify stats. Behaviors change game flow.
+
+pub const SummonType = enum {
+    snowman, // Basic snowman minion
+    abomination, // Large tanky creature
+    suicide_snowman, // Explodes on death
+    snow_fort, // Stationary turret-like summon
+};
+
+pub const SummonParams = struct {
+    summon_type: SummonType,
+    count: u8 = 1, // How many to summon
+    level: u8 = 1, // Power/health scaling
+    duration_ms: u32 = 30000, // How long summon lasts
+    damage_per_attack: f32 = 5.0, // Base damage
+    explode_damage: f32 = 0.0, // If > 0, explodes on death for this damage
+    explode_radius: f32 = 0.0, // Explosion radius
+};
+
+pub const LinkParams = struct {
+    max_targets: u8 = 5, // Max allies in the link
+    damage_share_percent: f32 = 1.0, // How much damage is shared (1.0 = 100%)
+    healing_share_percent: f32 = 0.0, // How much healing is shared
+    duration_ms: u32 = 15000,
+};
+
+pub const RedirectParams = struct {
+    redirect_percent: f32 = 1.0, // How much damage to redirect (1.0 = 100%)
+    to_caster: bool = true, // Redirect TO caster (Guardian Angel) vs FROM caster
+    duration_ms: u32 = 15000,
+};
+
+pub const ProjectileReturnParams = struct {
+    return_damage: f32 = 20.0, // Damage when projectile is returned
+    block_count: u8 = 1, // How many projectiles to catch
+    duration_ms: u32 = 5000,
+};
+
+pub const PreventDeathParams = struct {
+    heal_to_percent: f32 = 0.5, // Heal to this % when triggered
+    invulnerable_ms: u32 = 3000, // Invulnerability duration after trigger
+    trigger_below_percent: f32 = 0.2, // Trigger when dropping below this %
+};
+
+/// Complex skill behaviors that need dedicated combat system handling
+pub const SkillBehavior = union(enum) {
+    none: void, // No special behavior (default)
+
+    // Summoning creatures
+    summon: SummonParams,
+
+    // Damage/healing sharing between linked targets
+    spirit_link: LinkParams,
+
+    // Redirect damage between characters
+    damage_redirect: RedirectParams,
+
+    // Catch and return projectiles
+    projectile_return: ProjectileReturnParams,
+
+    // Prevent death and heal (Golden Parachute style)
+    prevent_death: PreventDeathParams,
+
+    // Taunt - force target to attack caster
+    taunt: struct {
+        duration_ms: u32 = 5000,
+    },
+};
+
 // An active chill (debuff) on a character
 pub const ActiveChill = struct {
     chill: Chill,
@@ -220,6 +296,10 @@ pub const Skill = struct {
     // These are applied when the skill hits a target
     effects: []const effects.Effect = &[_]effects.Effect{}, // composable effects (damage multipliers, etc.)
 
+    // Complex skill behavior (summons, links, redirects, etc.)
+    // A skill can have at most ONE behavior. These need dedicated combat system handling.
+    behavior: SkillBehavior = .none,
+
     // Special properties
     unblockable: bool = false,
     soak: f32 = 0.0, // percentage (0.0 to 1.0) - soaks through padding/layers
@@ -245,6 +325,9 @@ pub const Skill = struct {
 
     // School-specific resource costs
     grit_cost: u8 = 0, // Public School - adrenaline-like resource
+    requires_grit_stacks: u8 = 0, // Public School - minimum grit stacks to cast
+    consumes_all_grit: bool = false, // Public School - consume all grit (for skills like Final Push)
+    damage_per_grit_consumed: f32 = 0.0, // Public School - bonus damage per grit stack consumed
     warmth_cost_percent: f32 = 0.0, // Homeschool - % of max warmth sacrificed
     min_warmth_percent: f32 = 0.0, // Homeschool - can't cast below this warmth %
     credit_cost: u8 = 0, // Private School - reduces max energy temporarily (spending on credit)
@@ -259,6 +342,7 @@ pub const Skill = struct {
     // Resource gains (on successful cast/hit)
     grants_grit_on_hit: u8 = 0, // Public School - gain Grit when skill hits
     grants_grit_on_cast: u8 = 0, // Public School - gain Grit on cast (regardless of hit)
+    grants_grit_to_allies_on_cast: u8 = 0, // Public School - all nearby allies gain Grit on cast
     grants_energy_on_hit: u8 = 0, // Gain energy when skill hits
     grants_rhythm_on_cast: u8 = 0, // Waldorf - gain rhythm stacks on cast
 

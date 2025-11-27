@@ -255,6 +255,51 @@ const CENTER_FIELD_ENEMY_EFFECT = effects.Effect{
 
 const center_field_effects = [_]effects.Effect{ CENTER_FIELD_ALLY_EFFECT, CENTER_FIELD_ENEMY_EFFECT };
 
+// Catch and Return - block projectile and throw back
+// This skill uses behavior: .projectile_return instead of modifiers - it's a whole mechanic
+const catch_and_return_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_add, // Placeholder - actual behavior is in skill.behavior
+    .value = .{ .float = 0.0 },
+}};
+
+const CATCH_AND_RETURN_EFFECT = effects.Effect{
+    .name = "Catch and Return",
+    .description = "Block next projectile. If blocked, throw it back for 20 damage.",
+    .modifiers = &catch_and_return_mods,
+    .timing = .while_active,
+    .affects = .self,
+    .condition = .always,
+    .duration_ms = 5000,
+    .is_buff = true,
+};
+
+const catch_and_return_effects = [_]effects.Effect{CATCH_AND_RETURN_EFFECT};
+
+// Grand Slam - +10 damage per foe hit
+const grand_slam_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .piercing,
+        .value = .{ .int = 1 }, // Hits all in line
+    },
+    .{
+        .effect_type = .damage_increase_per_foe_hit,
+        .value = .{ .float = 10.0 }, // +10 damage per foe hit
+    },
+};
+
+const GRAND_SLAM_EFFECT = effects.Effect{
+    .name = "Grand Slam",
+    .description = "Hit all foes in line. +10 damage per foe hit (stacks).",
+    .modifiers = &grand_slam_mods,
+    .timing = .on_hit,
+    .affects = .target,
+    .condition = .always,
+    .duration_ms = 0,
+    .is_buff = false,
+};
+
+const grand_slam_effects = [_]effects.Effect{GRAND_SLAM_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Versatile throw - good at everything
     .{
@@ -439,6 +484,12 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 15000,
         .duration_ms = 5000,
+        .behavior = .{ .projectile_return = .{
+            .return_damage = 20.0,
+            .block_count = 1,
+            .duration_ms = 5000,
+        } },
+        .effects = &catch_and_return_effects,
     },
 
     // 13. Outfield Throw - DoT applicator
@@ -571,5 +622,6 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 40000,
         .is_ap = true,
+        .effects = &grand_slam_effects,
     },
 };

@@ -225,6 +225,69 @@ const TEMPO_MASTERY_EFFECT = effects.Effect{
 
 const tempo_mastery_effects = [_]effects.Effect{TEMPO_MASTERY_EFFECT};
 
+// Symphony of Snow (AP 1): All allies gain rhythm and energy passively
+// Simplified from trigger-based to passive gain over time
+const symphony_of_snow_mods = [_]effects.Modifier{
+    .{
+        .effect_type = .rhythm_gain_per_second,
+        .value = .{ .float = 0.5 }, // Allies gain rhythm over time
+    },
+    .{
+        .effect_type = .energy_gain_per_second,
+        .value = .{ .float = 1.0 }, // Allies gain energy over time
+    },
+};
+
+const SYMPHONY_OF_SNOW_EFFECT = effects.Effect{
+    .name = "Symphony of Snow",
+    .description = "All allies passively gain Rhythm and energy",
+    .modifiers = &symphony_of_snow_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .duration_ms = 20000,
+    .is_buff = true,
+};
+
+const symphony_of_snow_effects = [_]effects.Effect{SYMPHONY_OF_SNOW_EFFECT};
+
+// Resonant Link (AP 3): Share rhythm stacks with linked ally
+// Simplified to just give the target rhythm gain per second
+const resonant_link_mods = [_]effects.Modifier{.{
+    .effect_type = .rhythm_gain_per_second,
+    .value = .{ .float = 1.0 }, // Target gains rhythm over time
+}};
+
+const RESONANT_LINK_EFFECT = effects.Effect{
+    .name = "Resonant Link",
+    .description = "Target ally gains Rhythm over time",
+    .modifiers = &resonant_link_mods,
+    .timing = .while_active,
+    .affects = .target,
+    .duration_ms = 30000,
+    .is_buff = true,
+};
+
+const resonant_link_effects = [_]effects.Effect{RESONANT_LINK_EFFECT};
+
+// Ensemble Cast (skill 13): Team rhythm sharing
+// Simplified from complex rhythm sharing to rhythm gain per second for allies
+const ensemble_cast_mods = [_]effects.Modifier{.{
+    .effect_type = .rhythm_gain_per_second,
+    .value = .{ .float = 0.5 }, // Allies gain rhythm over time
+}};
+
+const ENSEMBLE_CAST_EFFECT = effects.Effect{
+    .name = "Ensemble Cast",
+    .description = "All allies build Rhythm over time",
+    .modifiers = &ensemble_cast_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .duration_ms = 10000,
+    .is_buff = true,
+};
+
+const ensemble_cast_effects = [_]effects.Effect{ENSEMBLE_CAST_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Rhythm buff - core mechanic
     .{
@@ -450,6 +513,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 0,
         .recharge_time_ms = 30000,
         .duration_ms = 10000,
+        .effects = &ensemble_cast_effects,
     },
 
     // 14. Graceful Recovery - defensive rhythm skill
@@ -522,6 +586,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 20000,
         .is_ap = true,
+        .effects = &symphony_of_snow_effects,
     },
 
     // AP 2: Tempo Mastery - rhythm becomes permanent during stance
@@ -554,6 +619,7 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 40000,
         .duration_ms = 30000,
         .is_ap = true,
+        .effects = &resonant_link_effects,
     },
 
     // AP 4: Grand Finale - ultimate rhythm finisher

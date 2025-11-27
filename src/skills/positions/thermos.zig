@@ -250,6 +250,27 @@ const MARTYR_EFFECT = effects.Effect{
 
 const martyr_effects = [_]effects.Effect{MARTYR_EFFECT};
 
+// Spirit Link - share damage among all linked allies
+// This skill uses behavior: .spirit_link instead of modifiers - it's a whole mechanic
+// The effect here just indicates the link is active
+const spirit_link_mods = [_]effects.Modifier{.{
+    .effect_type = .armor_add, // Placeholder - actual behavior is in skill.behavior
+    .value = .{ .float = 0.0 },
+}};
+
+const SPIRIT_LINK_EFFECT = effects.Effect{
+    .name = "Spirit Link",
+    .description = "Damage to any linked ally is split evenly among all",
+    .modifiers = &spirit_link_mods,
+    .timing = .while_active,
+    .affects = .allies_in_earshot,
+    .condition = .always,
+    .duration_ms = 15000,
+    .is_buff = true,
+};
+
+const spirit_link_effects = [_]effects.Effect{SPIRIT_LINK_EFFECT};
+
 pub const skills = [_]Skill{
     // 1. Single target heal - primary healing tool
     .{
@@ -544,6 +565,13 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 50000,
         .duration_ms = 15000,
         .is_ap = true,
+        .behavior = .{ .spirit_link = .{
+            .max_targets = 5,
+            .damage_share_percent = 1.0,
+            .healing_share_percent = 0.0,
+            .duration_ms = 15000,
+        } },
+        .effects = &spirit_link_effects,
     },
 
     // AP 3: Sanctuary - healing zone
