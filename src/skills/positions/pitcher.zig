@@ -100,7 +100,7 @@ const called_shot_bonus_mods = [_]effects.Modifier{.{
 }};
 
 const CALLED_SHOT_BONUS = effects.Effect{
-    .name = "Called Shot",
+    .name = "Perfect Shot",
     .description = "+15 damage to low warmth targets",
     .modifiers = &called_shot_bonus_mods,
     .timing = .on_hit,
@@ -458,7 +458,7 @@ pub const skills = [_]Skill{
 
     // 16. Called Shot - bonus damage to marked target
     .{
-        .name = "Called Shot",
+        .name = "Perfect Shot",
         .description = "Throw. Deals 25 damage. +15 damage if target is below 50% Warmth.",
         .skill_type = .throw,
         .mechanic = .windup,

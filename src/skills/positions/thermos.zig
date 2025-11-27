@@ -435,7 +435,7 @@ pub const skills = [_]Skill{
 
     // 11. WALL: Shelter - protective wall for allies
     .{
-        .name = "Shelter",
+        .name = "Snow Shelter",
         .description = "Gesture. Build a warm wall at target location. Protects allies from projectiles.",
         .skill_type = .gesture,
         .mechanic = .ready,

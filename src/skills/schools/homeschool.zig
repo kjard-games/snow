@@ -111,8 +111,8 @@ const SELF_RELIANCE_EFFECT = effects.Effect{
 
 const self_reliance_effects = [_]effects.Effect{SELF_RELIANCE_EFFECT};
 
-// Blood Magic (AP 1): No energy cost, +30% damage
-const blood_magic_mods = [_]effects.Modifier{
+// Sugar Rush (AP 1): No energy cost, +30% damage
+const sugar_rush_mods = [_]effects.Modifier{
     .{
         .effect_type = .energy_cost_multiplier,
         .value = .{ .float = 0.0 }, // Skills cost no energy
@@ -124,17 +124,17 @@ const blood_magic_mods = [_]effects.Modifier{
     // Note: 5% warmth cost per skill requires runtime implementation
 };
 
-const BLOOD_MAGIC_EFFECT = effects.Effect{
-    .name = "Blood Magic",
+const SUGAR_RUSH_EFFECT = effects.Effect{
+    .name = "Sugar Rush",
     .description = "Skills cost no energy but 5% Warmth. +30% damage.",
-    .modifiers = &blood_magic_mods,
+    .modifiers = &sugar_rush_mods,
     .timing = .while_active,
     .affects = .self,
     .duration_ms = 30000,
     .is_buff = true,
 };
 
-const blood_magic_effects = [_]effects.Effect{BLOOD_MAGIC_EFFECT};
+const sugar_rush_effects = [_]effects.Effect{SUGAR_RUSH_EFFECT};
 
 // Lone Wolf (AP 4): +60% damage, +40% armor, +50% energy regen when isolated
 const lone_wolf_mods = [_]effects.Modifier{
@@ -165,24 +165,24 @@ const LONE_WOLF_EFFECT = effects.Effect{
 
 const lone_wolf_effects = [_]effects.Effect{LONE_WOLF_EFFECT};
 
-// Soul Bargain (AP 2): Damage = 50% of current warmth sacrificed
+// Desperate Gambit (AP 2): Damage = 50% of current warmth sacrificed
 // Note: Actual damage calculation requires runtime, effect documents the mechanic
-const soul_bargain_mods = [_]effects.Modifier{.{
+const desperate_gambit_mods = [_]effects.Modifier{.{
     .effect_type = .damage_multiplier,
     .value = .{ .float = 1.0 }, // Base multiplier, actual damage from warmth sacrifice
 }};
 
-const SOUL_BARGAIN_EFFECT = effects.Effect{
-    .name = "Soul Bargain",
+const DESPERATE_GAMBIT_EFFECT = effects.Effect{
+    .name = "Desperate Gambit",
     .description = "Deal damage equal to 50% of sacrificed Warmth",
-    .modifiers = &soul_bargain_mods,
+    .modifiers = &desperate_gambit_mods,
     .timing = .on_cast,
     .affects = .target,
     .duration_ms = 0,
     .is_buff = false,
 };
 
-const soul_bargain_effects = [_]effects.Effect{SOUL_BARGAIN_EFFECT};
+const desperate_gambit_effects = [_]effects.Effect{DESPERATE_GAMBIT_EFFECT};
 
 // Infectious Isolation (AP 3): Apply chills to nearby foes when target takes damage
 // This is simplified from "spread chills" to "apply chill debuffs to nearby foes"
@@ -203,7 +203,7 @@ const INFECTIOUS_ISOLATION_EFFECT = effects.Effect{
 
 const infectious_isolation_effects = [_]effects.Effect{INFECTIOUS_ISOLATION_EFFECT};
 
-// Dark Knowledge (skill 10): Next attack +50% damage
+// Cramming (skill 10): Next attack +50% damage
 const dark_knowledge_mods = [_]effects.Modifier{.{
     .effect_type = .next_attack_damage_multiplier,
     .value = .{ .float = 1.5 },
@@ -221,14 +221,14 @@ const DARK_KNOWLEDGE_EFFECT = effects.Effect{
 
 const dark_knowledge_effects = [_]effects.Effect{DARK_KNOWLEDGE_EFFECT};
 
-// Martyrdom (skill 16): Allies gain +25% damage
+// Taking One for the Team (skill 16): Allies gain +25% damage
 const martyrdom_mods = [_]effects.Modifier{.{
     .effect_type = .damage_multiplier,
     .value = .{ .float = 1.25 },
 }};
 
 const MARTYRDOM_EFFECT = effects.Effect{
-    .name = "Martyrdom",
+    .name = "Taking One for the Team",
     .description = "+25% damage",
     .modifiers = &martyrdom_mods,
     .timing = .while_active,
@@ -242,7 +242,7 @@ const martyrdom_effects = [_]effects.Effect{MARTYRDOM_EFFECT};
 pub const skills = [_]Skill{
     // 1. Warmth for damage
     .{
-        .name = "Blood Pact",
+        .name = "Pinky Promise",
         .description = "Trick. Sacrifice 15% of your max Warmth. Deals 35 damage.",
         .skill_type = .trick,
         .mechanic = .concentrate,
@@ -274,7 +274,7 @@ pub const skills = [_]Skill{
 
     // 3. Crippling curse
     .{
-        .name = "Malnutrition",
+        .name = "Skipped Lunch",
         .description = "Trick. Sacrifice 10% of your max Warmth. Deals 12 damage. Inflicts Packed Snow (12 seconds).",
         .skill_type = .trick,
         .mechanic = .concentrate,
@@ -343,7 +343,7 @@ pub const skills = [_]Skill{
 
     // 7. Life steal - no sacrifice, sustain skill
     .{
-        .name = "Vampiric Touch",
+        .name = "Heat Leech",
         .description = "Throw. Deals 20 damage. You gain 20 Warmth.",
         .skill_type = .throw,
         .mechanic = .windup,
@@ -377,8 +377,8 @@ pub const skills = [_]Skill{
 
     // 9. WALL: Blood Wall - powerful wall at health cost
     .{
-        .name = "Blood Wall",
-        .description = "Trick. Sacrifice 18% of your max Warmth. Build a tall, jagged wall of frozen blood.",
+        .name = "Desperation Fort",
+        .description = "Trick. Sacrifice 18% of your max Warmth. Build a tall, jagged wall of ice.",
         .skill_type = .trick,
         .mechanic = .concentrate,
         .energy_cost = 8,
@@ -417,7 +417,7 @@ pub const skills = [_]Skill{
 
     // 11. Forbidden Technique - high damage with heavy sacrifice
     .{
-        .name = "Forbidden Technique",
+        .name = "Secret Move",
         .description = "Throw. Sacrifice 20% Warmth. Deals 45 damage. Unblockable.",
         .skill_type = .throw,
         .mechanic = .windup,
@@ -498,7 +498,7 @@ pub const skills = [_]Skill{
 
     // 16. Martyrdom - damage self to buff allies
     .{
-        .name = "Martyrdom",
+        .name = "Taking One for the Team",
         .description = "Call. Sacrifice 25% Warmth. All allies gain +25% damage and heal 20 Warmth.",
         .skill_type = .call,
         .mechanic = .shout,
@@ -520,9 +520,9 @@ pub const skills = [_]Skill{
     // HOMESCHOOL AP SKILLS (4 AP skills for 20% of 20 total)
     // ========================================================================
 
-    // AP 1: Blood Magic - convert warmth directly to damage
+    // AP 1: Sugar Rush - convert warmth directly to damage
     .{
-        .name = "Blood Magic",
+        .name = "Sugar Rush",
         .description = "[AP] Stance. (30 seconds.) Your skills cost no energy but cost 5% max Warmth instead. Deal +30% damage.",
         .skill_type = .stance,
         .mechanic = .shift,
@@ -533,12 +533,12 @@ pub const skills = [_]Skill{
         .recharge_time_ms = 60000,
         .duration_ms = 30000,
         .is_ap = true,
-        .effects = &blood_magic_effects, // No energy cost, +30% damage (5% warmth cost handled at runtime)
+        .effects = &sugar_rush_effects, // No energy cost, +30% damage (5% warmth cost handled at runtime)
     },
 
-    // AP 2: Soul Bargain - trade warmth for power
+    // AP 2: Desperate Gambit - trade warmth for power
     .{
-        .name = "Soul Bargain",
+        .name = "Desperate Gambit",
         .description = "[AP] Trick. Sacrifice 50% of your current Warmth. Deal that amount as damage to target. Cannot kill yourself.",
         .skill_type = .trick,
         .mechanic = .concentrate,
@@ -548,7 +548,7 @@ pub const skills = [_]Skill{
         .aftercast_ms = 750,
         .recharge_time_ms = 30000,
         .is_ap = true,
-        .effects = &soul_bargain_effects,
+        .effects = &desperate_gambit_effects,
     },
 
     // AP 3: Infectious Isolation - spread debuffs

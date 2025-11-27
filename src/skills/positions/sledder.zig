@@ -353,7 +353,7 @@ pub const skills = [_]Skill{
 
     // 8. Speed boost stance
     .{
-        .name = "Sprint",
+        .name = "Dash",
         .description = "Stance. (10 seconds.) You move 50% faster.",
         .skill_type = .stance,
         .mechanic = .shift,

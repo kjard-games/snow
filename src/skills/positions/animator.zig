@@ -209,7 +209,7 @@ const death_nova_mods = [_]effects.Modifier{
 };
 
 const DEATH_NOVA_EFFECT = effects.Effect{
-    .name = "Death Nova",
+    .name = "Snowman Supernova",
     .description = "If target dies within 20 seconds, explodes for 40 AoE damage",
     .modifiers = &death_nova_mods,
     .timing = .on_kill,
@@ -574,7 +574,7 @@ pub const skills = [_]Skill{
 
     // AP 4: Death Nova - explode enemies on death
     .{
-        .name = "Death Nova",
+        .name = "Snowman Supernova",
         .description = "[AP] Trick. Curse target. If they die within 20 seconds, they explode dealing 40 damage to nearby foes.",
         .skill_type = .trick,
         .mechanic = .concentrate,

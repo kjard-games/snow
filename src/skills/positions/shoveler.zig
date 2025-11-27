@@ -214,7 +214,7 @@ const earthquake_mods = [_]effects.Modifier{.{
 }};
 
 const EARTHQUAKE_EFFECT = effects.Effect{
-    .name = "Earthquake",
+    .name = "Ground Pound",
     .description = "Knockdown for 3 seconds",
     .modifiers = &earthquake_mods,
     .timing = .on_hit,
@@ -600,7 +600,7 @@ pub const skills = [_]Skill{
 
     // AP 4: Earthquake - massive AoE knockdown
     .{
-        .name = "Earthquake",
+        .name = "Ground Pound",
         .description = "[AP] Trick. All enemies in area take 20 damage and are knocked down for 3 seconds.",
         .skill_type = .trick,
         .mechanic = .concentrate,
