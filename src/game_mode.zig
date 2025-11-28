@@ -883,22 +883,33 @@ pub const GameMode = struct {
         if (self.campaign_state) |cs| {
             // Process result using polyomino block system (if we have a block_id)
             if (self.current_encounter_block_id) |block_id| {
-                cs.processPolyBlockResult(block_id, victory, self.prng.random()) catch {};
+                const status = cs.processPolyBlockResult(block_id, victory, self.prng.random()) catch cs.getStatus();
+
+                // Check for game over from territory loss
+                if (status == .victory) {
+                    self.cleanupMatch();
+                    self.phase = .campaign_victory;
+                    return;
+                } else if (status.isDefeat()) {
+                    self.cleanupMatch();
+                    self.phase = .campaign_defeat;
+                    return;
+                }
             } else {
                 // Fallback to legacy system
                 cs.processEncounterResult(node, victory, self.prng.random());
-            }
 
-            // Check campaign status
-            const status = cs.getStatus();
-            if (status == .victory) {
-                self.cleanupMatch();
-                self.phase = .campaign_victory;
-                return;
-            } else if (status.isDefeat()) {
-                self.cleanupMatch();
-                self.phase = .campaign_defeat;
-                return;
+                // Check campaign status
+                const status = cs.getStatus();
+                if (status == .victory) {
+                    self.cleanupMatch();
+                    self.phase = .campaign_victory;
+                    return;
+                } else if (status.isDefeat()) {
+                    self.cleanupMatch();
+                    self.phase = .campaign_defeat;
+                    return;
+                }
             }
 
             if (victory) {

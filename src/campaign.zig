@@ -88,6 +88,8 @@ pub const Faction = enum(u8) {
     red = 1, // Primary rivals - the kids from across the park
     yellow = 2, // Third party - the homeschool collective
     green = 3, // Fourth party - the after-school program kids
+    purple = 4, // Fifth party - the private school kids
+    orange = 5, // Sixth party - the sports league kids
 
     pub fn isEnemy(self: Faction, other: Faction) bool {
         return self != other;
@@ -103,6 +105,8 @@ pub const Faction = enum(u8) {
             .red => "Oak Park Crew",
             .yellow => "Homeschool Collective",
             .green => "After-School Alliance",
+            .purple => "St. Augustine Prep",
+            .orange => "Little League Legends",
         };
     }
 
@@ -112,6 +116,8 @@ pub const Faction = enum(u8) {
             .red => 0xFF4444,
             .yellow => 0xFFCC00,
             .green => 0x44CC44,
+            .purple => 0x9944FF,
+            .orange => 0xFF8844,
         };
     }
 };
@@ -1246,7 +1252,11 @@ pub const CampaignState = struct {
     }
 
     /// Process the result of completing a polyomino block encounter
-    pub fn processPolyBlockResult(self: *CampaignState, block_id: u32, victory: bool, rng: std.Random) !void {
+    /// Returns the campaign status after processing (may be game over on loss)
+    pub fn processPolyBlockResult(self: *CampaignState, block_id: u32, victory: bool, rng: std.Random) !CampaignStatus {
+        // Advance the round counter for loss penalty scaling
+        self.poly_map.current_round = self.turn;
+
         if (self.poly_map.getBlock(block_id)) |block| {
             if (block.encounter) |node| {
                 if (victory) {
@@ -1270,9 +1280,28 @@ pub const CampaignState = struct {
                     try self.poly_map.expandFrontier();
                 } else {
                     self.encounters_lost += 1;
+
+                    // LOSS PENALTY: Lose frontier territory based on current round
+                    // Early game (rounds 1-3): lose 1 block
+                    // Mid game (rounds 4-6): lose 2 blocks
+                    // Late game: scales up further
+                    const penalty = self.poly_map.getLossPenalty();
+                    const lost_result = try self.poly_map.loseTerritory(penalty);
+
+                    if (lost_result == null) {
+                        // Lost the starting block - GAME OVER
+                        return .defeat_faction_lost;
+                    }
+
+                    // Check if party is also wiped
+                    if (self.party.isWiped()) {
+                        return .defeat_party_wiped;
+                    }
                 }
             }
         }
+
+        return self.getStatus();
     }
 
     /// Get encounter from a polyomino block

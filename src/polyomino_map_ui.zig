@@ -18,6 +18,7 @@ const Block = polyomino_map.Block;
 const GridCoord = polyomino_map.GridCoord;
 const ChunkCoord = polyomino_map.ChunkCoord;
 const BlockState = polyomino_map.BlockState;
+const VisibilityLayer = polyomino_map.VisibilityLayer;
 const CELL_SIZE = polyomino_map.CELL_SIZE;
 const Faction = campaign.Faction;
 const EncounterType = campaign.EncounterType;
@@ -26,13 +27,16 @@ const EncounterType = campaign.EncounterType;
 // CONSTANTS
 // ============================================================================
 
-const BORDER_THICKNESS: f32 = 2.0;
-const HOVER_BORDER_THICKNESS: f32 = 3.0;
-const SELECTED_BORDER_THICKNESS: f32 = 4.0;
+const EXTERIOR_BORDER_THICKNESS: f32 = 4.0; // Thick border on faction exterior
+const INTERIOR_BORDER_THICKNESS: f32 = 1.5; // Thin border between same-faction blocks
+const HOVER_BORDER_THICKNESS: f32 = 5.0;
+const SELECTED_BORDER_THICKNESS: f32 = 6.0;
 
 const FOG_COLOR = rl.Color.init(20, 25, 35, 255);
-const REVEALED_DIM: u8 = 180; // Alpha for revealed but not conquered
 const GRID_LINE_COLOR = rl.Color.init(50, 55, 65, 100);
+
+// Interior border dimming factor (how dim same-faction interior borders are)
+const INTERIOR_BORDER_DIM: u8 = 60; // Very dim
 
 // ============================================================================
 // UI STATE
@@ -195,7 +199,7 @@ pub fn drawPolyominoMap(
             const is_hovered = if (ui_state.hovered_block_id) |hid| hid == block.id else false;
             const is_selected = if (ui_state.selected_block_id) |sid| sid == block.id else false;
 
-            drawBlock(block, ui_state, area_x, area_y, is_hovered, is_selected);
+            drawBlock(block, map, ui_state, area_x, area_y, is_hovered, is_selected);
 
             // Check hover
             if (isMouseOverBlock(block, ui_state, mouse_pos, area_x, area_y)) {
@@ -208,40 +212,49 @@ pub fn drawPolyominoMap(
     drawGridLines(ui_state, area_x, area_y, area_width, area_height);
 }
 
+/// Border type for territory edges
+const BorderType = enum {
+    none, // Deep interior, no border needed
+    interior_frontier, // Same faction at frontier - dim dashed
+    solid, // Different factions meet (both visible)
+    solid_foggy, // Different factions meet but neighbor is in fog - solid with foggy fade
+    dashed, // Frontier edge into fog/unexplored (same faction)
+    squiggly, // Edge into true fog
+};
+
 /// Draw a single block (polyomino)
+/// Border rendering follows territory map conventions:
+/// - NO borders deep inside same-faction contiguous territory
+/// - DIM DASHED lines between same-faction blocks at the frontier
+/// - SOLID lines where two different factions meet
+/// - DASHED lines at frontier (edge of explored into less-explored)
+/// - SQUIGGLY lines fading into true unexplored fog
 fn drawBlock(
     block: *Block,
+    map: *PolyominoMap,
     ui_state: *PolyominoMapUIState,
     area_x: f32,
     area_y: f32,
     is_hovered: bool,
     is_selected: bool,
 ) void {
-    // Determine colors based on state
-    const alpha: u8 = switch (block.state) {
-        .fogged => 0, // Shouldn't render fogged blocks
-        .revealed => REVEALED_DIM,
-        .conquered => 255,
+    // Get alpha based on visibility layer
+    const layer_alpha = block.visibility_layer.getAlpha();
+
+    if (layer_alpha == 0) return;
+
+    // Block interior: subtle neutral fill (will eventually be illustrated)
+    // Brightness varies by visibility layer
+    const base_brightness: u8 = switch (block.visibility_layer) {
+        .conquered => 45,
+        .layer_1 => 40,
+        .layer_2 => 32,
+        .layer_3 => 25,
+        .fogged => 20,
     };
+    const fill_color = rl.Color.init(base_brightness, base_brightness + 5, base_brightness + 15, layer_alpha);
 
-    if (alpha == 0) return;
-
-    const fill_color = getFactionColor(block.faction, alpha);
-    const border_color = if (is_selected)
-        rl.Color.yellow
-    else if (is_hovered)
-        rl.Color.white
-    else
-        rl.Color.init(30, 35, 45, 255);
-
-    const border_thickness = if (is_selected)
-        SELECTED_BORDER_THICKNESS
-    else if (is_hovered)
-        HOVER_BORDER_THICKNESS
-    else
-        BORDER_THICKNESS;
-
-    // Draw each cell of the block
+    // Draw each cell of the block - neutral fill only
     for (block.getCells()) |cell| {
         const world_pos = cell.toWorldPos();
         const screen_pos = ui_state.worldToScreen(world_pos.x - CELL_SIZE / 2, world_pos.y - CELL_SIZE / 2);
@@ -250,11 +263,11 @@ fn drawBlock(
         const cell_y = area_y + screen_pos.y;
         const cell_size = CELL_SIZE * ui_state.zoom;
 
-        // Fill
+        // Neutral fill (placeholder for future illustration)
         rl.drawRectangle(toI32(cell_x), toI32(cell_y), toI32(cell_size), toI32(cell_size), fill_color);
     }
 
-    // Draw borders (only on edges that don't connect to same block)
+    // Draw territory borders - only at faction boundaries and frontiers
     for (block.getCells()) |cell| {
         const world_pos = cell.toWorldPos();
         const screen_pos = ui_state.worldToScreen(world_pos.x - CELL_SIZE / 2, world_pos.y - CELL_SIZE / 2);
@@ -263,51 +276,419 @@ fn drawBlock(
         const cell_y = area_y + screen_pos.y;
         const cell_size = CELL_SIZE * ui_state.zoom;
 
-        // Check each edge
+        // Check each edge (N, E, S, W)
         const neighbors = cell.neighbors();
-        const edges = [_]struct { nx: f32, ny: f32, w: f32, h: f32 }{
-            .{ .nx = cell_x, .ny = cell_y, .w = cell_size, .h = border_thickness }, // Top
-            .{ .nx = cell_x + cell_size - border_thickness, .ny = cell_y, .w = border_thickness, .h = cell_size }, // Right
-            .{ .nx = cell_x, .ny = cell_y + cell_size - border_thickness, .w = cell_size, .h = border_thickness }, // Bottom
-            .{ .nx = cell_x, .ny = cell_y, .w = border_thickness, .h = cell_size }, // Left
-        };
 
-        for (neighbors, edges) |neighbor, edge| {
-            // Only draw border if neighbor is not part of this block
-            if (!block.containsCell(neighbor)) {
-                rl.drawRectangle(toI32(edge.nx), toI32(edge.ny), toI32(edge.w), toI32(edge.h), border_color);
+        for (neighbors, 0..) |neighbor, edge_idx| {
+            // Skip if neighbor is part of this same block (internal edge)
+            if (block.containsCell(neighbor)) continue;
+
+            // Get the neighbor block info
+            const neighbor_chunk_coord = neighbor.toChunkCoord();
+            const neighbor_block: ?*Block = blk: {
+                if (map.getChunk(neighbor_chunk_coord)) |chunk| {
+                    break :blk chunk.getBlockAt(neighbor);
+                }
+                break :blk null;
+            };
+
+            // Determine border type based on neighbor
+            const border_type = determineBorderType(block, neighbor_block, map);
+
+            // Skip if no border needed (deep interior)
+            if (border_type == .none) continue;
+
+            // Get faction color for this border
+            const border_color = getFactionColor(block.faction, 255);
+
+            // Draw the appropriate border style
+            switch (border_type) {
+                .none => {},
+                .interior_frontier => {
+                    // Dim dashed lines for same-faction frontier blocks
+                    const dim_color = rl.Color.init(border_color.r, border_color.g, border_color.b, 80);
+                    drawDashedBorder(cell_x, cell_y, cell_size, edge_idx, dim_color, ui_state.zoom * 0.5);
+                },
+                .solid => drawSolidBorder(cell_x, cell_y, cell_size, edge_idx, border_color, ui_state.zoom),
+                .solid_foggy => drawSolidFoggyBorder(cell_x, cell_y, cell_size, edge_idx, border_color, ui_state.zoom),
+                .dashed => drawDashedBorder(cell_x, cell_y, cell_size, edge_idx, border_color, ui_state.zoom),
+                .squiggly => drawSquigglyBorder(cell_x, cell_y, cell_size, edge_idx, border_color, ui_state.zoom),
             }
         }
     }
 
-    // Draw block label at centroid
-    if (ui_state.zoom > 0.5) {
+    // Draw selection/hover highlight
+    if (is_selected or is_hovered) {
+        const highlight_color = if (is_selected) rl.Color.yellow else rl.Color.white;
+        for (block.getCells()) |cell| {
+            const world_pos = cell.toWorldPos();
+            const screen_pos = ui_state.worldToScreen(world_pos.x - CELL_SIZE / 2, world_pos.y - CELL_SIZE / 2);
+            const cell_x = area_x + screen_pos.x;
+            const cell_y = area_y + screen_pos.y;
+            const cell_size = CELL_SIZE * ui_state.zoom;
+
+            // Draw highlight on edges that are block boundaries
+            const neighbors = cell.neighbors();
+            for (neighbors, 0..) |neighbor, edge_idx| {
+                if (!block.containsCell(neighbor)) {
+                    const thickness = if (is_selected) SELECTED_BORDER_THICKNESS else HOVER_BORDER_THICKNESS;
+                    drawSolidBorder(cell_x, cell_y, cell_size, edge_idx, highlight_color, ui_state.zoom * thickness / EXTERIOR_BORDER_THICKNESS);
+                }
+            }
+        }
+    }
+
+    // Draw flag marker at centroid for blocks with encounters that can be engaged
+    if (ui_state.zoom > 0.4 and (block.visibility_layer == .layer_1 or block.visibility_layer == .conquered)) {
         const centroid = block.getCentroid();
         const screen_centroid = ui_state.worldToScreen(centroid.x, centroid.y);
         const label_x = area_x + screen_centroid.x;
         const label_y = area_y + screen_centroid.y;
 
-        // Draw encounter icon if block has encounter
+        // Check if this is the tutorial target (starting block in tutorial mode)
+        const is_tutorial_target = map.in_tutorial_mode and
+            map.start_block_id != null and
+            block.id == map.start_block_id.?;
+
         if (block.encounter) |encounter| {
-            const icon = getEncounterIcon(encounter.encounter_type);
-            const icon_color = if (block.state == .conquered) rl.Color.gray else getEncounterColor(encounter.encounter_type);
-            const icon_size: i32 = @intFromFloat(20 * ui_state.zoom);
-            const icon_width = rl.measureText(icon, icon_size);
-            rl.drawText(icon, toI32(label_x) - @divTrunc(icon_width, 2), toI32(label_y) - @divTrunc(icon_size, 2), icon_size, icon_color);
+            // Draw flag marker for:
+            // 1. Tutorial target ONLY during tutorial mode
+            // 2. Unconquered blocks when NOT in tutorial mode (normal gameplay)
+            const should_show_flag = if (map.in_tutorial_mode)
+                is_tutorial_target
+            else
+                block.state != .conquered;
+
+            if (should_show_flag) {
+                drawFlagMarker(label_x, label_y, encounter.encounter_type, ui_state.zoom, layer_alpha);
+            }
         }
 
-        // Draw name below icon if zoomed in enough
+        // Draw name below marker if zoomed in enough
         if (ui_state.zoom > 0.8) {
             const name_size: i32 = @intFromFloat(10 * ui_state.zoom);
-            // Create null-terminated buffer for raylib
             var name_buf: [64:0]u8 = [_:0]u8{0} ** 64;
             const copy_len = @min(block.name.len, 63);
             @memcpy(name_buf[0..copy_len], block.name[0..copy_len]);
             const name_width = rl.measureText(&name_buf, name_size);
-            const name_color = if (block.state == .conquered) rl.Color.white else rl.Color.init(200, 200, 200, REVEALED_DIM);
-            rl.drawText(&name_buf, toI32(label_x) - @divTrunc(name_width, 2), toI32(label_y) + toI32(12 * ui_state.zoom), name_size, name_color);
+            const name_color = if (block.state == .conquered and !is_tutorial_target) rl.Color.init(255, 255, 255, layer_alpha) else rl.Color.init(200, 200, 200, layer_alpha);
+            const marker_offset: f32 = if (block.state == .conquered and !is_tutorial_target) 0 else 18 * ui_state.zoom;
+            rl.drawText(&name_buf, toI32(label_x) - @divTrunc(name_width, 2), toI32(label_y + marker_offset), name_size, name_color);
         }
     }
+}
+
+/// Determine what type of border to draw between this block and its neighbor
+/// Based on the matrix:
+/// - L0: hard border with rivals, dashed interiors
+/// - L1: hard border with rivals (solid if neighbor L0/L1, solid_foggy if neighbor L2/L3), dashed interior with L2
+/// - L2: squiggly with rivals, no internal borders
+/// - L3: squiggly with rivals, no internal borders, squiggly with outside
+fn determineBorderType(block: *Block, neighbor_block: ?*Block, map: *PolyominoMap) BorderType {
+    _ = map;
+
+    // No neighbor block = edge into outside/unexplored
+    if (neighbor_block == null) {
+        return switch (block.visibility_layer) {
+            .conquered => .none, // L0 doesn't border outside
+            .layer_1 => .dashed, // L1 frontier into unknown
+            .layer_2 => .squiggly, // L2 fog edge
+            .layer_3 => .squiggly, // L3 fog edge into outside
+            .fogged => .none,
+        };
+    }
+
+    const neighbor = neighbor_block.?;
+
+    // If neighbor is completely fogged (not visible at all)
+    if (neighbor.visibility_layer == .fogged) {
+        return switch (block.visibility_layer) {
+            .conquered => .none,
+            .layer_1 => .dashed,
+            .layer_2, .layer_3 => .squiggly,
+            .fogged => .none,
+        };
+    }
+
+    // Same faction check
+    const same_faction = (block.faction != null and neighbor.faction != null and block.faction.? == neighbor.faction.?);
+
+    // === L0 (Conquered) ===
+    if (block.visibility_layer == .conquered) {
+        if (!same_faction) {
+            return .solid; // Hard border with all rival teams
+        }
+        // Same faction - dashed interiors (but only if neighbor is also L0, otherwise let neighbor draw)
+        if (neighbor.visibility_layer == .conquered) {
+            return .interior_frontier; // Dashed interior
+        }
+        return .none; // Let the other block handle it
+    }
+
+    // === L1 ===
+    if (block.visibility_layer == .layer_1) {
+        if (!same_faction) {
+            // Hard line with rivals, but style depends on neighbor visibility
+            return switch (neighbor.visibility_layer) {
+                .conquered, .layer_1 => .solid, // Clear faction boundary
+                .layer_2, .layer_3 => .solid_foggy, // Faction boundary fading into fog
+                .fogged => .dashed,
+            };
+        }
+        // Same faction
+        return switch (neighbor.visibility_layer) {
+            .conquered => .interior_frontier, // Dashed interior with L0
+            .layer_1 => .interior_frontier, // Dashed interior with other L1
+            .layer_2 => .dashed, // Dotted interior with L2
+            .layer_3 => .squiggly, // Fog transition
+            .fogged => .dashed,
+        };
+    }
+
+    // === L2 ===
+    if (block.visibility_layer == .layer_2) {
+        if (!same_faction) {
+            return .squiggly; // Foggy line with rivals
+        }
+        // Same faction - no internal borders
+        return .none;
+    }
+
+    // === L3 ===
+    if (block.visibility_layer == .layer_3) {
+        if (!same_faction) {
+            return .squiggly; // Foggy line with rivals
+        }
+        // Same faction - no internal borders (squiggly with outside handled above)
+        return .none;
+    }
+
+    return .none;
+}
+
+/// Draw a solid border line
+fn drawSolidBorder(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize, color: rl.Color, zoom: f32) void {
+    const thickness = EXTERIOR_BORDER_THICKNESS * zoom;
+    const edge_rect = getEdgeRect(cell_x, cell_y, cell_size, edge_idx, thickness);
+    rl.drawRectangle(toI32(edge_rect.x), toI32(edge_rect.y), toI32(edge_rect.w), toI32(edge_rect.h), color);
+}
+
+/// Draw a dashed border line
+fn drawDashedBorder(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize, color: rl.Color, zoom: f32) void {
+    const thickness = EXTERIOR_BORDER_THICKNESS * zoom;
+    const dash_len: f32 = 8.0 * zoom;
+    const gap_len: f32 = 6.0 * zoom;
+
+    const is_horizontal = (edge_idx == 0 or edge_idx == 2);
+    const total_len = cell_size;
+
+    // Get starting position for this edge
+    var start_x: f32 = cell_x;
+    var start_y: f32 = cell_y;
+
+    switch (edge_idx) {
+        0 => {}, // Top - start at top-left
+        1 => start_x = cell_x + cell_size - thickness, // Right
+        2 => start_y = cell_y + cell_size - thickness, // Bottom
+        3 => {}, // Left - start at top-left
+        else => {},
+    }
+
+    // Draw dashes
+    var pos: f32 = 0;
+    while (pos < total_len) {
+        const dash_actual = @min(dash_len, total_len - pos);
+
+        if (is_horizontal) {
+            rl.drawRectangle(toI32(start_x + pos), toI32(start_y), toI32(dash_actual), toI32(thickness), color);
+        } else {
+            rl.drawRectangle(toI32(start_x), toI32(start_y + pos), toI32(thickness), toI32(dash_actual), color);
+        }
+
+        pos += dash_len + gap_len;
+    }
+}
+
+/// Draw a squiggly/wavy border line (for fog edge)
+fn drawSquigglyBorder(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize, color: rl.Color, zoom: f32) void {
+    const thickness = 2.0 * zoom;
+    const wave_amplitude: f32 = 4.0 * zoom;
+    const wave_frequency: f32 = 0.15 / zoom; // Adjust for zoom
+    const step: f32 = 3.0 * zoom;
+
+    const is_horizontal = (edge_idx == 0 or edge_idx == 2);
+    const total_len = cell_size;
+
+    // Fade alpha for fog edge
+    const faded_color = rl.Color.init(color.r, color.g, color.b, 120);
+
+    // Get base position for this edge
+    var base_x: f32 = cell_x;
+    var base_y: f32 = cell_y;
+
+    switch (edge_idx) {
+        0 => {}, // Top
+        1 => base_x = cell_x + cell_size, // Right
+        2 => base_y = cell_y + cell_size, // Bottom
+        3 => {}, // Left
+        else => {},
+    }
+
+    // Draw wavy line
+    var pos: f32 = 0;
+    while (pos < total_len) {
+        const wave_offset = wave_amplitude * @sin(pos * wave_frequency);
+
+        if (is_horizontal) {
+            const x = base_x + pos;
+            const y = base_y + wave_offset;
+            rl.drawCircle(toI32(x), toI32(y), thickness, faded_color);
+        } else {
+            const x = base_x + wave_offset;
+            const y = base_y + pos;
+            rl.drawCircle(toI32(x), toI32(y), thickness, faded_color);
+        }
+
+        pos += step;
+    }
+}
+
+/// Draw a solid border with foggy fade on the outer edge
+/// Used when L1 faction boundary meets L2/L3 fog - shows hard line fading into mist
+fn drawSolidFoggyBorder(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize, color: rl.Color, zoom: f32) void {
+    // First draw the solid border line (on the inside)
+    const thickness = EXTERIOR_BORDER_THICKNESS * zoom;
+    const edge_rect = getEdgeRect(cell_x, cell_y, cell_size, edge_idx, thickness);
+    rl.drawRectangle(toI32(edge_rect.x), toI32(edge_rect.y), toI32(edge_rect.w), toI32(edge_rect.h), color);
+
+    // Then draw a foggy/squiggly effect on the outside (into the fog)
+    const wave_thickness = 2.0 * zoom;
+    const wave_amplitude: f32 = 3.0 * zoom;
+    const wave_frequency: f32 = 0.2 / zoom;
+    const step: f32 = 3.0 * zoom;
+    const fog_offset: f32 = thickness + 2.0 * zoom; // Offset into the fog side
+
+    const is_horizontal = (edge_idx == 0 or edge_idx == 2);
+    const total_len = cell_size;
+
+    // Faded color for the fog side
+    const faded_color = rl.Color.init(color.r, color.g, color.b, 80);
+
+    // Get base position - offset into the neighbor (fog) side
+    var base_x: f32 = cell_x;
+    var base_y: f32 = cell_y;
+
+    switch (edge_idx) {
+        0 => base_y = cell_y - fog_offset, // Top edge - fog is above
+        1 => base_x = cell_x + cell_size + fog_offset, // Right edge - fog is to right
+        2 => base_y = cell_y + cell_size + fog_offset, // Bottom edge - fog is below
+        3 => base_x = cell_x - fog_offset, // Left edge - fog is to left
+        else => {},
+    }
+
+    // Draw wavy line in the fog
+    var pos: f32 = 0;
+    while (pos < total_len) {
+        const wave_offset = wave_amplitude * @sin(pos * wave_frequency);
+
+        if (is_horizontal) {
+            const x = base_x + pos;
+            const y = base_y + wave_offset;
+            rl.drawCircle(toI32(x), toI32(y), wave_thickness, faded_color);
+        } else {
+            const x = base_x + wave_offset;
+            const y = base_y + pos;
+            rl.drawCircle(toI32(x), toI32(y), wave_thickness, faded_color);
+        }
+
+        pos += step;
+    }
+}
+
+/// Get rectangle for a cell edge
+fn getEdgeRect(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize, thickness: f32) struct { x: f32, y: f32, w: f32, h: f32 } {
+    return switch (edge_idx) {
+        0 => .{ .x = cell_x, .y = cell_y, .w = cell_size, .h = thickness }, // Top
+        1 => .{ .x = cell_x + cell_size - thickness, .y = cell_y, .w = thickness, .h = cell_size }, // Right
+        2 => .{ .x = cell_x, .y = cell_y + cell_size - thickness, .w = cell_size, .h = thickness }, // Bottom
+        3 => .{ .x = cell_x, .y = cell_y, .w = thickness, .h = cell_size }, // Left
+        else => .{ .x = 0, .y = 0, .w = 0, .h = 0 },
+    };
+}
+
+/// Draw a map-style flag marker with encounter type glyph
+fn drawFlagMarker(x: f32, y: f32, encounter_type: EncounterType, zoom: f32, alpha: u8) void {
+    const scale = zoom * 0.8;
+
+    // Flag pole
+    const pole_height: f32 = 24 * scale;
+    const pole_width: f32 = 2 * scale;
+    const pole_x = x;
+    const pole_bottom_y = y + 8 * scale;
+    const pole_top_y = pole_bottom_y - pole_height;
+
+    // Draw pole (dark gray, with alpha)
+    rl.drawRectangle(
+        toI32(pole_x - pole_width / 2),
+        toI32(pole_top_y),
+        toI32(pole_width),
+        toI32(pole_height),
+        rl.Color.init(60, 60, 70, alpha),
+    );
+
+    // Flag banner (colored by encounter type, with alpha)
+    const base_flag_color = getEncounterColor(encounter_type);
+    const flag_color = rl.Color.init(base_flag_color.r, base_flag_color.g, base_flag_color.b, alpha);
+    const flag_width: f32 = 16 * scale;
+    const flag_height: f32 = 12 * scale;
+    const flag_x = pole_x + pole_width / 2;
+    const flag_y = pole_top_y;
+
+    // Draw flag as a small banner shape (rectangle with notch)
+    rl.drawRectangle(
+        toI32(flag_x),
+        toI32(flag_y),
+        toI32(flag_width),
+        toI32(flag_height),
+        flag_color,
+    );
+
+    // Draw notch (triangle cut out of right side) - using dark background color
+    rl.drawTriangle(
+        rl.Vector2{ .x = flag_x + flag_width, .y = flag_y },
+        rl.Vector2{ .x = flag_x + flag_width - 4 * scale, .y = flag_y + flag_height / 2 },
+        rl.Vector2{ .x = flag_x + flag_width, .y = flag_y + flag_height },
+        FOG_COLOR,
+    );
+
+    // Draw encounter glyph on flag
+    const glyph = getEncounterGlyph(encounter_type);
+    const glyph_size: i32 = @intFromFloat(10 * scale);
+    if (glyph_size >= 6) {
+        const glyph_width = rl.measureText(glyph, glyph_size);
+        rl.drawText(
+            glyph,
+            toI32(flag_x + (flag_width - 4 * scale) / 2) - @divTrunc(glyph_width, 2),
+            toI32(flag_y + flag_height / 2) - @divTrunc(glyph_size, 2),
+            glyph_size,
+            rl.Color.init(255, 255, 255, alpha),
+        );
+    }
+
+    // Draw small base/pin at bottom
+    const base_radius: f32 = 3 * scale;
+    rl.drawCircle(toI32(pole_x), toI32(pole_bottom_y), base_radius, rl.Color.init(80, 80, 90, alpha));
+}
+
+/// Get encounter type glyph (single character for flag display)
+fn getEncounterGlyph(encounter_type: EncounterType) [:0]const u8 {
+    return switch (encounter_type) {
+        .skirmish => "X", // Crossed swords vibe
+        .boss_capture => "!", // Important/dangerous
+        .intel => "?", // Unknown/mystery
+        .strategic => "*", // Key location
+        .recruitment => "+", // Add to party
+    };
 }
 
 /// Check if mouse is over a block
@@ -465,8 +846,16 @@ pub fn drawBlockDetails(
     }
 
     // Action prompt at bottom
-    if (block.state == .revealed) {
-        rl.drawText("[Enter] Engage", toI32(panel_x + padding), toI32(panel_y + panel_height - 25), 12, rl.Color.white);
+    // Show engage prompt for revealed blocks OR starting block in tutorial mode
+    const is_tutorial_target = map.in_tutorial_mode and
+        map.start_block_id != null and
+        block_id == map.start_block_id.?;
+
+    if (block.state == .revealed or is_tutorial_target) {
+        if (block.encounter != null) {
+            const prompt_text = if (is_tutorial_target) "[Enter] Defend Home" else "[Enter] Engage";
+            rl.drawText(prompt_text, toI32(panel_x + padding), toI32(panel_y + panel_height - 25), 12, rl.Color.white);
+        }
     }
 }
 
@@ -550,7 +939,15 @@ pub fn handlePolyominoMapInput(
     if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
         if (ui_state.selected_block_id) |selected_id| {
             if (map.getBlock(selected_id)) |block| {
-                if (block.state == .revealed and block.encounter != null) {
+                // Can engage if:
+                // 1. Block is revealed with an encounter (normal case)
+                // 2. OR it's the starting block in tutorial mode (defend home tutorial)
+                const is_tutorial_target = map.in_tutorial_mode and
+                    map.start_block_id != null and
+                    selected_id == map.start_block_id.?;
+                const is_normal_target = block.state == .revealed and block.encounter != null;
+
+                if ((is_normal_target or is_tutorial_target) and block.encounter != null) {
                     return selected_id;
                 }
             }
