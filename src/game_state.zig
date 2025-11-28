@@ -700,6 +700,24 @@ pub const GameState = struct {
             }
         }
 
+        // Apply trail terrain effects (e.g., Sled Carve drops ice as character moves)
+        for (&self.entities) |*ent| {
+            if (ent.isAlive()) {
+                if (ent.getActiveTrail()) |trail| {
+                    // Only apply trail if character is moving
+                    if (ent.isMoving()) {
+                        // Apply terrain at current position
+                        self.terrain_grid.setTerrainInRadius(
+                            ent.position.x,
+                            ent.position.z,
+                            trail.trail_radius,
+                            trail.terrain_type,
+                        );
+                    }
+                }
+            }
+        }
+
         // Update terrain (snow accumulation)
         self.terrain_grid.update(TICK_RATE_SEC);
 
@@ -809,6 +827,7 @@ pub const GameState = struct {
                     }
 
                     ent.casting.cast_target_id = null;
+                    ent.casting.cast_ground_position = null;
                     ent.casting.skill_executed = false;
                 }
             }
@@ -816,6 +835,13 @@ pub const GameState = struct {
     }
 
     fn executeSkillEffect(self: *GameState, ent: *Character, skill: *const Skill, rng: *std.Random) void {
+        // Check for ground-targeted skills first
+        if (ent.casting.cast_ground_position) |ground_pos| {
+            // Execute ground-targeted skill at stored position
+            combat.executeSkillAtGround(ent, skill, ground_pos, ent.casting.casting_skill_index, rng, &self.vfx_manager, &self.terrain_grid, self.match_telemetry);
+            return;
+        }
+
         var target: ?*Character = null;
         var target_valid = false;
 
@@ -855,6 +881,6 @@ pub const GameState = struct {
     /// Render UI elements (skill bars, target info, etc.) on top of the 3D scene.
     pub fn drawUI(self: *GameState) void {
         const player = self.getPlayerConst();
-        ui.drawUI(player, &self.entities, self.selected_target, &self.input_state, self.camera);
+        ui.drawUI(player, &self.entities, self.selected_target, &self.input_state, self.camera, &self.terrain_grid);
     }
 };

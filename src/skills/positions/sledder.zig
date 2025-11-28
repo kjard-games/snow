@@ -577,14 +577,14 @@ pub const skills = [_]Skill{
     // 12. WALL: Speed Ramp - angled wall for mobility
     .{
         .name = "Speed Ramp",
-        .description = "Stance. Build an angled ramp at target location. You gain +25% movement speed for 8 seconds.",
-        .skill_type = .stance,
-        .mechanic = .shift,
+        .description = "Trick. Build an angled ramp at target location. You gain +25% movement speed for 8 seconds.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
         .energy_cost = 7,
         .target_type = .ground,
         .cast_range = 200.0, // Increased for ground targeting
-        .activation_time_ms = 0,
-        .aftercast_ms = 0,
+        .activation_time_ms = 1000, // Requires commitment - can be interrupted
+        .aftercast_ms = 500,
         .recharge_time_ms = 20000,
         .duration_ms = 8000,
         .creates_wall = true,

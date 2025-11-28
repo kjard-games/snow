@@ -622,15 +622,15 @@ pub const skills = [_]Skill{
     // 9. WALL: Security Fence - expensive but sturdy wall
     .{
         .name = "Security Fence",
-        .description = "Stance. Credit: 12 energy. Build a tall reinforced wall. Blocks projectiles.",
-        .skill_type = .stance,
-        .mechanic = .shift,
+        .description = "Trick. Credit: 12 energy. Build a tall reinforced wall. Blocks projectiles.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
         .energy_cost = 10,
         .credit_cost = 12,
         .target_type = .ground,
         .cast_range = 120.0,
-        .activation_time_ms = 0,
-        .aftercast_ms = 0,
+        .activation_time_ms = 1750, // Premium wall requires more setup time
+        .aftercast_ms = 500,
         .recharge_time_ms = 30000,
         .creates_wall = true,
         .wall_length = 75.0, // Longer wall

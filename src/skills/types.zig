@@ -69,6 +69,7 @@ pub const Chill = enum {
     brain_freeze, // Energy degen (ate snow)
     packed_snow, // Max health reduction
     dazed, // Attacks interrupt casts
+    knocked_down, // Can't move or use skills (fallen in snow)
 };
 
 // Positive effects - "Cozy" (buffs)

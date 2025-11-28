@@ -553,14 +553,14 @@ pub const skills = [_]Skill{
     // 9. WALL: Adaptive Barrier - wall that changes based on situation
     .{
         .name = "Adaptive Barrier",
-        .description = "Stance. Build a versatile wall. Shape and height adapt to terrain.",
-        .skill_type = .stance,
-        .mechanic = .shift,
+        .description = "Trick. Build a versatile wall. Shape and height adapt to terrain.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
         .energy_cost = 7,
         .target_type = .ground,
         .cast_range = 120.0,
-        .activation_time_ms = 0,
-        .aftercast_ms = 0,
+        .activation_time_ms = 1000, // Montessori adapts quickly
+        .aftercast_ms = 500,
         .recharge_time_ms = 18000,
         .creates_wall = true,
         .wall_length = 60.0,

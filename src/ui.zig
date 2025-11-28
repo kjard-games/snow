@@ -6,12 +6,14 @@ const entity_types = @import("entity.zig");
 const skill_icons = @import("skill_icons.zig");
 const palette = @import("color_palette.zig");
 const skills = @import("skills.zig");
+const terrain_mod = @import("terrain.zig");
 
 const Character = character.Character;
 const InputState = input.InputState;
 const EntityId = entity_types.EntityId;
 const SkillType = skills.SkillType;
 const Skill = skills.Skill;
+const TerrainGrid = terrain_mod.TerrainGrid;
 
 // ============================================================================
 // SCHOOL MECHANIC HINTS - Visual indicators for skill synergy
@@ -369,7 +371,98 @@ fn drawWrappedText(text: [:0]const u8, x: f32, y: f32, max_width: f32, font_size
     }
 }
 
-pub fn drawUI(player: *const Character, entities: []const Character, selected_target: ?EntityId, input_state: *InputState, camera: rl.Camera) void {
+// ============================================================================
+// TERRAIN SPEED INDICATOR
+// ============================================================================
+
+fn drawTerrainIndicator(player: *const Character, terrain_grid: *const TerrainGrid) void {
+    const screen_height = rl.getScreenHeight();
+
+    // Position: above the skill bar, left side
+    const x: f32 = 20.0;
+    const y: f32 = @as(f32, @floatFromInt(screen_height)) - 140.0;
+
+    // Get terrain info at player position
+    const speed_mod = terrain_grid.getMovementSpeedAt(player.position.x, player.position.z);
+
+    // Get terrain type name
+    var terrain_name: [:0]const u8 = "Unknown";
+    var terrain_color = palette.UI.TEXT_PRIMARY;
+
+    if (terrain_grid.getCellAtConst(player.position.x, player.position.z)) |cell| {
+        terrain_name = switch (cell.type) {
+            .thick_snow => "Thick Snow",
+            .packed_snow => "Packed Snow",
+            .icy_ground => "Icy Ground",
+            .deep_powder => "Deep Powder",
+            .cleared_ground => "Cleared",
+            .slushy => "Slushy",
+        };
+
+        // Color based on terrain type
+        terrain_color = switch (cell.type) {
+            .deep_powder => rl.Color.init(180, 180, 255, 255), // Blue-tinted - slow
+            .thick_snow => rl.Color.init(200, 200, 230, 255), // Slight blue - slow
+            .packed_snow => rl.Color.init(220, 220, 220, 255), // Neutral
+            .icy_ground => rl.Color.init(150, 220, 255, 255), // Cyan - fast but risky
+            .cleared_ground => rl.Color.init(180, 255, 180, 255), // Green - fast
+            .slushy => rl.Color.init(255, 200, 150, 255), // Orange - slow and bad
+        };
+    }
+
+    // Draw terrain indicator panel
+    const panel_width: f32 = 130.0;
+    const panel_height: f32 = 45.0;
+
+    // Background
+    rl.drawRectangle(toI32(x - 5), toI32(y - 5), toI32(panel_width + 10), toI32(panel_height + 10), rl.Color.init(0, 0, 0, 150));
+    rl.drawRectangleLines(toI32(x - 5), toI32(y - 5), toI32(panel_width + 10), toI32(panel_height + 10), rl.Color.init(100, 100, 100, 200));
+
+    // Terrain name
+    rl.drawText(terrain_name, toI32(x), toI32(y), 12, terrain_color);
+
+    // Speed percentage text
+    var speed_buf: [32]u8 = undefined;
+    const speed_percent = @as(i32, @intFromFloat(speed_mod * 100.0));
+    const speed_text = std.fmt.bufPrintZ(&speed_buf, "Speed: {d}%", .{speed_percent}) catch "???";
+
+    // Speed color: green if fast, red if slow, white if normal
+    const speed_color = if (speed_mod > 1.05)
+        rl.Color.init(150, 255, 150, 255) // Green - fast
+    else if (speed_mod < 0.95)
+        rl.Color.init(255, 150, 150, 255) // Red - slow
+    else
+        palette.UI.TEXT_PRIMARY;
+
+    rl.drawText(speed_text, toI32(x), toI32(y + 15), 12, speed_color);
+
+    // Ice warning indicator
+    if (terrain_grid.getCellAtConst(player.position.x, player.position.z)) |cell| {
+        if (cell.type == .icy_ground) {
+            rl.drawText("! Slip Risk", toI32(x), toI32(y + 30), 10, rl.Color.init(255, 200, 100, 255));
+        }
+    }
+
+    // Speed bar visualization
+    const bar_x = x + 75.0;
+    const bar_y = y + 18.0;
+    const bar_width: f32 = 50.0;
+    const bar_height: f32 = 8.0;
+
+    // Background bar (100% mark)
+    rl.drawRectangle(toI32(bar_x), toI32(bar_y), toI32(bar_width), toI32(bar_height), rl.Color.init(40, 40, 40, 255));
+
+    // Filled portion (relative to 1.0 = normal speed)
+    const fill_ratio = @min(speed_mod / 1.2, 1.0); // Max at 1.2x speed (120%)
+    const fill_width = bar_width * fill_ratio;
+    rl.drawRectangle(toI32(bar_x), toI32(bar_y), toI32(fill_width), toI32(bar_height), speed_color);
+
+    // Center line at 100% (normal speed)
+    const center_x = bar_x + (bar_width * (1.0 / 1.2)); // Position for 100% speed
+    rl.drawLine(toI32(center_x), toI32(bar_y - 2), toI32(center_x), toI32(bar_y + bar_height + 2), rl.Color.init(200, 200, 200, 200));
+}
+
+pub fn drawUI(player: *const Character, entities: []const Character, selected_target: ?EntityId, input_state: *InputState, camera: rl.Camera, terrain_grid: *const TerrainGrid) void {
     _ = camera; // Suppress unused parameter warning
 
     // Action Camera reticle (keep this - it's functional, not debug)
@@ -425,6 +518,9 @@ pub fn drawUI(player: *const Character, entities: []const Character, selected_ta
             }
         }
     }
+
+    // Draw terrain speed indicator (near skill bar)
+    drawTerrainIndicator(player, terrain_grid);
 
     // Draw skill bar (and detect mouse hover)
     drawSkillBar(player, input_state, target_ptr);

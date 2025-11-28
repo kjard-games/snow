@@ -452,14 +452,14 @@ pub const skills = [_]Skill{
     // 3. Build snow wall
     .{
         .name = "Snow Wall",
-        .description = "Stance. Build a snow wall at target location. Walls block direct projectiles.",
-        .skill_type = .stance,
-        .mechanic = .shift,
+        .description = "Trick. Build a snow wall at target location. Walls block direct projectiles.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
         .energy_cost = 7,
         .target_type = .ground,
         .cast_range = 200.0, // Increased for ground targeting
-        .activation_time_ms = 0,
-        .aftercast_ms = 750,
+        .activation_time_ms = 1250, // Requires commitment - can be interrupted
+        .aftercast_ms = 500,
         .recharge_time_ms = 12000,
         .creates_wall = true,
         .wall_length = 120.0, // Increased from 60 for better coverage
@@ -598,14 +598,14 @@ pub const skills = [_]Skill{
     // 12. Protective Barrier - ally protection
     .{
         .name = "Protective Barrier",
-        .description = "Stance. Build a wall that also grants adjacent allies +20% armor.",
-        .skill_type = .stance,
-        .mechanic = .shift,
+        .description = "Trick. Build a wall that also grants adjacent allies +20% armor.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
         .energy_cost = 8,
         .target_type = .ground,
         .cast_range = 150.0,
-        .activation_time_ms = 0,
-        .aftercast_ms = 750,
+        .activation_time_ms = 1500, // Requires commitment - can be interrupted
+        .aftercast_ms = 500,
         .recharge_time_ms = 18000,
         .creates_wall = true,
         .wall_length = 100.0,
@@ -811,14 +811,14 @@ pub const skills = [_]Skill{
     // 20. Soak Wall - damage reduction bubble (like Shield of Absorption)
     .{
         .name = "Soak Wall",
-        .description = "Stance. Build a wall that absorbs 100 damage before breaking. Allies behind take 50% less damage.",
-        .skill_type = .stance,
-        .mechanic = .shift,
+        .description = "Trick. Build a wall that absorbs 100 damage before breaking. Allies behind take 50% less damage.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
         .energy_cost = 10,
         .target_type = .ground,
         .cast_range = 150.0,
-        .activation_time_ms = 0,
-        .aftercast_ms = 750,
+        .activation_time_ms = 1500, // Requires commitment - can be interrupted
+        .aftercast_ms = 500,
         .recharge_time_ms = 25000,
         .creates_wall = true,
         .wall_length = 80.0,

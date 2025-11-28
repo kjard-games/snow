@@ -1716,6 +1716,47 @@ pub const MOD_REMOVE_ALL_CHILLS = [_]Modifier{.{ .effect_type = .remove_all_chil
 pub const MOD_REMOVE_ALL_COZIES = [_]Modifier{.{ .effect_type = .remove_all_cozies, .value = .{ .int = 1 } }};
 
 // ============================================================================
+// KNOCKDOWN EFFECTS - Standard durations for skill design
+// ============================================================================
+// GW1 knockdowns typically last 2-3 seconds. We provide standard effects here.
+
+/// Standard 2-second knockdown (short)
+pub const KNOCKDOWN_SHORT_EFFECT = Effect{
+    .name = "Knocked Down",
+    .description = "Fallen in snow - can't move or use skills",
+    .modifiers = &MOD_KNOCKDOWN,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 2000,
+    .is_buff = false,
+    .condition = .always,
+};
+
+/// Standard 3-second knockdown (standard/long)
+pub const KNOCKDOWN_STANDARD_EFFECT = Effect{
+    .name = "Knocked Down",
+    .description = "Fallen in snow - can't move or use skills",
+    .modifiers = &MOD_KNOCKDOWN,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 3000,
+    .is_buff = false,
+    .condition = .always,
+};
+
+/// Short 1-second knockdown (for ice slip, minor stumbles)
+pub const KNOCKDOWN_BRIEF_EFFECT = Effect{
+    .name = "Stumbled",
+    .description = "Lost footing briefly",
+    .modifiers = &MOD_KNOCKDOWN,
+    .timing = .on_hit,
+    .affects = .target,
+    .duration_ms = 1000,
+    .is_buff = false,
+    .condition = .always,
+};
+
+// ============================================================================
 // Helper functions to query and apply effects
 // ============================================================================
 

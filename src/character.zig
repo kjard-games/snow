@@ -143,11 +143,26 @@ pub const Character = struct {
         return (self.stats.warmth / self.stats.max_warmth) < 0.25;
     }
 
+    /// Check if character is knocked down (can't move or use skills)
+    /// Checks both the knocked_down chill AND the knockdown effect modifier
+    pub fn isKnockedDown(self: Character) bool {
+        // Check the knocked_down chill
+        if (self.conditions.hasChill(.knocked_down)) return true;
+
+        // Check the knockdown effect modifier
+        return effects.isKnockedDown(&self.conditions.effects.active, self.conditions.effects.count);
+    }
+
     // ========================================================================
     // MOVEMENT
     // ========================================================================
 
     pub fn getMovementSpeedMultiplier(self: Character) f32 {
+        // Can't move when knocked down
+        if (self.isKnockedDown()) {
+            return 0.0;
+        }
+
         if (self.isFreezing()) {
             return 0.75;
         }
@@ -166,6 +181,16 @@ pub const Character = struct {
             .y = self.previous_position.y + (self.position.y - self.previous_position.y) * alpha,
             .z = self.previous_position.z + (self.position.z - self.previous_position.z) * alpha,
         };
+    }
+
+    /// Check if character moved since last tick (for ice slip mechanic)
+    /// Returns true if the character has moved a meaningful distance
+    pub fn isMoving(self: Character) bool {
+        const dx = self.position.x - self.previous_position.x;
+        const dz = self.position.z - self.previous_position.z;
+        const distance_sq = dx * dx + dz * dz;
+        // Consider "moving" if moved more than 1 unit (prevents float precision issues)
+        return distance_sq > 1.0;
     }
 
     pub fn distanceTo(self: Character, other: Character) f32 {
@@ -315,6 +340,9 @@ pub const Character = struct {
         if (!self.casting.canStartCast()) return false;
         if (self.casting.isOnCooldown(skill_index)) return false;
 
+        // Can't use skills when knocked down
+        if (self.isKnockedDown()) return false;
+
         const skill_to_check = self.casting.skills[skill_index] orelse return false;
         if (self.stats.energy < skill_to_check.energy_cost) return false;
 
@@ -420,6 +448,41 @@ pub const Character = struct {
 
     pub fn addEffect(self: *Character, effect: *const effects.Effect, source_id: ?u32) void {
         _ = self.conditions.addEffect(effect, source_id);
+    }
+
+    /// Apply a knockdown effect for the specified duration (in milliseconds)
+    /// Knockdown prevents movement and skill use
+    pub fn applyKnockdown(self: *Character, duration_ms: u32, source_id: ?u32) void {
+        _ = self.conditions.applyKnockdown(duration_ms, source_id);
+        // If we were casting, interrupt it
+        if (self.casting.state == .activating) {
+            self.casting.cancelCast();
+            std.debug.print("{s} was knocked down!\n", .{self.name});
+        }
+    }
+
+    // ========================================================================
+    // TRAIL EFFECTS
+    // ========================================================================
+
+    /// Start a trail effect that drops terrain as the character moves
+    pub fn startTrailEffect(self: *Character, terrain_type: @import("terrain.zig").TerrainType, duration_ms: u32, trail_radius: f32, skill_name: [:0]const u8) void {
+        self.conditions.startTrailEffect(terrain_type, duration_ms, trail_radius, skill_name);
+    }
+
+    /// Check if the character has an active trail effect
+    pub fn hasActiveTrail(self: Character) bool {
+        return self.conditions.hasActiveTrail();
+    }
+
+    /// Get the active trail effect (for applying terrain during movement)
+    pub fn getActiveTrail(self: Character) ?character_conditions.ActiveTrailEffect {
+        return self.conditions.getActiveTrail();
+    }
+
+    /// Stop any active trail effect
+    pub fn stopTrailEffect(self: *Character) void {
+        self.conditions.stopTrailEffect();
     }
 
     // ========================================================================

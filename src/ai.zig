@@ -277,6 +277,88 @@ const WorldState = struct {
             10.0,
         );
     }
+
+    // ========== TERRAIN EVALUATION HELPERS ==========
+
+    /// Get terrain speed modifier at a world position
+    fn getTerrainSpeedAt(self: *const WorldState, x: f32, z: f32) f32 {
+        return self.terrain.getMovementSpeedAt(x, z);
+    }
+
+    /// Get terrain speed modifier at character's current position
+    fn getSelfTerrainSpeed(self: *const WorldState) f32 {
+        return self.getTerrainSpeedAt(self.self.position.x, self.self.position.z);
+    }
+
+    /// Check if terrain at position is icy (slippery - knockdown risk when hit while moving)
+    fn isIcyAt(self: *const WorldState, x: f32, z: f32) bool {
+        if (self.terrain.getCellAtConst(x, z)) |cell| {
+            return cell.type == .icy_ground;
+        }
+        return false;
+    }
+
+    /// Check if self is standing on icy terrain
+    fn selfOnIce(self: *const WorldState) bool {
+        return self.isIcyAt(self.self.position.x, self.self.position.z);
+    }
+
+    /// Check if terrain at position is slow (speed < 1.0)
+    fn isSlowTerrainAt(self: *const WorldState, x: f32, z: f32) bool {
+        return self.getTerrainSpeedAt(x, z) < 0.95;
+    }
+
+    /// Check if terrain at position is fast (speed > 1.0)
+    fn isFastTerrainAt(self: *const WorldState, x: f32, z: f32) bool {
+        return self.getTerrainSpeedAt(x, z) > 1.05;
+    }
+
+    /// Sample terrain speed in a direction from current position
+    /// Returns average speed modifier along the path
+    fn sampleTerrainInDirection(self: *const WorldState, dir_x: f32, dir_z: f32, sample_dist: f32) f32 {
+        const sample_count: usize = 3;
+        var total_speed: f32 = 0.0;
+
+        for (1..sample_count + 1) |i| {
+            const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(sample_count));
+            const sample_x = self.self.position.x + dir_x * sample_dist * t;
+            const sample_z = self.self.position.z + dir_z * sample_dist * t;
+            total_speed += self.getTerrainSpeedAt(sample_x, sample_z);
+        }
+
+        return total_speed / @as(f32, @floatFromInt(sample_count));
+    }
+
+    /// Evaluate terrain quality in a direction (higher = better for movement)
+    /// Considers: speed modifier, ice risk (if enemies nearby), wall obstacles
+    fn evalTerrainDirection(self: *const WorldState, dir_x: f32, dir_z: f32, sample_dist: f32) f32 {
+        var score: f32 = 0.0;
+
+        // Base score from average speed along path
+        const avg_speed = self.sampleTerrainInDirection(dir_x, dir_z, sample_dist);
+        score += avg_speed; // 0.5 to 1.2 typically
+
+        // Penalty for ice when enemies are nearby (knockdown risk)
+        if (self.nearest_enemy_dist < Config.THREAT_RANGE) {
+            const check_x = self.self.position.x + dir_x * sample_dist * 0.5;
+            const check_z = self.self.position.z + dir_z * sample_dist * 0.5;
+            if (self.isIcyAt(check_x, check_z)) {
+                score -= 0.3; // Significant penalty for ice when threatened
+            }
+        }
+
+        // Check for walls blocking the path
+        const end_x = self.self.position.x + dir_x * sample_dist;
+        const end_z = self.self.position.z + dir_z * sample_dist;
+        const wall_height = self.terrain.getWallHeightAt(end_x, end_z);
+        if (wall_height > 15.0) {
+            score -= 0.5; // Big penalty for running into walls
+        } else if (wall_height > 5.0) {
+            score -= 0.2; // Smaller penalty for low walls
+        }
+
+        return score;
+    }
 };
 
 // ============================================================================
@@ -337,6 +419,16 @@ fn evalDamageSkill(
             util += 0.15;
         } else {
             util -= 0.3;
+        }
+    }
+
+    // Terrain-aware targeting: bonus for hitting targets on ice while they're moving
+    // (ice slip mechanic: moving targets on ice get knocked down when hit)
+    if (world.isIcyAt(target.position.x, target.position.z)) {
+        if (target.isMoving()) {
+            util += 0.25; // Big bonus - will trigger knockdown!
+        } else {
+            util += 0.05; // Small bonus - they might start moving
         }
     }
 
@@ -826,6 +918,56 @@ fn calcMovement(world: *const WorldState, ai: *AIState, action: ?*const SkillAct
     const spread = calcSpread(self, world.allies[0..world.ally_count], world.ally_count);
     move_x += spread.x * 0.25;
     move_z += spread.z * 0.25;
+
+    // ========== TERRAIN-AWARE MOVEMENT ADJUSTMENTS ==========
+    // Evaluate terrain quality and adjust movement direction slightly
+
+    // If we have a movement direction, evaluate terrain along that path
+    const move_mag = @sqrt(move_x * move_x + move_z * move_z);
+    if (move_mag > 0.1) {
+        const norm_x = move_x / move_mag;
+        const norm_z = move_z / move_mag;
+
+        // Sample terrain quality in intended direction vs perpendicular alternatives
+        const sample_dist: f32 = 50.0; // Look ahead 50 units
+        const intended_score = world.evalTerrainDirection(norm_x, norm_z, sample_dist);
+
+        // Check perpendicular directions (left and right of intended path)
+        const perp_l_x = -norm_z;
+        const perp_l_z = norm_x;
+        const perp_r_x = norm_z;
+        const perp_r_z = -norm_x;
+
+        // Blend directions: 70% intended + 30% perpendicular
+        const blend_l_x = norm_x * 0.7 + perp_l_x * 0.3;
+        const blend_l_z = norm_z * 0.7 + perp_l_z * 0.3;
+        const blend_r_x = norm_x * 0.7 + perp_r_x * 0.3;
+        const blend_r_z = norm_z * 0.7 + perp_r_z * 0.3;
+
+        const left_score = world.evalTerrainDirection(blend_l_x, blend_l_z, sample_dist);
+        const right_score = world.evalTerrainDirection(blend_r_x, blend_r_z, sample_dist);
+
+        // Only adjust if alternative is significantly better (0.2+ improvement)
+        const improvement_threshold: f32 = 0.2;
+
+        if (left_score > intended_score + improvement_threshold and left_score >= right_score) {
+            // Shift movement slightly left for better terrain
+            move_x = move_x * 0.8 + perp_l_x * move_mag * 0.3;
+            move_z = move_z * 0.8 + perp_l_z * move_mag * 0.3;
+        } else if (right_score > intended_score + improvement_threshold) {
+            // Shift movement slightly right for better terrain
+            move_x = move_x * 0.8 + perp_r_x * move_mag * 0.3;
+            move_z = move_z * 0.8 + perp_r_z * move_mag * 0.3;
+        }
+
+        // Emergency ice avoidance: if we're moving and on ice with nearby enemies, stop or retreat
+        if (world.selfOnIce() and world.nearest_enemy_dist < Config.MELEE_RANGE) {
+            // On ice with enemies close - reduce movement speed to minimize knockdown risk
+            // (Standing still on ice is safer than moving when you might get hit)
+            move_x *= 0.3;
+            move_z *= 0.3;
+        }
+    }
 
     // Normalize
     const mag = @sqrt(move_x * move_x + move_z * move_z);

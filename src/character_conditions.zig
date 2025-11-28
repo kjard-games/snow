@@ -2,8 +2,10 @@ const std = @import("std");
 const skills = @import("skills.zig");
 const effects = @import("effects.zig");
 const entity = @import("entity.zig");
+const terrain_mod = @import("terrain.zig");
 
 const EntityId = entity.EntityId;
+const TerrainType = terrain_mod.TerrainType;
 
 // ============================================================================
 // CHARACTER CONDITIONS - Chill, Cozy, and Effect Management
@@ -418,6 +420,28 @@ pub const WarmthPipState = struct {
 };
 
 // ============================================================================
+// ACTIVE TRAIL EFFECT - Terrain dropped while moving (e.g., Sled Carve)
+// ============================================================================
+
+/// Active trail effect that drops terrain as the character moves
+/// Used for skills like "Sled Carve" that leave ice behind while in stance
+pub const ActiveTrailEffect = struct {
+    terrain_type: TerrainType,
+    time_remaining_ms: u32,
+    trail_radius: f32 = 15.0, // How wide the trail is (in world units)
+    source_skill_name: [:0]const u8 = "Trail", // For debugging
+
+    /// Update trail effect, returns true if expired
+    pub fn update(self: *ActiveTrailEffect, delta_time_ms: u32) bool {
+        if (self.time_remaining_ms <= delta_time_ms) {
+            return true; // Expired
+        }
+        self.time_remaining_ms -= delta_time_ms;
+        return false;
+    }
+};
+
+// ============================================================================
 // CONDITION STATE - Combined state for all condition systems
 // ============================================================================
 
@@ -427,6 +451,7 @@ pub const ConditionState = struct {
     cozies: CozyState = .{},
     effects: EffectState = .{},
     warmth_pips: WarmthPipState = .{},
+    active_trail: ?ActiveTrailEffect = null, // Active trail effect (drops terrain while moving)
 
     // ========== QUERY HELPERS ==========
 
@@ -467,6 +492,15 @@ pub const ConditionState = struct {
         const chills_changed = self.chills.update(delta_time_ms);
         const cozies_changed = self.cozies.update(delta_time_ms);
         self.effects.update(delta_time_ms);
+
+        // Update active trail effect
+        if (self.active_trail) |*trail| {
+            if (trail.update(delta_time_ms)) {
+                // Trail expired
+                self.active_trail = null;
+                std.debug.print("Trail effect expired\n", .{});
+            }
+        }
 
         // Recalculate warmth pips if any conditions expired
         if (chills_changed or cozies_changed) {
@@ -530,6 +564,55 @@ pub const ConditionState = struct {
         return self.effects.getEnergyCostMultiplier();
     }
 
+    // ========== KNOCKDOWN HELPERS ==========
+
+    /// Apply a knockdown effect for the specified duration
+    /// This adds the knocked_down chill which prevents movement and skill use
+    pub fn applyKnockdown(self: *ConditionState, duration_ms: u32, source_id: ?EntityId) bool {
+        const effect = skills.ChillEffect{
+            .chill = .knocked_down,
+            .duration_ms = duration_ms,
+            .stack_intensity = 1, // Knockdown doesn't stack, just refreshes
+        };
+        return self.chills.add(effect, source_id);
+    }
+
+    /// Check if knocked down via chill (effect modifier is checked separately)
+    pub fn hasKnockdownChill(self: ConditionState) bool {
+        return self.chills.has(.knocked_down);
+    }
+
+    // ========== TRAIL EFFECT HELPERS ==========
+
+    /// Start a trail effect that drops terrain as the character moves
+    pub fn startTrailEffect(self: *ConditionState, terrain_type: TerrainType, duration_ms: u32, trail_radius: f32, skill_name: [:0]const u8) void {
+        self.active_trail = .{
+            .terrain_type = terrain_type,
+            .time_remaining_ms = duration_ms,
+            .trail_radius = trail_radius,
+            .source_skill_name = skill_name,
+        };
+        std.debug.print("Started trail effect: {s} ({s} for {d}ms)\n", .{ skill_name, @tagName(terrain_type), duration_ms });
+    }
+
+    /// Check if a trail effect is active
+    pub fn hasActiveTrail(self: ConditionState) bool {
+        return self.active_trail != null;
+    }
+
+    /// Get the active trail effect (for applying terrain)
+    pub fn getActiveTrail(self: ConditionState) ?ActiveTrailEffect {
+        return self.active_trail;
+    }
+
+    /// Stop any active trail effect
+    pub fn stopTrailEffect(self: *ConditionState) void {
+        if (self.active_trail != null) {
+            std.debug.print("Trail effect stopped\n", .{});
+            self.active_trail = null;
+        }
+    }
+
     // ========== CLEAR ==========
 
     /// Clear all conditions (on death, resurrection, etc.)
@@ -537,6 +620,7 @@ pub const ConditionState = struct {
         self.chills.clear();
         self.cozies.clear();
         self.effects.clear();
+        self.active_trail = null;
         self.warmth_pips.pips = 0;
         self.warmth_pips.resetAccumulator();
     }

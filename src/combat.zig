@@ -102,24 +102,27 @@ pub fn tryStartCastAtGround(
     const result = validation.validateGroundCast(caster, skill_index, ground_position, telem);
     if (result != .success) return result;
 
-    // Start casting (consumes energy, sets cast state)
-    caster.startCasting(skill_index);
-
     // Get skill
     const skill = caster.casting.skills[skill_index] orelse return .no_target;
 
     // If instant cast, execute immediately
     if (skill.activation_time_ms == 0) {
+        // Deduct energy for instant casts
+        caster.stats.energy -= skill.energy_cost;
         executeSkillAtGround(caster, skill, ground_position, skill_index, rng, vfx_manager, terrain_grid, telem);
         return .success;
     }
 
-    // For activation-time skills, we need to store the ground position
-    // TODO: Add cast_ground_position to Character struct
-    // For now, execute ground skills immediately (most wall skills are instant anyway)
-    executeSkillAtGround(caster, skill, ground_position, skill_index, rng, vfx_manager, terrain_grid, telem);
-    caster.casting.state = .idle;
-    return .success;
+    // For activation-time skills, start the cast and store the ground position
+    // Energy is deducted when cast starts (GW1-accurate)
+    caster.stats.energy -= skill.energy_cost;
+
+    // Use the new startGroundCast method
+    if (!caster.casting.startGroundCast(skill_index, skill, ground_position)) {
+        return .already_casting;
+    }
+
+    return .casting_started;
 }
 
 // ============================================================================
@@ -127,7 +130,7 @@ pub fn tryStartCastAtGround(
 // ============================================================================
 
 /// Execute a ground-targeted skill at a specific position
-fn executeSkillAtGround(
+pub fn executeSkillAtGround(
     caster: *Character,
     skill: *const Skill,
     ground_pos: rl.Vector3,
@@ -236,7 +239,7 @@ fn executeTargetedSkill(
 
         // Apply damage
         if (dmg_result.final_damage > 0) {
-            applyDamageToTarget(caster, tgt, skill, dmg_result.final_damage, vfx_manager, telem, null);
+            applyDamageToTarget(caster, tgt, skill, dmg_result.final_damage, vfx_manager, telem, null, terrain_grid);
             skill_hit = true;
         }
     } else {
@@ -306,6 +309,15 @@ fn executeSelfTargetedSkill(
         if (caster.addBehaviorFromSkill(skill, caster.id)) {
             print("{s} activated behavior from {s}!\n", .{ caster.name, skill.name });
         }
+    }
+
+    // Check for trail terrain effects (e.g., Sled Carve leaves ice behind while moving)
+    // Trail effects only work with stance skills that have a duration
+    if (skill.terrain_effect.shape == .trail and skill.terrain_effect.terrain_type != null and skill.duration_ms > 0) {
+        const terrain_type = skill.terrain_effect.terrain_type.?;
+        // Use aoe_radius as trail width, or default to 15
+        const trail_radius = if (skill.aoe_radius > 0) skill.aoe_radius else 15.0;
+        caster.startTrailEffect(terrain_type, skill.duration_ms, trail_radius, skill.name);
     }
 
     // Apply self-debuffs (chills) - some skills have drawbacks
@@ -381,6 +393,7 @@ fn recordSkillCastTelemetry(caster: *Character, skill: *const Skill, telem: ?*Ma
 
 /// Apply damage to target with all side effects
 /// Now includes behavior checks for damage interception and death prevention
+/// Also checks for ice slip mechanic (knockdown when hit while moving on ice)
 fn applyDamageToTarget(
     caster: *Character,
     target: *Character,
@@ -389,6 +402,7 @@ fn applyDamageToTarget(
     vfx_manager: *vfx.VFXManager,
     telem: ?*MatchTelemetry,
     all_characters: ?[]Character,
+    terrain_grid: ?*TerrainGrid,
 ) void {
     var damage_to_apply = final_damage;
 
@@ -457,6 +471,24 @@ fn applyDamageToTarget(
     // Check if target is Dazed - if so, damage interrupts
     if (target.hasChill(.dazed)) {
         target.interrupt();
+    }
+
+    // ICE SLIP MECHANIC: Taking direct damage while moving on ice = knockdown
+    // Only applies if target was moving and is on icy terrain
+    if (terrain_grid) |grid| {
+        if (target.isMoving() and !target.isKnockedDown()) {
+            if (grid.getCellAtConst(target.position.x, target.position.z)) |cell| {
+                if (cell.type == .icy_ground) {
+                    // Apply brief knockdown (1 second for ice slip)
+                    const ICE_SLIP_KNOCKDOWN_MS: u32 = 1000;
+                    target.applyKnockdown(ICE_SLIP_KNOCKDOWN_MS, caster.id);
+                    print("{s} slipped on ice after being hit!\n", .{target.name});
+
+                    // Spawn a visual indicator
+                    vfx_manager.spawnDamageNumber(0, target.position, .miss); // Use miss effect as "slip" indicator
+                }
+            }
+        }
     }
 }
 

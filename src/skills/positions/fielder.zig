@@ -589,14 +589,14 @@ pub const skills = [_]Skill{
     // 11. WALL: Quick Barrier - fast defensive wall
     .{
         .name = "Quick Barrier",
-        .description = "Stance. Build a small wall at target location.",
-        .skill_type = .stance,
-        .mechanic = .shift,
+        .description = "Trick. Build a small wall at target location.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
         .energy_cost = 5,
         .target_type = .ground,
         .cast_range = 200.0, // Increased for ground targeting
-        .activation_time_ms = 0,
-        .aftercast_ms = 750,
+        .activation_time_ms = 750, // Faster than other walls - "Quick" Barrier
+        .aftercast_ms = 500,
         .recharge_time_ms = 15000,
         .creates_wall = true,
         .wall_length = 100.0, // Increased from 50 for better coverage

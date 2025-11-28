@@ -513,14 +513,14 @@ pub const skills = [_]Skill{
     // 9. WALL: Harmonic Wall - rhythmic wall that pulses
     .{
         .name = "Harmonic Wall",
-        .description = "Call. Build a resonant wall. Grants 1 Rhythm on cast. Party members near the wall gain Hot Cocoa regeneration.",
-        .skill_type = .call,
-        .mechanic = .shout,
+        .description = "Trick. Build a resonant wall. Grants 1 Rhythm on cast. Party members near the wall gain Hot Cocoa regeneration.",
+        .skill_type = .trick,
+        .mechanic = .concentrate,
         .energy_cost = 9,
         .target_type = .ground,
         .cast_range = 140.0,
-        .activation_time_ms = 0,
-        .aftercast_ms = 0,
+        .activation_time_ms = 1250, // Building takes concentration
+        .aftercast_ms = 500,
         .recharge_time_ms = 22000,
         .creates_wall = true,
         .wall_length = 65.0,

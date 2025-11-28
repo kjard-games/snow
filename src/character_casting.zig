@@ -1,4 +1,5 @@
 const std = @import("std");
+const rl = @import("raylib");
 const skills = @import("skills.zig");
 const effects = @import("effects.zig");
 const entity = @import("entity.zig");
@@ -93,6 +94,7 @@ pub const CastingState = struct {
     // What's being cast
     casting_skill_index: u8 = 0,
     cast_target_id: ?EntityId = null,
+    cast_ground_position: ?rl.Vector3 = null, // For ground-targeted skills
 
     // Timing
     cast_time_remaining: f32 = 0.0, // Seconds remaining in activation
@@ -149,7 +151,7 @@ pub const CastingState = struct {
 
     // ========== CAST LIFECYCLE ==========
 
-    /// Start casting a skill
+    /// Start casting a skill at a target
     /// Returns false if already casting
     pub fn startCast(self: *CastingState, skill_index: u8, skill: *const Skill, target_id: ?EntityId) bool {
         if (!self.canStartCast()) return false;
@@ -157,10 +159,31 @@ pub const CastingState = struct {
         self.state = .activating;
         self.casting_skill_index = skill_index;
         self.cast_target_id = target_id;
+        self.cast_ground_position = null; // Clear ground position for targeted casts
         self.cast_time_remaining = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
         self.skill_executed = false;
 
         return true;
+    }
+
+    /// Start casting a ground-targeted skill
+    /// Returns false if already casting
+    pub fn startGroundCast(self: *CastingState, skill_index: u8, skill: *const Skill, ground_pos: rl.Vector3) bool {
+        if (!self.canStartCast()) return false;
+
+        self.state = .activating;
+        self.casting_skill_index = skill_index;
+        self.cast_target_id = null;
+        self.cast_ground_position = ground_pos;
+        self.cast_time_remaining = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
+        self.skill_executed = false;
+
+        return true;
+    }
+
+    /// Check if current cast is a ground-targeted skill
+    pub fn isGroundCast(self: CastingState) bool {
+        return self.cast_ground_position != null;
     }
 
     /// Complete a cast (called when cast_time_remaining reaches 0)
@@ -188,6 +211,7 @@ pub const CastingState = struct {
             self.cast_time_remaining = 0;
             self.skill_executed = false;
             self.cast_target_id = null;
+            self.cast_ground_position = null;
         }
     }
 
@@ -244,6 +268,7 @@ pub const CastingState = struct {
             if (self.aftercast_time_remaining <= 0) {
                 self.state = .idle;
                 self.cast_target_id = null;
+                self.cast_ground_position = null;
             }
         }
 
@@ -257,6 +282,7 @@ pub const CastingState = struct {
         self.aftercast_time_remaining = 0;
         self.skill_executed = false;
         self.cast_target_id = null;
+        self.cast_ground_position = null;
         self.clearQueue();
     }
 };
