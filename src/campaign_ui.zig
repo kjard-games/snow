@@ -20,6 +20,8 @@ const school = @import("school.zig");
 const skill_icons = @import("skill_icons.zig");
 const palette = @import("color_palette.zig");
 const position = @import("position.zig");
+const polyomino_map = @import("polyomino_map.zig");
+const polyomino_map_ui = @import("polyomino_map_ui.zig");
 
 const CampaignState = campaign.CampaignState;
 const EncounterNode = campaign.EncounterNode;
@@ -33,6 +35,7 @@ const Faction = campaign.Faction;
 const Skill = skills.Skill;
 const School = school.School;
 const Position = position.Position;
+const PolyominoMapUIState = polyomino_map_ui.PolyominoMapUIState;
 
 // ============================================================================
 // CONSTANTS
@@ -61,9 +64,12 @@ pub const CampaignUIMode = enum {
 pub const CampaignUIState = struct {
     mode: CampaignUIMode = .overworld,
 
-    // Overworld selection
+    // Overworld selection (legacy)
     selected_node_index: ?usize = null,
     hovered_node_index: ?usize = null,
+
+    // Polyomino map UI state (new)
+    poly_ui: PolyominoMapUIState = .{},
 
     // Skill bar editing
     editing_member_index: ?usize = null,
@@ -87,6 +93,7 @@ pub const CampaignUIState = struct {
         self.mode = .overworld;
         self.selected_node_index = null;
         self.hovered_node_index = null;
+        self.poly_ui.reset();
         self.editing_member_index = null;
         self.editing_slot_index = null;
         self.hovered_pool_skill_index = null;
@@ -1162,34 +1169,91 @@ pub fn drawTopBar(state: *const CampaignState) void {
 // ============================================================================
 
 /// Main campaign UI draw function - call from game_mode
-pub fn drawCampaignUI(state: *const CampaignState, ui_state: *CampaignUIState) void {
+pub fn drawCampaignUI(state: *CampaignState, ui_state: *CampaignUIState) void {
     // Clear background
     rl.clearBackground(rl.Color.init(25, 30, 40, 255));
 
     // Always draw base UI
     drawTopBar(state);
 
+    const screen_width = rl.getScreenWidth();
+    const screen_height = rl.getScreenHeight();
+
+    // Map area (central portion of screen)
+    const map_x: f32 = 250;
+    const map_y: f32 = 60;
+    const map_width = @as(f32, @floatFromInt(screen_width)) - 500;
+    const map_height = @as(f32, @floatFromInt(screen_height)) - 180;
+
     switch (ui_state.mode) {
         .overworld => {
-            drawOverworldMap(state, ui_state);
+            // Draw new polyomino map
+            polyomino_map_ui.drawPolyominoMap(
+                &state.poly_map,
+                &ui_state.poly_ui,
+                map_x,
+                map_y,
+                map_width,
+                map_height,
+            );
+
+            // Draw block details panel on the right
+            polyomino_map_ui.drawBlockDetails(
+                &state.poly_map,
+                &ui_state.poly_ui,
+                @as(f32, @floatFromInt(screen_width)) - 240,
+                map_y,
+                230,
+            );
+
+            // Draw minimap in corner
+            polyomino_map_ui.drawMinimap(
+                &state.poly_map,
+                &ui_state.poly_ui,
+                @as(f32, @floatFromInt(screen_width)) - 240,
+                @as(f32, @floatFromInt(screen_height)) - 180,
+                120,
+            );
+
             drawPartyPanel(state, ui_state);
             drawWarPanel(state);
             drawQuestPanel(state);
         },
         .skill_bar_edit => {
-            // Draw overworld dimmed underneath
-            drawOverworldMap(state, ui_state);
+            // Draw map dimmed underneath
+            polyomino_map_ui.drawPolyominoMap(
+                &state.poly_map,
+                &ui_state.poly_ui,
+                map_x,
+                map_y,
+                map_width,
+                map_height,
+            );
             drawPartyPanel(state, ui_state);
             // Draw editor overlay
             drawSkillBarEditor(state, ui_state);
         },
         .skill_capture_reward => {
             // TODO: Draw skill capture choice UI
-            drawOverworldMap(state, ui_state);
+            polyomino_map_ui.drawPolyominoMap(
+                &state.poly_map,
+                &ui_state.poly_ui,
+                map_x,
+                map_y,
+                map_width,
+                map_height,
+            );
         },
         .party_inspect => {
             // TODO: Draw party inspection UI
-            drawOverworldMap(state, ui_state);
+            polyomino_map_ui.drawPolyominoMap(
+                &state.poly_map,
+                &ui_state.poly_ui,
+                map_x,
+                map_y,
+                map_width,
+                map_height,
+            );
             drawPartyPanel(state, ui_state);
         },
         .character_creation => {
@@ -1204,25 +1268,32 @@ pub fn drawCampaignUI(state: *const CampaignState, ui_state: *CampaignUIState) v
 // ============================================================================
 
 /// Handle input for campaign UI
-/// Returns true if an encounter should be started
-pub fn handleCampaignInput(state: *CampaignState, ui_state: *CampaignUIState) ?u16 {
+/// Returns a block ID (u32) if an encounter should be started, null otherwise
+/// Note: Return type changed from ?u16 to ?u32 to accommodate polyomino block IDs
+pub fn handleCampaignInput(state: *CampaignState, ui_state: *CampaignUIState) ?u32 {
+    const screen_width = rl.getScreenWidth();
+    const screen_height = rl.getScreenHeight();
+
+    // Map area (central portion of screen) - must match drawCampaignUI
+    const map_x: f32 = 250;
+    const map_y: f32 = 60;
+    const map_width = @as(f32, @floatFromInt(screen_width)) - 500;
+    const map_height = @as(f32, @floatFromInt(screen_height)) - 180;
+
     switch (ui_state.mode) {
         .overworld => {
-            // Node selection with mouse
-            if (rl.isMouseButtonPressed(.left)) {
-                if (ui_state.hovered_node_index) |idx| {
-                    ui_state.selected_node_index = idx;
-                }
-            }
+            // Handle polyomino map input (panning, zooming, selection)
+            const engaged_block = polyomino_map_ui.handlePolyominoMapInput(
+                &state.poly_map,
+                &ui_state.poly_ui,
+                map_x,
+                map_y,
+                map_width,
+                map_height,
+            );
 
-            // Confirm selection
-            if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
-                if (ui_state.selected_node_index) |idx| {
-                    const nodes = state.overworld.getNodes();
-                    if (idx < nodes.len) {
-                        return nodes[idx].id;
-                    }
-                }
+            if (engaged_block) |block_id| {
+                return block_id;
             }
 
             // Edit skills

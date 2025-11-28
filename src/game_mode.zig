@@ -229,6 +229,7 @@ pub const GameMode = struct {
     campaign_ui_state: CampaignUIState,
     skill_capture_ui_state: ?SkillCaptureUIState,
     current_encounter_node: ?EncounterNode,
+    current_encounter_block_id: ?u32,
 
     // Match tracking
     matches_played: u32,
@@ -261,6 +262,7 @@ pub const GameMode = struct {
             .campaign_ui_state = .{},
             .skill_capture_ui_state = null,
             .current_encounter_node = null,
+            .current_encounter_block_id = null,
             .matches_played = 0,
             .matches_won = 0,
             .selected_menu_item = 0,
@@ -620,10 +622,11 @@ pub const GameMode = struct {
             .campaign_overworld, .run_start, .encounter_select => {
                 // Handle campaign UI input
                 if (self.campaign_state) |cs| {
-                    if (campaign_ui.handleCampaignInput(cs, &self.campaign_ui_state)) |node_id| {
-                        // Player selected an encounter - start it
-                        if (cs.overworld.getNode(node_id)) |node| {
+                    if (campaign_ui.handleCampaignInput(cs, &self.campaign_ui_state)) |block_id| {
+                        // Player selected a polyomino block encounter - start it
+                        if (cs.getPolyBlockEncounter(block_id)) |node| {
                             self.current_encounter_node = node;
+                            self.current_encounter_block_id = block_id;
                             self.startCampaignEncounter(node);
                         }
                     }
@@ -878,8 +881,13 @@ pub const GameMode = struct {
         };
 
         if (self.campaign_state) |cs| {
-            // Process result in campaign state
-            cs.processEncounterResult(node, victory, self.prng.random());
+            // Process result using polyomino block system (if we have a block_id)
+            if (self.current_encounter_block_id) |block_id| {
+                cs.processPolyBlockResult(block_id, victory, self.prng.random()) catch {};
+            } else {
+                // Fallback to legacy system
+                cs.processEncounterResult(node, victory, self.prng.random());
+            }
 
             // Check campaign status
             const status = cs.getStatus();
@@ -937,6 +945,7 @@ pub const GameMode = struct {
 
         self.matches_played += 1;
         self.current_encounter_node = null;
+        self.current_encounter_block_id = null;
     }
 
     /// Advance the campaign by one turn and return to overworld

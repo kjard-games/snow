@@ -31,12 +31,14 @@ const position = @import("position.zig");
 const entity = @import("entity.zig");
 const character = @import("character.zig");
 const palette = @import("color_palette.zig");
+const polyomino_map = @import("polyomino_map.zig");
 
 const Skill = skills.Skill;
 const School = school.School;
 const Position = position.Position;
 const Character = character.Character;
 const Team = entity.Team;
+const PolyominoMap = polyomino_map.PolyominoMap;
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -1114,6 +1116,9 @@ pub const CampaignState = struct {
     war: WarState,
     quest: QuestProgress,
 
+    /// Polyomino-based tessellating map (new map system)
+    poly_map: PolyominoMap,
+
     // Campaign metadata
     goal_type: GoalType,
     seed: u64,
@@ -1135,18 +1140,23 @@ pub const CampaignState = struct {
             .overworld = OverworldMap.init(allocator, seed),
             .war = WarState.initRandom(rng),
             .quest = QuestProgress.init(goal_type),
+            .poly_map = PolyominoMap.init(allocator, seed),
             .goal_type = goal_type,
             .seed = seed,
         };
 
-        // Generate initial overworld nodes
+        // Generate initial overworld nodes (legacy system)
         try state.overworld.generateInitialNodes(8);
+
+        // Generate polyomino starting area (new system)
+        try state.poly_map.generateStartingArea(.blue);
 
         return state;
     }
 
     pub fn deinit(self: *CampaignState) void {
         self.overworld.deinit();
+        self.poly_map.deinit();
     }
 
     /// Set up the player and best friend
@@ -1234,6 +1244,44 @@ pub const CampaignState = struct {
             self.quest.processSkillCapture(added);
         }
     }
+
+    /// Process the result of completing a polyomino block encounter
+    pub fn processPolyBlockResult(self: *CampaignState, block_id: u32, victory: bool, rng: std.Random) !void {
+        if (self.poly_map.getBlock(block_id)) |block| {
+            if (block.encounter) |node| {
+                if (victory) {
+                    self.encounters_won += 1;
+
+                    // Apply faction influence
+                    self.war.applyResult(self.party.faction, node.faction_influence);
+
+                    // Process quest-specific effects
+                    if (node.offers_quest_progress) {
+                        _ = self.quest.processIntel(rng);
+                    }
+                    if (node.encounter_type == .strategic) {
+                        self.quest.processStrategicWin();
+                    }
+
+                    // Conquer the block
+                    try self.poly_map.conquerBlock(block_id, self.party.faction);
+
+                    // Expand frontier to generate new adjacent chunks
+                    try self.poly_map.expandFrontier();
+                } else {
+                    self.encounters_lost += 1;
+                }
+            }
+        }
+    }
+
+    /// Get encounter from a polyomino block
+    pub fn getPolyBlockEncounter(self: *CampaignState, block_id: u32) ?EncounterNode {
+        if (self.poly_map.getBlock(block_id)) |block| {
+            return block.encounter;
+        }
+        return null;
+    }
 };
 
 // ============================================================================
@@ -1289,6 +1337,9 @@ test "campaign state initialization" {
 
     var campaign = try CampaignState.init(allocator, 12345, .find_brother);
     defer campaign.deinit();
+
+    // Set up party so isWiped() returns false
+    campaign.setupParty("Hero", .public_school, "Buddy", .waldorf);
 
     try std.testing.expect(campaign.turn == 0);
     try std.testing.expect(campaign.getStatus() == .in_progress);
