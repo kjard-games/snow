@@ -201,9 +201,11 @@ pub fn drawPolyominoMap(
 
             drawBlock(block, map, ui_state, area_x, area_y, is_hovered, is_selected);
 
-            // Check hover
-            if (isMouseOverBlock(block, ui_state, mouse_pos, area_x, area_y)) {
-                ui_state.hovered_block_id = block.id;
+            // Check hover - only L0 and L1 blocks are clickable
+            if (block.visibility_layer == .conquered or block.visibility_layer == .layer_1) {
+                if (isMouseOverBlock(block, ui_state, mouse_pos, area_x, area_y)) {
+                    ui_state.hovered_block_id = block.id;
+                }
             }
         }
     }
@@ -216,10 +218,10 @@ pub fn drawPolyominoMap(
 const BorderType = enum {
     none, // Deep interior, no border needed
     interior_frontier, // Same faction at frontier - dim dashed
-    solid, // Different factions meet (both visible)
-    solid_foggy, // Different factions meet but neighbor is in fog - solid with foggy fade
-    dashed, // Frontier edge into fog/unexplored (same faction)
-    squiggly, // Edge into true fog
+    solid, // Different factions meet (both L0/L1 visible)
+    hashed_bicolor, // L1 ↔ L2/L3 different faction - alternating color stripes (shared border)
+    hashed_fog_bicolor, // L2/L3 ↔ L2/L3 different faction - foggy alternating colors (shared border)
+    squiggly, // Edge into true fog (same faction)
 };
 
 /// Draw a single block (polyomino)
@@ -301,6 +303,9 @@ fn drawBlock(
             // Get faction color for this border
             const border_color = getFactionColor(block.faction, 255);
 
+            // For shared bicolor borders, get neighbor's color too
+            const neighbor_color = if (neighbor_block) |nb| getFactionColor(nb.faction, 255) else border_color;
+
             // Draw the appropriate border style
             switch (border_type) {
                 .none => {},
@@ -310,8 +315,8 @@ fn drawBlock(
                     drawDashedBorder(cell_x, cell_y, cell_size, edge_idx, dim_color, ui_state.zoom * 0.5);
                 },
                 .solid => drawSolidBorder(cell_x, cell_y, cell_size, edge_idx, border_color, ui_state.zoom),
-                .solid_foggy => drawSolidFoggyBorder(cell_x, cell_y, cell_size, edge_idx, border_color, ui_state.zoom),
-                .dashed => drawDashedBorder(cell_x, cell_y, cell_size, edge_idx, border_color, ui_state.zoom),
+                .hashed_bicolor => drawHashedBicolorBorder(cell_x, cell_y, cell_size, edge_idx, border_color, neighbor_color, ui_state.zoom),
+                .hashed_fog_bicolor => drawHashedFogBicolorBorder(cell_x, cell_y, cell_size, edge_idx, border_color, neighbor_color, ui_state.zoom),
                 .squiggly => drawSquigglyBorder(cell_x, cell_y, cell_size, edge_idx, border_color, ui_state.zoom),
             }
         }
@@ -381,9 +386,9 @@ fn drawBlock(
 /// Determine what type of border to draw between this block and its neighbor
 /// Based on the matrix:
 /// - L0: hard border with rivals, dashed interiors
-/// - L1: hard border with rivals (solid if neighbor L0/L1, solid_foggy if neighbor L2/L3), dashed interior with L2
-/// - L2: squiggly with rivals, no internal borders
-/// - L3: squiggly with rivals, no internal borders, squiggly with outside
+/// - L1: hard border with rivals (solid if neighbor L0/L1, hashed_bicolor if neighbor L2/L3)
+/// - L2/L3 ↔ L2/L3 different faction: hashed_fog_bicolor (shared, only draw from one side)
+/// - Same faction fog edges: squiggly
 fn determineBorderType(block: *Block, neighbor_block: ?*Block, map: *PolyominoMap) BorderType {
     _ = map;
 
@@ -391,7 +396,7 @@ fn determineBorderType(block: *Block, neighbor_block: ?*Block, map: *PolyominoMa
     if (neighbor_block == null) {
         return switch (block.visibility_layer) {
             .conquered => .none, // L0 doesn't border outside
-            .layer_1 => .dashed, // L1 frontier into unknown
+            .layer_1 => .interior_frontier, // L1 frontier into unknown
             .layer_2 => .squiggly, // L2 fog edge
             .layer_3 => .squiggly, // L3 fog edge into outside
             .fogged => .none,
@@ -404,7 +409,7 @@ fn determineBorderType(block: *Block, neighbor_block: ?*Block, map: *PolyominoMa
     if (neighbor.visibility_layer == .fogged) {
         return switch (block.visibility_layer) {
             .conquered => .none,
-            .layer_1 => .dashed,
+            .layer_1 => .interior_frontier,
             .layer_2, .layer_3 => .squiggly,
             .fogged => .none,
         };
@@ -430,25 +435,35 @@ fn determineBorderType(block: *Block, neighbor_block: ?*Block, map: *PolyominoMa
         if (!same_faction) {
             // Hard line with rivals, but style depends on neighbor visibility
             return switch (neighbor.visibility_layer) {
-                .conquered, .layer_1 => .solid, // Clear faction boundary
-                .layer_2, .layer_3 => .solid_foggy, // Faction boundary fading into fog
-                .fogged => .dashed,
+                .conquered => .solid, // Clear faction boundary (L0 will draw it)
+                .layer_1 => .solid, // Clear faction boundary
+                .layer_2, .layer_3 => .hashed_bicolor, // Bicolor hashed into fog
+                .fogged => .interior_frontier,
             };
         }
         // Same faction
         return switch (neighbor.visibility_layer) {
             .conquered => .interior_frontier, // Dashed interior with L0
             .layer_1 => .interior_frontier, // Dashed interior with other L1
-            .layer_2 => .dashed, // Dotted interior with L2
+            .layer_2 => .interior_frontier, // Dashed interior with L2
             .layer_3 => .squiggly, // Fog transition
-            .fogged => .dashed,
+            .fogged => .interior_frontier,
         };
     }
 
     // === L2 ===
     if (block.visibility_layer == .layer_2) {
         if (!same_faction) {
-            return .squiggly; // Foggy line with rivals
+            // Different faction - but only draw if neighbor is also L2/L3
+            // If neighbor is L0/L1, let them draw the border (solid or hashed_bicolor)
+            if (neighbor.visibility_layer == .layer_2 or neighbor.visibility_layer == .layer_3) {
+                // Both in fog - use shared bicolor border
+                // Only draw if this block has lower ID (to avoid double-drawing)
+                if (block.id < neighbor.id) {
+                    return .hashed_fog_bicolor;
+                }
+            }
+            return .none; // Let the other block draw it
         }
         // Same faction - no internal borders
         return .none;
@@ -457,7 +472,16 @@ fn determineBorderType(block: *Block, neighbor_block: ?*Block, map: *PolyominoMa
     // === L3 ===
     if (block.visibility_layer == .layer_3) {
         if (!same_faction) {
-            return .squiggly; // Foggy line with rivals
+            // Different faction - but only draw if neighbor is also L2/L3
+            // If neighbor is L0/L1, let them draw the border
+            if (neighbor.visibility_layer == .layer_2 or neighbor.visibility_layer == .layer_3) {
+                // Both in fog - use shared bicolor border
+                // Only draw if this block has lower ID (to avoid double-drawing)
+                if (block.id < neighbor.id) {
+                    return .hashed_fog_bicolor;
+                }
+            }
+            return .none; // Let the other block draw it
         }
         // Same faction - no internal borders (squiggly with outside handled above)
         return .none;
@@ -553,52 +577,92 @@ fn drawSquigglyBorder(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize,
     }
 }
 
-/// Draw a solid border with foggy fade on the outer edge
-/// Used when L1 faction boundary meets L2/L3 fog - shows hard line fading into mist
-fn drawSolidFoggyBorder(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize, color: rl.Color, zoom: f32) void {
-    // First draw the solid border line (on the inside)
+/// Draw a hashed bicolor border - alternating stripes of two faction colors
+/// Used for L1 ↔ L2/L3 different faction boundaries
+/// Shows clear faction conflict with one side fading into fog
+fn drawHashedBicolorBorder(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize, color1: rl.Color, color2: rl.Color, zoom: f32) void {
     const thickness = EXTERIOR_BORDER_THICKNESS * zoom;
-    const edge_rect = getEdgeRect(cell_x, cell_y, cell_size, edge_idx, thickness);
-    rl.drawRectangle(toI32(edge_rect.x), toI32(edge_rect.y), toI32(edge_rect.w), toI32(edge_rect.h), color);
-
-    // Then draw a foggy/squiggly effect on the outside (into the fog)
-    const wave_thickness = 2.0 * zoom;
-    const wave_amplitude: f32 = 3.0 * zoom;
-    const wave_frequency: f32 = 0.2 / zoom;
-    const step: f32 = 3.0 * zoom;
-    const fog_offset: f32 = thickness + 2.0 * zoom; // Offset into the fog side
+    const stripe_len: f32 = 10.0 * zoom;
 
     const is_horizontal = (edge_idx == 0 or edge_idx == 2);
     const total_len = cell_size;
 
-    // Faded color for the fog side
-    const faded_color = rl.Color.init(color.r, color.g, color.b, 80);
+    // Get starting position for this edge
+    var start_x: f32 = cell_x;
+    var start_y: f32 = cell_y;
 
-    // Get base position - offset into the neighbor (fog) side
+    switch (edge_idx) {
+        0 => {}, // Top - start at top-left
+        1 => start_x = cell_x + cell_size - thickness, // Right
+        2 => start_y = cell_y + cell_size - thickness, // Bottom
+        3 => {}, // Left - start at top-left
+        else => {},
+    }
+
+    // Draw alternating stripes
+    var pos: f32 = 0;
+    var use_color1 = true;
+    while (pos < total_len) {
+        const stripe_actual = @min(stripe_len, total_len - pos);
+        const current_color = if (use_color1) color1 else color2;
+
+        if (is_horizontal) {
+            rl.drawRectangle(toI32(start_x + pos), toI32(start_y), toI32(stripe_actual), toI32(thickness), current_color);
+        } else {
+            rl.drawRectangle(toI32(start_x), toI32(start_y + pos), toI32(thickness), toI32(stripe_actual), current_color);
+        }
+
+        pos += stripe_len;
+        use_color1 = !use_color1;
+    }
+}
+
+/// Draw a hashed foggy bicolor border - alternating colors with wavy/foggy aesthetic
+/// Used for L2/L3 ↔ L2/L3 different faction boundaries (shared border)
+/// Both sides are in fog, so the whole border feels misty
+fn drawHashedFogBicolorBorder(cell_x: f32, cell_y: f32, cell_size: f32, edge_idx: usize, color1: rl.Color, color2: rl.Color, zoom: f32) void {
+    const thickness = 2.5 * zoom;
+    const wave_amplitude: f32 = 3.0 * zoom;
+    const wave_frequency: f32 = 0.18 / zoom;
+    const step: f32 = 3.0 * zoom;
+    const stripe_len: f32 = 12.0 * zoom; // How long before switching colors
+
+    const is_horizontal = (edge_idx == 0 or edge_idx == 2);
+    const total_len = cell_size;
+
+    // Fade both colors for foggy effect
+    const faded_color1 = rl.Color.init(color1.r, color1.g, color1.b, 100);
+    const faded_color2 = rl.Color.init(color2.r, color2.g, color2.b, 100);
+
+    // Get base position for this edge (centered on edge)
     var base_x: f32 = cell_x;
     var base_y: f32 = cell_y;
 
     switch (edge_idx) {
-        0 => base_y = cell_y - fog_offset, // Top edge - fog is above
-        1 => base_x = cell_x + cell_size + fog_offset, // Right edge - fog is to right
-        2 => base_y = cell_y + cell_size + fog_offset, // Bottom edge - fog is below
-        3 => base_x = cell_x - fog_offset, // Left edge - fog is to left
+        0 => {}, // Top
+        1 => base_x = cell_x + cell_size, // Right
+        2 => base_y = cell_y + cell_size, // Bottom
+        3 => {}, // Left
         else => {},
     }
 
-    // Draw wavy line in the fog
+    // Draw wavy line with alternating colors
     var pos: f32 = 0;
     while (pos < total_len) {
         const wave_offset = wave_amplitude * @sin(pos * wave_frequency);
 
+        // Determine which color based on position
+        const stripe_idx = @as(u32, @intFromFloat(pos / stripe_len));
+        const current_color = if (stripe_idx % 2 == 0) faded_color1 else faded_color2;
+
         if (is_horizontal) {
             const x = base_x + pos;
             const y = base_y + wave_offset;
-            rl.drawCircle(toI32(x), toI32(y), wave_thickness, faded_color);
+            rl.drawCircle(toI32(x), toI32(y), thickness, current_color);
         } else {
             const x = base_x + wave_offset;
             const y = base_y + pos;
-            rl.drawCircle(toI32(x), toI32(y), wave_thickness, faded_color);
+            rl.drawCircle(toI32(x), toI32(y), thickness, current_color);
         }
 
         pos += step;
