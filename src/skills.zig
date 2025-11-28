@@ -32,3 +32,6 @@ pub const LinkParams = types.LinkParams;
 pub const RedirectParams = types.RedirectParams;
 pub const ProjectileReturnParams = types.ProjectileReturnParams;
 pub const PreventDeathParams = types.PreventDeathParams;
+pub const Behavior = types.Behavior;
+pub const BehaviorTrigger = types.BehaviorTrigger;
+pub const BehaviorResponse = types.BehaviorResponse;

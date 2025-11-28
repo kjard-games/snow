@@ -508,7 +508,8 @@ fn applyCozies(target: *Character, skill: *const Skill, caster: ?*Character) voi
 
 /// Apply composable effects from skill
 fn applyEffects(caster: *Character, target: *Character, skill: *const Skill) void {
-    for (skill.effects) |effect| {
+    // Iterate by pointer to get stable references to the comptime effect data
+    for (skill.effects) |*effect| {
         // Check if condition is met
         const caster_hp_percent = caster.stats.warmth / caster.stats.max_warmth;
         const target_hp_percent = target.stats.warmth / target.stats.max_warmth;
@@ -517,7 +518,7 @@ fn applyEffects(caster: *Character, target: *Character, skill: *const Skill) voi
         }
 
         // Apply effect to target
-        target.addEffect(&effect, caster.id);
+        target.addEffect(effect, caster.id);
 
         print("{s} applied effect {s} to {s} for {d}ms\n", .{
             caster.name,

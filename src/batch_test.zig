@@ -139,7 +139,7 @@ fn runBatchTest(
             .build();
 
         var runner = SimulationRunner.init(context, factory.config);
-        try runner.run();
+        _ = try runner.run();
         runner.deinit();
 
         // Collect statistics from telemetry

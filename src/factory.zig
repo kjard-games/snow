@@ -7,6 +7,7 @@ const skills = @import("skills.zig");
 const equipment = @import("equipment.zig");
 const gear_slot = @import("gear_slot.zig");
 const entity = @import("entity.zig");
+const campaign = @import("campaign.zig");
 
 const Character = character.Character;
 const School = school.School;
@@ -16,6 +17,7 @@ const Equipment = equipment.Equipment;
 const Gear = gear_slot.Gear;
 const EntityId = entity.EntityId;
 const Team = entity.Team;
+const SkillPool = campaign.SkillPool;
 
 const print = std.debug.print;
 
@@ -80,6 +82,9 @@ pub const CharacterBuilder = struct {
 
     // Skill constraints
     skill_constraints: [character.MAX_SKILLS]SkillConstraint = [_]SkillConstraint{.none} ** character.MAX_SKILLS,
+
+    // Optional skill pool (if provided, skills are drawn from pool instead of school/position defaults)
+    skill_pool: ?*const SkillPool = null,
 
     pub fn init(allocator: std.mem.Allocator, rng: *std.Random, id_gen: *entity.EntityIdGenerator) CharacterBuilder {
         return .{
@@ -159,6 +164,11 @@ pub const CharacterBuilder = struct {
         return self.withSkillInSlot(slot, .any_ap);
     }
 
+    pub fn withSkillPool(self: *CharacterBuilder, pool: *const SkillPool) *CharacterBuilder {
+        self.skill_pool = pool;
+        return self;
+    }
+
     /// Build and return the character
     pub fn build(self: *CharacterBuilder) Character {
         // Select school
@@ -207,10 +217,65 @@ pub const CharacterBuilder = struct {
         return char;
     }
 
-    fn generateName(_: *CharacterBuilder) [:0]const u8 {
-        // In a real system, we'd allocate a unique name
-        // For now, return a static string
-        return "Character";
+    fn generateName(self: *CharacterBuilder) [:0]const u8 {
+        // Generate names based on position for better combat log readability
+        // Use team letter prefix (B=Blue, R=Red, Y=Yellow, G=Green) + position abbreviation
+        const team_prefix: u8 = switch (self.team) {
+            .blue => 'B',
+            .red => 'R',
+            .yellow => 'Y',
+            .green => 'G',
+            .none => 'N',
+        };
+
+        const pos = self.position_override orelse pickRandomPosition(self.rng);
+
+        // Return position-based names with team indicator
+        // These are comptime strings so they're valid for the lifetime
+        return switch (pos) {
+            .pitcher => switch (team_prefix) {
+                'B' => "BluePitcher",
+                'R' => "RedPitcher",
+                'Y' => "YellowPitcher",
+                'G' => "GreenPitcher",
+                else => "Pitcher",
+            },
+            .fielder => switch (team_prefix) {
+                'B' => "BlueFielder",
+                'R' => "RedFielder",
+                'Y' => "YellowFielder",
+                'G' => "GreenFielder",
+                else => "Fielder",
+            },
+            .sledder => switch (team_prefix) {
+                'B' => "BlueSledder",
+                'R' => "RedSledder",
+                'Y' => "YellowSledder",
+                'G' => "GreenSledder",
+                else => "Sledder",
+            },
+            .shoveler => switch (team_prefix) {
+                'B' => "BlueShoveler",
+                'R' => "RedShoveler",
+                'Y' => "YellowShoveler",
+                'G' => "GreenShoveler",
+                else => "Shoveler",
+            },
+            .animator => switch (team_prefix) {
+                'B' => "BlueAnimator",
+                'R' => "RedAnimator",
+                'Y' => "YellowAnimator",
+                'G' => "GreenAnimator",
+                else => "Animator",
+            },
+            .thermos => switch (team_prefix) {
+                'B' => "BlueThermos",
+                'R' => "RedThermos",
+                'Y' => "YellowThermos",
+                'G' => "GreenThermos",
+                else => "Thermos",
+            },
+        };
     }
 
     fn equipCharacter(self: *CharacterBuilder, char: *Character) void {
@@ -230,6 +295,13 @@ pub const CharacterBuilder = struct {
     }
 
     fn skillCharacter(self: *CharacterBuilder, char: *Character) void {
+        // If using a skill pool, draw skills from the pool instead of default pools
+        if (self.skill_pool) |pool| {
+            self.skillCharacterFromPool(char, pool);
+            return;
+        }
+
+        // Default behavior: use position and school skill pools
         const position_skills = char.player_position.getSkills();
         const school_skills = char.school.getSkills();
 
@@ -324,6 +396,79 @@ pub const CharacterBuilder = struct {
         }
     }
 
+    /// Fill skill bar from a skill pool (campaign mode)
+    fn skillCharacterFromPool(self: *CharacterBuilder, char: *Character, pool: *const SkillPool) void {
+        // First, apply any specific skill constraints
+        for (self.skill_constraints, 0..) |constraint, slot| {
+            if (slot >= character.MAX_SKILLS) break;
+
+            if (constraint != .none) {
+                // Try to resolve constraint from pool
+                char.casting.skills[slot] = self.resolveSkillConstraintFromPool(constraint, pool);
+            }
+        }
+
+        // Fill remaining slots with random skills from pool
+        var slot_idx: usize = 0;
+        while (slot_idx < character.MAX_SKILLS) : (slot_idx += 1) {
+            if (char.casting.skills[slot_idx] != null) continue; // Already filled
+            if (pool.count == 0) break;
+
+            // Pick a random skill from pool
+            var attempts: usize = 0;
+            while (attempts < pool.count * 3) : (attempts += 1) {
+                const random_idx = self.rng.intRangeAtMost(u16, 0, pool.count - 1);
+                if (pool.get(random_idx)) |skill| {
+                    // Check if already in skill bar
+                    var already_loaded = false;
+                    for (0..slot_idx) |check_idx| {
+                        if (char.casting.skills[check_idx]) |existing| {
+                            if (std.mem.eql(u8, existing.name, skill.name)) {
+                                already_loaded = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!already_loaded) {
+                        char.casting.skills[slot_idx] = skill;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Ensure slot 7 has an AP skill if available in pool
+        if (char.casting.skills[7] != null) {
+            if (char.casting.skills[7].?.is_ap) {
+                return; // Already has AP skill
+            }
+        }
+
+        // Try to find an AP skill in pool for slot 7
+        for (0..pool.count) |i| {
+            if (pool.get(@intCast(i))) |skill| {
+                if (skill.is_ap) {
+                    // Check if already loaded
+                    var already_loaded = false;
+                    for (0..7) |check_idx| {
+                        if (char.casting.skills[check_idx]) |existing| {
+                            if (std.mem.eql(u8, existing.name, skill.name)) {
+                                already_loaded = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!already_loaded) {
+                        char.casting.skills[7] = skill;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     fn resolveEquipmentConstraint(self: *CharacterBuilder, constraint: EquipmentConstraint, include_none: bool) ?*const Equipment {
         return switch (constraint) {
             .none => if (include_none) null else pickRandomEquipmentOfCategory(self.rng, .utility),
@@ -348,6 +493,24 @@ pub const CharacterBuilder = struct {
             else
                 null,
             .any_ap => getRandomAPSkillFromPools(position_skills, school_skills, self.rng),
+            .in_slot => null, // Handled separately
+        };
+    }
+
+    fn resolveSkillConstraintFromPool(self: *CharacterBuilder, constraint: SkillConstraint, pool: *const SkillPool) ?*const Skill {
+        return switch (constraint) {
+            .none => null,
+            .specific => |sk| sk,
+            .creates_wall => findWallSkillInPool(pool),
+            .destroys_wall => findWallBreakerSkillInPool(pool),
+            .any_from_school, .any_from_position => {
+                // When using a skill pool, we can't filter by school/position
+                // since skills don't store that metadata. Just pick a random skill.
+                if (pool.count == 0) return null;
+                const idx = self.rng.intRangeAtMost(u16, 0, pool.count - 1);
+                return pool.get(idx);
+            },
+            .any_ap => getRandomAPSkillFromPool(pool, self.rng),
             .in_slot => null, // Handled separately
         };
     }
@@ -683,6 +846,50 @@ fn getRandomAPSkillFromPools(position_skills: []const Skill, school_skills: []co
         if (skill.is_ap) {
             if (target_idx == 0) return skill;
             target_idx -= 1;
+        }
+    }
+
+    return null;
+}
+
+// ============================================
+// SKILL POOL HELPER FUNCTIONS
+// ============================================
+
+/// Find a wall-creating skill in a skill pool
+fn findWallSkillInPool(pool: *const SkillPool) ?*const Skill {
+    for (0..pool.count) |i| {
+        if (pool.get(@intCast(i))) |skill| {
+            if (skill.creates_wall) return skill;
+        }
+    }
+    return null;
+}
+
+/// Find a wall-breaking skill in a skill pool
+fn findWallBreakerSkillInPool(pool: *const SkillPool) ?*const Skill {
+    for (0..pool.count) |i| {
+        if (pool.get(@intCast(i))) |skill| {
+            if (skill.destroys_walls) return skill;
+        }
+    }
+    return null;
+}
+
+/// Returns a random AP skill from a skill pool
+fn getRandomAPSkillFromPool(pool: *const SkillPool, rng: *std.Random) ?*const Skill {
+    const ap_count = pool.countApSkills();
+    if (ap_count == 0) return null;
+
+    // Pick a random AP skill
+    var target_idx = rng.intRangeAtMost(u8, 0, ap_count - 1);
+
+    for (0..pool.count) |i| {
+        if (pool.get(@intCast(i))) |skill| {
+            if (skill.is_ap) {
+                if (target_idx == 0) return skill;
+                target_idx -= 1;
+            }
         }
     }
 

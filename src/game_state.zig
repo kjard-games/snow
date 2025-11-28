@@ -182,10 +182,7 @@ pub const GameStateBuilder = struct {
         // Build AI states - healers get support role, others get damage_dealer
         var ai_states: [MAX_ENTITIES]AIState = undefined;
         for (entities, 0..) |ent, i| {
-            ai_states[i] = .{
-                .role = if (ent.player_position == .thermos) .support else .damage_dealer,
-                .skill_cooldown = 0.0,
-            };
+            ai_states[i] = AIState.init(ent.player_position);
         }
 
         return GameState{
@@ -647,6 +644,7 @@ pub const GameState = struct {
             ent.updateEnergy(TICK_RATE_SEC);
             ent.updateCooldowns(TICK_RATE_SEC);
             ent.updateConditions(TICK_RATE_MS);
+            ent.updateBehaviors(TICK_RATE_MS); // Update active behaviors (duration, cooldowns)
             ent.updateWarmth(TICK_RATE_SEC); // Warmth regen/degen from pips
             ent.updateDamageMonitor(TICK_RATE_SEC); // Update damage monitor timers
         }

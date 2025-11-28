@@ -318,6 +318,41 @@ pub const Character = struct {
         const skill_to_check = self.casting.skills[skill_index] orelse return false;
         if (self.stats.energy < skill_to_check.energy_cost) return false;
 
+        // Check school-specific resources (silently - no print spam)
+        // Waldorf: Check rhythm requirement
+        if (skill_to_check.requires_rhythm_stacks > 0 and self.school == .waldorf) {
+            if (!self.school_resources.rhythm.has(skill_to_check.requires_rhythm_stacks)) {
+                return false;
+            }
+        }
+
+        // Private School: Check credit room
+        if (skill_to_check.credit_cost > 0 and self.school == .private_school) {
+            const current_effective_max = self.school_resources.credit_debt.getEffectiveMaxEnergy(self.stats.max_energy);
+            if (current_effective_max <= 5) return false;
+            const max_additional_credit = current_effective_max - 5;
+            if (skill_to_check.credit_cost > max_additional_credit) return false;
+        }
+
+        // Homeschool: Check warmth sacrifice affordability
+        if (skill_to_check.warmth_cost_percent > 0 and self.school == .homeschool) {
+            if (!character_school_resources.SacrificeState.canAffordSacrifice(
+                self.stats.warmth,
+                self.stats.max_warmth,
+                skill_to_check.warmth_cost_percent,
+                skill_to_check.min_warmth_percent,
+            )) {
+                return false;
+            }
+        }
+
+        // Public School: Check grit cost
+        if (skill_to_check.grit_cost > 0 and self.school == .public_school) {
+            if (!self.school_resources.grit.has(skill_to_check.grit_cost)) {
+                return false;
+            }
+        }
+
         return true;
     }
 

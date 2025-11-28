@@ -129,7 +129,7 @@ fn runBalanceTest(
 
     // Run simulation
     var runner = SimulationRunner.init(context, factory.config);
-    try runner.run();
+    _ = try runner.run();
     runner.deinit();
 
     std.debug.print("Blue ({s}) vs Red ({s}): Match complete\n", .{ blue_comp.name, red_comp.name });
