@@ -4,10 +4,12 @@ const skills = @import("skills.zig");
 const character = @import("character.zig");
 const terrain = @import("terrain.zig");
 const palette = @import("color_palette.zig");
+const entity_types = @import("entity.zig");
 
 const Character = character.Character;
 const Skill = skills.Skill;
 const TerrainGrid = terrain.TerrainGrid;
+const EntityId = entity_types.EntityId;
 
 /// Ground targeting state - tracks active ground-targeting mode
 pub const GroundTargetingState = struct {
@@ -589,5 +591,334 @@ fn drawConePreview(
             .{ .x = origin_x + @cos(angle2) * length, .y = y, .z = origin_z + @sin(angle2) * length },
             outline_color,
         );
+    }
+}
+
+// ============================================================================
+// SKILL RANGE PREVIEW SYSTEM
+// ============================================================================
+// Shows range circles when hovering over skills in the skill bar, and
+// previews where mid-cast skills will land (MMO-style AoE indicators).
+
+/// State for skill range previews (hover and cast)
+pub const SkillRangePreviewState = struct {
+    /// Skill being hovered in the UI (from ui.hovered_skill_index)
+    hovered_skill: ?*const Skill = null,
+
+    /// Position to center the hover preview on (player pos for self/ground, target pos for enemy/ally)
+    hover_center: rl.Vector3 = .{ .x = 0, .y = 0, .z = 0 },
+
+    /// Target type of hovered skill (determines preview behavior)
+    hover_target_type: skills.SkillTarget = .enemy,
+
+    /// Target position for hover preview (if targeting enemy/ally)
+    hover_target_pos: ?rl.Vector3 = null,
+
+    /// Update hover preview state from UI
+    pub fn updateFromUI(
+        self: *SkillRangePreviewState,
+        hovered_index: ?u8,
+        player: *const Character,
+        entities: []const Character,
+        selected_target: ?EntityId,
+    ) void {
+        // Clear if no hover
+        if (hovered_index == null) {
+            self.hovered_skill = null;
+            self.hover_target_pos = null;
+            return;
+        }
+
+        const idx = hovered_index.?;
+        if (idx >= player.casting.skills.len) {
+            self.hovered_skill = null;
+            self.hover_target_pos = null;
+            return;
+        }
+
+        const skill = player.casting.skills[idx] orelse {
+            self.hovered_skill = null;
+            self.hover_target_pos = null;
+            return;
+        };
+
+        self.hovered_skill = skill;
+        self.hover_target_type = skill.target_type;
+        self.hover_center = player.position;
+
+        // Find target position for enemy/ally skills
+        self.hover_target_pos = null;
+        if (selected_target) |target_id| {
+            // Check if it's the player themselves
+            if (target_id == player.id) {
+                self.hover_target_pos = player.position;
+            } else {
+                // Search entities
+                for (entities) |ent| {
+                    if (ent.id == target_id and ent.isAlive()) {
+                        self.hover_target_pos = ent.position;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+};
+
+/// Draw skill range preview when hovering over a skill in the skill bar (3D)
+/// Shows: cast range circle around caster, AoE radius preview at target/ground
+pub fn drawSkillRangePreview3D(
+    state: *const SkillRangePreviewState,
+    player: *const Character,
+    terrain_grid: *const TerrainGrid,
+) void {
+    const skill = state.hovered_skill orelse return;
+
+    // Colors for range preview (subtle, non-intrusive)
+    const range_outline_color = rl.Color{ .r = 150, .g = 200, .b = 255, .a = 150 }; // Brighter outline
+
+    // Get player ground position
+    const player_y = terrain_grid.getGroundYAt(player.position.x, player.position.z) + 0.5;
+
+    // Draw cast range circle centered on player
+    if (skill.cast_range > 0) {
+        drawGroundCircleOutline(
+            player.position.x,
+            player_y,
+            player.position.z,
+            skill.cast_range,
+            range_outline_color,
+            48,
+        );
+    }
+
+    // For skills that have AoE radius, show the effect area preview
+    if (skill.aoe_radius > 0) {
+        const aoe_fill = rl.Color{ .r = 255, .g = 200, .b = 100, .a = 40 }; // Warm orange, very transparent
+        const aoe_outline = rl.Color{ .r = 255, .g = 220, .b = 150, .a = 120 };
+
+        // Determine where to show the AoE preview
+        switch (skill.target_type) {
+            .self => {
+                // Self-targeted AoE: show around player
+                drawGroundCircle(player.position.x, player_y, player.position.z, skill.aoe_radius, aoe_fill, 24);
+                drawGroundCircleOutline(player.position.x, player_y, player.position.z, skill.aoe_radius, aoe_outline, 24);
+            },
+            .ground => {
+                // Ground-targeted: AoE preview will be shown by ground targeting mode when activated
+                // Just show the range for now
+            },
+            .enemy, .ally => {
+                // Entity-targeted: show AoE around target if one is selected
+                if (state.hover_target_pos) |target_pos| {
+                    const target_y = terrain_grid.getGroundYAt(target_pos.x, target_pos.z) + 0.5;
+                    drawGroundCircle(target_pos.x, target_y, target_pos.z, skill.aoe_radius, aoe_fill, 24);
+                    drawGroundCircleOutline(target_pos.x, target_y, target_pos.z, skill.aoe_radius, aoe_outline, 24);
+
+                    // Draw line from player to target showing skill trajectory
+                    const line_color = rl.Color{ .r = 200, .g = 200, .b = 200, .a = 80 };
+                    rl.drawLine3D(
+                        .{ .x = player.position.x, .y = player_y, .z = player.position.z },
+                        .{ .x = target_pos.x, .y = target_y, .z = target_pos.z },
+                        line_color,
+                    );
+                }
+            },
+        }
+    } else if (state.hover_target_pos) |target_pos| {
+        // Single-target skills: show a small indicator at target
+        const target_y = terrain_grid.getGroundYAt(target_pos.x, target_pos.z) + 0.5;
+        const target_indicator_color = rl.Color{ .r = 255, .g = 255, .b = 100, .a = 100 };
+
+        // Small circle at target
+        drawGroundCircleOutline(target_pos.x, target_y, target_pos.z, 15.0, target_indicator_color, 16);
+
+        // Line from player to target
+        const line_color = rl.Color{ .r = 200, .g = 200, .b = 200, .a = 80 };
+        rl.drawLine3D(
+            .{ .x = player.position.x, .y = player_y, .z = player.position.z },
+            .{ .x = target_pos.x, .y = target_y, .z = target_pos.z },
+            line_color,
+        );
+    }
+}
+
+/// Draw mid-cast skill landing preview for ALL entities (MMO-style "where will this land" indicator)
+/// Shows where skills being cast will hit when they complete - crucial for dodging enemy AoEs!
+/// Colors: Orange/gold = your casts, Red = enemy casts, Green = ally casts
+pub fn drawCastLandingPreview3D(
+    player: *const Character,
+    entities: []const Character,
+    terrain_grid: *const TerrainGrid,
+) void {
+    // Draw cast previews for all entities (including enemies and allies)
+    for (entities) |*caster| {
+        if (!caster.isAlive()) continue;
+        if (caster.casting.state != .activating) continue;
+
+        drawEntityCastPreview(caster, player, entities, terrain_grid);
+    }
+
+    // Also draw player's own cast preview
+    if (player.isAlive() and player.casting.state == .activating) {
+        drawEntityCastPreview(player, player, entities, terrain_grid);
+    }
+}
+
+/// Draw cast preview for a single entity
+fn drawEntityCastPreview(
+    caster: *const Character,
+    player: *const Character,
+    entities: []const Character,
+    terrain_grid: *const TerrainGrid,
+) void {
+    const skill = caster.casting.skills[caster.casting.casting_skill_index] orelse return;
+
+    // Get cast progress for animation effects (pulsing, gets more solid as cast nears completion)
+    const cast_time_total = @as(f32, @floatFromInt(skill.activation_time_ms)) / 1000.0;
+    const progress = if (cast_time_total > 0) 1.0 - (caster.casting.cast_time_remaining / cast_time_total) else 1.0;
+
+    // Pulse alpha based on cast progress
+    const base_alpha: f32 = 60.0;
+    const progress_alpha: f32 = 80.0 * progress;
+    const alpha = @as(u8, @intFromFloat(base_alpha + progress_alpha));
+
+    // Color based on relationship to player:
+    // - Orange/gold = player's own casts
+    // - Red = enemy casts (DANGER!)
+    // - Green = ally casts (friendly)
+    const is_self = caster.id == player.id;
+    const is_enemy = player.isEnemy(caster.*);
+
+    const cast_fill: rl.Color = if (is_self)
+        rl.Color{ .r = 255, .g = 180, .b = 50, .a = alpha } // Gold for self
+    else if (is_enemy)
+        rl.Color{ .r = 255, .g = 60, .b = 60, .a = alpha } // Red for enemies
+    else
+        rl.Color{ .r = 60, .g = 255, .b = 100, .a = alpha }; // Green for allies
+
+    const cast_outline: rl.Color = if (is_self)
+        rl.Color{ .r = 255, .g = 200, .b = 100, .a = @min(255, alpha + 80) }
+    else if (is_enemy)
+        rl.Color{ .r = 255, .g = 100, .b = 100, .a = @min(255, alpha + 80) }
+    else
+        rl.Color{ .r = 100, .g = 255, .b = 150, .a = @min(255, alpha + 80) };
+
+    // Determine landing position based on skill type and target
+    switch (skill.target_type) {
+        .ground => {
+            // Ground-targeted skills: use stored ground target position
+            if (caster.casting.cast_ground_position) |target_pos| {
+                const target_y = terrain_grid.getGroundYAt(target_pos.x, target_pos.z) + 1.0;
+                const shape = getPreviewShape(skill);
+
+                switch (shape) {
+                    .circle => {
+                        const radius = if (skill.aoe_radius > 0) skill.aoe_radius else 10.0;
+                        drawGroundCircle(target_pos.x, target_y, target_pos.z, radius, cast_fill, 32);
+                        drawGroundCircleOutline(target_pos.x, target_y, target_pos.z, radius, cast_outline, 32);
+                    },
+                    .wall => {
+                        // Wall preview at target location
+                        const dx = target_pos.x - caster.position.x;
+                        const dz = target_pos.z - caster.position.z;
+                        const facing_angle = std.math.atan2(dz, dx);
+
+                        drawArcWallPreview(
+                            target_pos.x,
+                            target_y,
+                            target_pos.z,
+                            facing_angle,
+                            skill.wall_length,
+                            skill.wall_height,
+                            skill.wall_thickness,
+                            skill.wall_arc_factor,
+                            cast_fill,
+                            cast_outline,
+                        );
+                    },
+                    .line => {
+                        const caster_y = terrain_grid.getGroundYAt(caster.position.x, caster.position.z) + 1.0;
+                        rl.drawLine3D(
+                            .{ .x = caster.position.x, .y = caster_y, .z = caster.position.z },
+                            .{ .x = target_pos.x, .y = target_y, .z = target_pos.z },
+                            cast_outline,
+                        );
+                        drawGroundCircle(target_pos.x, target_y, target_pos.z, 15.0, cast_fill, 16);
+                        drawGroundCircleOutline(target_pos.x, target_y, target_pos.z, 15.0, cast_outline, 16);
+                    },
+                    .cone => {
+                        const caster_y = terrain_grid.getGroundYAt(caster.position.x, caster.position.z) + 1.0;
+                        const dx = target_pos.x - caster.position.x;
+                        const dz = target_pos.z - caster.position.z;
+                        const facing_angle = std.math.atan2(dz, dx);
+
+                        drawConePreview(
+                            caster.position.x,
+                            caster_y,
+                            caster.position.z,
+                            facing_angle,
+                            skill.aoe_radius,
+                            std.math.pi / 3.0,
+                            cast_fill,
+                            cast_outline,
+                        );
+                    },
+                }
+            }
+        },
+        .enemy, .ally => {
+            // Entity-targeted skills: find the target and show preview there
+            const target_id = caster.casting.cast_target_id orelse return;
+
+            var target_pos: ?rl.Vector3 = null;
+
+            // Check if target is the player
+            if (target_id == player.id) {
+                target_pos = player.position;
+            } else {
+                // Search entities
+                for (entities) |ent| {
+                    if (ent.id == target_id and ent.isAlive()) {
+                        target_pos = ent.position;
+                        break;
+                    }
+                }
+            }
+
+            if (target_pos) |pos| {
+                const target_y = terrain_grid.getGroundYAt(pos.x, pos.z) + 1.0;
+
+                if (skill.aoe_radius > 0) {
+                    // AoE preview at target
+                    drawGroundCircle(pos.x, target_y, pos.z, skill.aoe_radius, cast_fill, 24);
+                    drawGroundCircleOutline(pos.x, target_y, pos.z, skill.aoe_radius, cast_outline, 24);
+                } else {
+                    // Single-target indicator
+                    drawGroundCircleOutline(pos.x, target_y, pos.z, 12.0, cast_outline, 16);
+                }
+
+                // Draw trajectory line from caster to target
+                const caster_y = terrain_grid.getGroundYAt(caster.position.x, caster.position.z) + 1.0;
+                const line_color = rl.Color{ .r = cast_outline.r, .g = cast_outline.g, .b = cast_outline.b, .a = alpha };
+                rl.drawLine3D(
+                    .{ .x = caster.position.x, .y = caster_y, .z = caster.position.z },
+                    .{ .x = pos.x, .y = target_y, .z = pos.z },
+                    line_color,
+                );
+            }
+        },
+        .self => {
+            // Self-targeted skills: show preview centered on caster
+            const caster_y = terrain_grid.getGroundYAt(caster.position.x, caster.position.z) + 1.0;
+
+            if (skill.aoe_radius > 0) {
+                drawGroundCircle(caster.position.x, caster_y, caster.position.z, skill.aoe_radius, cast_fill, 24);
+                drawGroundCircleOutline(caster.position.x, caster_y, caster.position.z, skill.aoe_radius, cast_outline, 24);
+            } else {
+                // Self-buff indicator (small pulsing ring)
+                drawGroundCircleOutline(caster.position.x, caster_y, caster.position.z, caster.radius + 5.0, cast_outline, 16);
+            }
+        },
     }
 }

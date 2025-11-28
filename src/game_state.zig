@@ -14,6 +14,7 @@ const entity = @import("entity.zig");
 const auto_attack = @import("auto_attack.zig");
 const vfx = @import("vfx.zig");
 const terrain = @import("terrain.zig");
+const ground_targeting = @import("ground_targeting.zig");
 const equipment = @import("equipment.zig");
 const gear_slot = @import("gear_slot.zig");
 const palette = @import("color_palette.zig");
@@ -485,6 +486,7 @@ const EntityId = entity.EntityId;
 const EntityIdGenerator = entity.EntityIdGenerator;
 pub const TerrainGrid = terrain.TerrainGrid;
 const MatchTelemetry = telemetry.MatchTelemetry;
+const SkillRangePreviewState = ground_targeting.SkillRangePreviewState;
 
 // Game configuration constants
 pub const MAX_ENTITIES: usize = 12; // Support 3 teams x 4 characters (currently using 8 for 4v4, slots 8-11 reserved for 3rd team)
@@ -531,6 +533,9 @@ pub const GameState = struct {
 
     // Simulation mode: when true, skip raylib input polling (for headless battle simulation)
     simulation_mode: bool = false,
+
+    // Skill range preview state (for hover and cast previews)
+    skill_range_preview: SkillRangePreviewState = .{},
 
     // ============================================
     // INITIALIZATION METHODS
@@ -875,7 +880,15 @@ pub const GameState = struct {
         const player_render_pos = player.getInterpolatedPosition(alpha);
         input.updateCamera(&self.camera, player_render_pos, self.input_state);
 
-        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid, &self.input_state.ground_targeting);
+        // Update skill range preview state from UI hover
+        self.skill_range_preview.updateFromUI(
+            self.input_state.hovered_skill_index,
+            player,
+            &self.entities,
+            self.selected_target,
+        );
+
+        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid, &self.input_state.ground_targeting, &self.skill_range_preview);
     }
 
     /// Render UI elements (skill bars, target info, etc.) on top of the 3D scene.
