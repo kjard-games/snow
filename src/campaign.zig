@@ -540,6 +540,52 @@ pub const PartyState = struct {
         self.next_member_id += 1;
     }
 
+    /// Add player with auto-equipped starter skills
+    pub fn addPlayerWithStarterSkills(self: *PartyState, name: [:0]const u8, player_school: School, player_position: Position, skill_pool: *SkillPool) void {
+        const equipped = skill_pool.addStarterSkillsForCharacter(player_school, player_position);
+        self.members[0] = PartyMember{
+            .name = name,
+            .school_type = player_school,
+            .position_type = player_position,
+            .is_player = true,
+            .id = self.next_member_id,
+            .skill_bar = .{
+                @as(?u16, equipped[0]),
+                @as(?u16, equipped[1]),
+                @as(?u16, equipped[2]),
+                @as(?u16, equipped[3]),
+                null,
+                null,
+                null,
+                null,
+            },
+        };
+        self.next_member_id += 1;
+    }
+
+    /// Add best friend with auto-equipped starter skills
+    pub fn addBestFriendWithStarterSkills(self: *PartyState, name: [:0]const u8, friend_school: School, friend_position: Position, skill_pool: *SkillPool) void {
+        const equipped = skill_pool.addStarterSkillsForCharacter(friend_school, friend_position);
+        self.members[1] = PartyMember{
+            .name = name,
+            .school_type = friend_school,
+            .position_type = friend_position,
+            .is_player = false,
+            .id = self.next_member_id,
+            .skill_bar = .{
+                @as(?u16, equipped[0]),
+                @as(?u16, equipped[1]),
+                @as(?u16, equipped[2]),
+                @as(?u16, equipped[3]),
+                null,
+                null,
+                null,
+                null,
+            },
+        };
+        self.next_member_id += 1;
+    }
+
     /// Recruit a new party member
     pub fn recruit(self: *PartyState, name: [:0]const u8, member_school: School, member_position: Position) bool {
         for (&self.members, 0..) |*slot, i| {
@@ -694,6 +740,238 @@ fn loadDefaultSkills(char: *Character) void {
 // SKILL POOL - Campaign-wide unlocked skills
 // ============================================================================
 
+/// BOG SIMPLE starter skill indices for each school
+/// These are the simplest, most intuitive skills for new players
+/// Rule: 2 skills per school, no AP skills, no complex conditions
+pub const StarterSkillIndices = struct {
+    // Public School (Red/Grit): 0=Scrap (basic damage+grit), 2=Dirty Snowball (damage+DoT)
+    pub const public_school = [2]usize{ 0, 2 };
+
+    // Private School (Gold/Credit): 0=Icy Loan (basic damage), 1=Cold Calculation (heal)
+    pub const private_school = [2]usize{ 0, 1 };
+
+    // Montessori (Green/Variety): 0=Explore (damage), 1=Discover (heal/support)
+    pub const montessori = [2]usize{ 0, 1 };
+
+    // Homeschool (Black/Sacrifice): 0=Self-Study (basic), 1=Dark Library (buff)
+    pub const homeschool = [2]usize{ 0, 1 };
+
+    // Waldorf (Blue/Rhythm): 0=Opening Note (basic rhythm), 1=Tempo (buff)
+    pub const waldorf = [2]usize{ 0, 1 };
+
+    // Position starter skill indices (same logic - 2 simple skills each)
+    // Pitcher: 0=Fastball (basic damage), 7=Quick Toss (spam)
+    pub const pitcher = [2]usize{ 0, 7 };
+
+    // Fielder: 0=Catch (basic), 1=Quick Catch (fast)
+    pub const fielder = [2]usize{ 0, 1 };
+
+    // Sledder: 0=Ram (basic melee), 1=Slide By (mobility)
+    pub const sledder = [2]usize{ 0, 1 };
+
+    // Shoveler: 0=Dig In (basic), 1=Shovel Toss (ranged option)
+    pub const shoveler = [2]usize{ 0, 1 };
+
+    // Animator: 0=Build Snowman (summon), 1=Snow Fort (wall)
+    pub const animator = [2]usize{ 0, 1 };
+
+    // Thermos: 0=Share Cocoa (heal), 12=Quick Refill (fast heal)
+    pub const thermos = [2]usize{ 0, 12 };
+
+    /// Get starter indices for a school
+    pub fn forSchool(s: School) [2]usize {
+        return switch (s) {
+            .public_school => public_school,
+            .private_school => private_school,
+            .montessori => montessori,
+            .homeschool => homeschool,
+            .waldorf => waldorf,
+        };
+    }
+
+    /// Get starter indices for a position
+    pub fn forPosition(p: Position) [2]usize {
+        return switch (p) {
+            .pitcher => pitcher,
+            .fielder => fielder,
+            .sledder => sledder,
+            .shoveler => shoveler,
+            .animator => animator,
+            .thermos => thermos,
+        };
+    }
+};
+
+// ============================================================================
+// FIRST REWARD BUNDLES - Post-tutorial skill selection
+// ============================================================================
+
+/// Maximum skills per bundle
+pub const FIRST_BUNDLE_SIZE: usize = 8;
+
+/// A bundle of skills offered as the first reward after tutorial
+/// Each bundle has 8 skills: 2 from each of the 4 pools
+/// (player school, player position, friend school, friend position)
+pub const FirstRewardBundle = struct {
+    /// Display name for this bundle
+    name: [:0]const u8,
+    /// Brief description of the bundle's theme
+    description: [:0]const u8,
+    /// The 8 skills in this bundle (pointers to comptime skills)
+    skills: [FIRST_BUNDLE_SIZE]?*const Skill = [_]?*const Skill{null} ** FIRST_BUNDLE_SIZE,
+    /// Number of skills actually in the bundle
+    skill_count: u8 = 0,
+};
+
+/// Generate 3 bundles for the first reward choice
+/// Each bundle is themed and draws 2 skills from each of the 4 pools:
+/// - Player's school skills
+/// - Player's position skills
+/// - Friend's school skills
+/// - Friend's position skills
+pub const FirstRewardGenerator = struct {
+    /// Bundle skill indices for each theme
+    /// These are indices into each pool's skill list (skipping starter skills)
+    /// Theme 0: Aggressive - damage-focused skills
+    /// Theme 1: Defensive - survival and support skills
+    /// Theme 2: Utility - buffs, debuffs, and control skills
+    pub const bundle_themes = [3][:0]const u8{
+        "Snowball Fight",
+        "Cozy Defense",
+        "Winter Tactics",
+    };
+
+    pub const bundle_descriptions = [3][:0]const u8{
+        "More ways to pelt your enemies",
+        "Keep your team warm and safe",
+        "Outmaneuver the opposition",
+    };
+
+    /// Generate bundles based on party composition
+    pub fn generateBundles(
+        player_school: School,
+        player_position: Position,
+        friend_school: School,
+        friend_position: Position,
+    ) [3]FirstRewardBundle {
+        var bundles: [3]FirstRewardBundle = undefined;
+
+        // Get all skill pools
+        const ps_skills = player_school.getSkills();
+        const pp_skills = player_position.getSkills();
+        const fs_skills = friend_school.getSkills();
+        const fp_skills = friend_position.getSkills();
+
+        // Get starter indices to skip them
+        const ps_starters = StarterSkillIndices.forSchool(player_school);
+        const pp_starters = StarterSkillIndices.forPosition(player_position);
+        const fs_starters = StarterSkillIndices.forSchool(friend_school);
+        const fp_starters = StarterSkillIndices.forPosition(friend_position);
+
+        // Generate each themed bundle
+        for (0..3) |theme_idx| {
+            bundles[theme_idx] = FirstRewardBundle{
+                .name = bundle_themes[theme_idx],
+                .description = bundle_descriptions[theme_idx],
+            };
+
+            var slot: u8 = 0;
+
+            // Pick 2 skills from each pool, offset by theme to get different skills
+            // Skip starter skills and AP skills (is_ap = true)
+
+            // Player school skills (2)
+            slot = addSkillsFromPool(&bundles[theme_idx], ps_skills, ps_starters, theme_idx, slot, 2);
+
+            // Player position skills (2)
+            slot = addSkillsFromPool(&bundles[theme_idx], pp_skills, pp_starters, theme_idx, slot, 2);
+
+            // Friend school skills (2)
+            slot = addSkillsFromPool(&bundles[theme_idx], fs_skills, fs_starters, theme_idx, slot, 2);
+
+            // Friend position skills (2)
+            _ = addSkillsFromPool(&bundles[theme_idx], fp_skills, fp_starters, theme_idx, slot, 2);
+        }
+
+        return bundles;
+    }
+
+    /// Add skills from a pool to a bundle, skipping starters and AP skills
+    fn addSkillsFromPool(
+        bundle: *FirstRewardBundle,
+        skill_pool: []const Skill,
+        starters: [2]usize,
+        theme_offset: usize,
+        start_slot: u8,
+        count: u8,
+    ) u8 {
+        var slot = start_slot;
+        var added: u8 = 0;
+        var pool_idx: usize = theme_offset * 2; // Offset by theme to get different skills
+
+        while (added < count and pool_idx < skill_pool.len) {
+            // Skip starter skills
+            if (pool_idx == starters[0] or pool_idx == starters[1]) {
+                pool_idx += 1;
+                continue;
+            }
+
+            // Skip AP skills (they should be captured from bosses)
+            if (skill_pool[pool_idx].is_ap) {
+                pool_idx += 1;
+                continue;
+            }
+
+            // Add this skill
+            if (slot < FIRST_BUNDLE_SIZE) {
+                bundle.skills[slot] = &skill_pool[pool_idx];
+                bundle.skill_count = slot + 1;
+                slot += 1;
+                added += 1;
+            }
+
+            pool_idx += 1;
+        }
+
+        // If we didn't find enough, wrap around and try again from start
+        pool_idx = 0;
+        while (added < count and pool_idx < skill_pool.len) {
+            if (pool_idx == starters[0] or pool_idx == starters[1]) {
+                pool_idx += 1;
+                continue;
+            }
+            if (skill_pool[pool_idx].is_ap) {
+                pool_idx += 1;
+                continue;
+            }
+
+            // Check if we already added this skill
+            var already_added = false;
+            for (bundle.skills[0..slot]) |maybe_skill| {
+                if (maybe_skill) |s| {
+                    if (std.mem.eql(u8, s.name, skill_pool[pool_idx].name)) {
+                        already_added = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!already_added) {
+                if (slot < FIRST_BUNDLE_SIZE) {
+                    bundle.skills[slot] = &skill_pool[pool_idx];
+                    bundle.skill_count = slot + 1;
+                    slot += 1;
+                    added += 1;
+                }
+            }
+
+            pool_idx += 1;
+        }
+
+        return slot;
+    }
+};
+
 /// Pool of all skills unlocked during this campaign run
 /// Party members' skill bars reference skills by index into this pool
 pub const SkillPool = struct {
@@ -703,7 +981,65 @@ pub const SkillPool = struct {
     /// Number of skills in the pool
     count: u16 = 0,
 
-    /// Add starting skills based on player's school
+    /// Add BOG SIMPLE starting skills for a character (2 school + 2 position)
+    /// Returns the 4 skill indices in the pool for immediate equipping
+    pub fn addStarterSkillsForCharacter(self: *SkillPool, s: School, p: Position) [4]u16 {
+        var equipped: [4]u16 = [_]u16{ 0, 0, 0, 0 };
+        var slot: usize = 0;
+
+        // Add 2 school skills
+        const school_indices = StarterSkillIndices.forSchool(s);
+        const school_skills = s.getSkills();
+        for (school_indices) |idx| {
+            if (idx < school_skills.len) {
+                const pool_idx = self.addSkillAndGetIndex(&school_skills[idx]);
+                if (pool_idx) |pi| {
+                    if (slot < 4) {
+                        equipped[slot] = pi;
+                        slot += 1;
+                    }
+                }
+            }
+        }
+
+        // Add 2 position skills
+        const pos_indices = StarterSkillIndices.forPosition(p);
+        const pos_skills = p.getSkills();
+        for (pos_indices) |idx| {
+            if (idx < pos_skills.len) {
+                const pool_idx = self.addSkillAndGetIndex(&pos_skills[idx]);
+                if (pool_idx) |pi| {
+                    if (slot < 4) {
+                        equipped[slot] = pi;
+                        slot += 1;
+                    }
+                }
+            }
+        }
+
+        return equipped;
+    }
+
+    /// Add a skill and return its pool index (or existing index if duplicate)
+    pub fn addSkillAndGetIndex(self: *SkillPool, skill: *const Skill) ?u16 {
+        // Check for duplicates first
+        for (self.pool[0..self.count], 0..) |maybe_skill, i| {
+            if (maybe_skill) |existing| {
+                if (std.mem.eql(u8, existing.name, skill.name)) {
+                    return @intCast(i); // Already have it, return existing index
+                }
+            }
+        }
+
+        // Add new skill
+        if (self.count >= MAX_SKILL_POOL_SIZE) return null;
+        self.pool[self.count] = skill;
+        const idx = self.count;
+        self.count += 1;
+        return idx;
+    }
+
+    /// Add starting skills based on player's school (legacy - kept for compatibility)
     pub fn addStartingSkills(self: *SkillPool, player_school: School) void {
         // Add 4 skills from player's school
         const school_skills = player_school.getSkills();
@@ -720,6 +1056,15 @@ pub const SkillPool = struct {
         const to_add = @min(school_skills.len, 3); // Add 3 from friend's school
         for (0..to_add) |i| {
             _ = self.addSkill(&school_skills[i]); // Uses addSkill to avoid duplicates
+        }
+    }
+
+    /// Apply a first reward bundle (add all 8 skills to the pool)
+    pub fn applyFirstRewardBundle(self: *SkillPool, bundle: *const FirstRewardBundle) void {
+        for (bundle.skills[0..bundle.skill_count]) |maybe_skill| {
+            if (maybe_skill) |skill| {
+                _ = self.addSkill(skill);
+            }
         }
     }
 
@@ -1193,6 +1538,23 @@ pub const CampaignState = struct {
         self.skill_pool.addStartingSkills(player_school);
         // Also add some skills from friend's school
         self.skill_pool.addStartingSkillsFromSchool(friend_school);
+    }
+
+    /// Set up the player and best friend with auto-equipped BOG SIMPLE starter skills
+    /// This is the new simplified flow: 4 skills each (2 school + 2 position)
+    pub fn setupPartyWithStarterSkills(
+        self: *CampaignState,
+        player_name: [:0]const u8,
+        player_school: School,
+        player_position: Position,
+        friend_name: [:0]const u8,
+        friend_school: School,
+        friend_position: Position,
+    ) void {
+        // Add player with auto-equipped skills
+        self.party.addPlayerWithStarterSkills(player_name, player_school, player_position, &self.skill_pool);
+        // Add friend with auto-equipped skills
+        self.party.addBestFriendWithStarterSkills(friend_name, friend_school, friend_position, &self.skill_pool);
     }
 
     /// Advance the campaign by one turn

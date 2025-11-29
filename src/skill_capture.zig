@@ -407,3 +407,307 @@ test "skill capture ui state" {
     ui_state.selected_option = 0;
     try std.testing.expect(ui_state.selected_option == 0);
 }
+
+// ============================================================================
+// FIRST REWARD UI - Post-tutorial bundle selection
+// ============================================================================
+
+const FirstRewardBundle = campaign.FirstRewardBundle;
+const FirstRewardGenerator = campaign.FirstRewardGenerator;
+const FIRST_BUNDLE_SIZE = campaign.FIRST_BUNDLE_SIZE;
+
+/// Constants for first reward UI
+const BUNDLE_CARD_WIDTH: f32 = 300;
+const BUNDLE_CARD_HEIGHT: f32 = 450;
+const BUNDLE_CARD_SPACING: f32 = 30;
+
+/// UI state for the first reward selection screen
+pub const FirstRewardUIState = struct {
+    /// The 3 bundles to choose from
+    bundles: [3]FirstRewardBundle,
+
+    /// Which bundle is currently hovered (0, 1, or 2)
+    hovered_bundle: ?u8 = null,
+
+    /// Which bundle is selected
+    selected_bundle: ?u8 = null,
+
+    /// Animation timer
+    animation_timer: f32 = 0,
+
+    /// Has the player confirmed their choice?
+    confirmed: bool = false,
+
+    /// Player's school (for icon rendering)
+    player_school: School = .public_school,
+
+    /// Player's position (for icon rendering)
+    player_position: Position = .fielder,
+
+    /// Friend's school (for icon rendering - bundles include friend's skills)
+    friend_school: School = .waldorf,
+
+    /// Friend's position (for icon rendering - bundles include friend's skills)
+    friend_position: Position = .thermos,
+
+    pub fn init(
+        player_school: School,
+        player_position: Position,
+        friend_school: School,
+        friend_position: Position,
+    ) FirstRewardUIState {
+        return .{
+            .bundles = FirstRewardGenerator.generateBundles(
+                player_school,
+                player_position,
+                friend_school,
+                friend_position,
+            ),
+            .player_school = player_school,
+            .player_position = player_position,
+            .friend_school = friend_school,
+            .friend_position = friend_position,
+        };
+    }
+
+    pub fn reset(self: *FirstRewardUIState) void {
+        self.hovered_bundle = null;
+        self.selected_bundle = null;
+        self.animation_timer = 0;
+        self.confirmed = false;
+    }
+
+    pub fn update(self: *FirstRewardUIState, delta_time: f32) void {
+        self.animation_timer += delta_time;
+    }
+
+    pub fn getSelectedBundle(self: *const FirstRewardUIState) ?*const FirstRewardBundle {
+        if (self.selected_bundle) |idx| {
+            return &self.bundles[idx];
+        }
+        return null;
+    }
+};
+
+/// Draw the first reward selection screen
+pub fn drawFirstRewardScreen(ui_state: *FirstRewardUIState) void {
+    const screen_width = rl.getScreenWidth();
+    const screen_height = rl.getScreenHeight();
+    const center_x = @as(f32, @floatFromInt(screen_width)) / 2;
+    const center_y = @as(f32, @floatFromInt(screen_height)) / 2;
+
+    // Full screen overlay
+    rl.drawRectangle(0, 0, screen_width, screen_height, rl.Color.init(0, 0, 0, 230));
+
+    // Entrance animation
+    const anim_progress = @min(1.0, ui_state.animation_timer / 0.5);
+    const scale = easeOutBack(anim_progress);
+
+    // Title
+    const title = "FIRST VICTORY!";
+    const title_size: i32 = 44;
+    const title_width = rl.measureText(title, title_size);
+    const title_y = center_y - 280 * scale;
+    rl.drawText(title, toI32(center_x) - @divTrunc(title_width, 2), toI32(title_y), title_size, rl.Color.gold);
+
+    // Subtitle
+    const subtitle = "Choose your reward - 8 new skills to expand your arsenal!";
+    const subtitle_width = rl.measureText(subtitle, 18);
+    rl.drawText(subtitle, toI32(center_x) - @divTrunc(subtitle_width, 2), toI32(title_y + 55), 18, rl.Color.white);
+
+    // Calculate card positions (3 cards centered)
+    const total_width = 3 * BUNDLE_CARD_WIDTH + 2 * BUNDLE_CARD_SPACING;
+    var card_x = center_x - total_width / 2;
+    const card_y = center_y - BUNDLE_CARD_HEIGHT / 2 + 50;
+
+    // Get mouse position for hover
+    const mouse_pos = rl.getMousePosition();
+    ui_state.hovered_bundle = null;
+
+    // Draw each bundle card
+    for (0..3) |i| {
+        const is_hovered = mouse_pos.x >= card_x and mouse_pos.x <= card_x + BUNDLE_CARD_WIDTH and
+            mouse_pos.y >= card_y and mouse_pos.y <= card_y + BUNDLE_CARD_HEIGHT;
+        if (is_hovered) {
+            ui_state.hovered_bundle = @intCast(i);
+        }
+        const is_selected = if (ui_state.selected_bundle) |sel| sel == i else false;
+
+        drawBundleSelectionCard(
+            &ui_state.bundles[i],
+            card_x,
+            card_y,
+            scale,
+            is_hovered,
+            is_selected,
+            ui_state.player_school,
+            ui_state.player_position,
+            ui_state.friend_school,
+            ui_state.friend_position,
+            @intCast(i + 1), // Card number (1, 2, 3)
+        );
+        card_x += BUNDLE_CARD_WIDTH + BUNDLE_CARD_SPACING;
+    }
+
+    // Instructions
+    const instructions = if (ui_state.selected_bundle != null)
+        "[Enter] Confirm Selection  [Esc] Cancel"
+    else
+        "[Click] or [1] [2] [3] to Select";
+    const inst_width = rl.measureText(instructions, 16);
+    rl.drawText(instructions, toI32(center_x) - @divTrunc(inst_width, 2), screen_height - 50, 16, palette.UI.TEXT_SECONDARY);
+}
+
+/// Draw a single bundle selection card
+fn drawBundleSelectionCard(
+    bundle: *const FirstRewardBundle,
+    x: f32,
+    y: f32,
+    scale: f32,
+    is_hovered: bool,
+    is_selected: bool,
+    player_school: School,
+    player_position: Position,
+    friend_school: School,
+    friend_position: Position,
+    card_number: u8,
+) void {
+    const scaled_height = BUNDLE_CARD_HEIGHT * scale;
+    const xi = toI32(x);
+    const yi = toI32(y + (BUNDLE_CARD_HEIGHT - scaled_height) / 2);
+    const widthi = toI32(BUNDLE_CARD_WIDTH);
+    const heighti = toI32(scaled_height);
+
+    // Card background - different tint per card
+    const base_color: rl.Color = switch (card_number) {
+        1 => rl.Color.init(50, 35, 35, 255), // Reddish for aggressive
+        2 => rl.Color.init(35, 45, 35, 255), // Greenish for defensive
+        else => rl.Color.init(35, 35, 50, 255), // Bluish for tactical
+    };
+
+    const bg_color = if (is_selected)
+        rl.Color.init(base_color.r + 30, base_color.g + 30, base_color.b + 30, 255)
+    else if (is_hovered)
+        rl.Color.init(base_color.r + 15, base_color.g + 15, base_color.b + 15, 255)
+    else
+        base_color;
+    rl.drawRectangle(xi, yi, widthi, heighti, bg_color);
+
+    // Border
+    const border_color = if (is_selected) rl.Color.gold else if (is_hovered) rl.Color.white else palette.UI.BORDER;
+    rl.drawRectangleLines(xi, yi, widthi, heighti, border_color);
+    if (is_selected or is_hovered) {
+        rl.drawRectangleLinesEx(.{ .x = x - 2, .y = y + (BUNDLE_CARD_HEIGHT - scaled_height) / 2 - 2, .width = BUNDLE_CARD_WIDTH + 4, .height = scaled_height + 4 }, 2, border_color);
+    }
+
+    const padding: f32 = 12;
+    var content_y = y + (BUNDLE_CARD_HEIGHT - scaled_height) / 2 + padding;
+
+    // Bundle name header
+    const name_width = rl.measureText(bundle.name, 18);
+    rl.drawText(bundle.name, xi + toI32(BUNDLE_CARD_WIDTH / 2) - @divTrunc(name_width, 2), toI32(content_y), 18, rl.Color.white);
+    content_y += 25;
+
+    // Description
+    const desc_width = rl.measureText(bundle.description, 12);
+    rl.drawText(bundle.description, xi + toI32(BUNDLE_CARD_WIDTH / 2) - @divTrunc(desc_width, 2), toI32(content_y), 12, palette.UI.TEXT_SECONDARY);
+    content_y += 25;
+
+    // Divider line
+    rl.drawLine(xi + 10, toI32(content_y), xi + widthi - 10, toI32(content_y), palette.UI.BORDER);
+    content_y += 10;
+
+    // Draw each skill in the bundle (compact 2-column layout)
+    const small_icon_size: f32 = 32;
+    const skill_row_height: f32 = 42;
+    const col_width: f32 = (BUNDLE_CARD_WIDTH - padding * 2) / 2;
+
+    for (0..bundle.skill_count) |i| {
+        if (bundle.skills[i]) |skill| {
+            const col: f32 = if (i % 2 == 0) 0 else 1;
+            const row: f32 = @floatFromInt(i / 2);
+            const skill_x = x + padding + col * col_width;
+            const skill_y = content_y + row * skill_row_height;
+
+            // Icon - use multi-source version to check all 4 pools (player + friend)
+            skill_icons.drawSkillIconMultiSource(
+                skill_x,
+                skill_y,
+                small_icon_size,
+                skill,
+                player_school,
+                player_position,
+                friend_school,
+                friend_position,
+                true,
+            );
+
+            // Name (truncated if needed)
+            var name_buf: [20:0]u8 = undefined;
+            const display_name = if (skill.name.len > 16)
+                std.fmt.bufPrintZ(&name_buf, "{s}...", .{skill.name[0..13]}) catch skill.name
+            else
+                skill.name;
+            rl.drawText(display_name, toI32(skill_x + small_icon_size + 4), toI32(skill_y + 4), 10, rl.Color.white);
+
+            // Type
+            const type_name = @tagName(skill.skill_type);
+            rl.drawText(type_name, toI32(skill_x + small_icon_size + 4), toI32(skill_y + 18), 8, palette.UI.TEXT_SECONDARY);
+        }
+    }
+
+    // Selection indicator / key hint
+    var key_buf: [8:0]u8 = undefined;
+    const key_text = std.fmt.bufPrintZ(&key_buf, "[{d}]", .{card_number}) catch "[?]";
+
+    if (is_selected) {
+        const check_text = "SELECTED";
+        const check_width = rl.measureText(check_text, 16);
+        rl.drawText(check_text, xi + toI32(BUNDLE_CARD_WIDTH / 2) - @divTrunc(check_width, 2), yi + heighti - 30, 16, rl.Color.gold);
+    } else {
+        const key_width = rl.measureText(key_text, 14);
+        rl.drawText(key_text, xi + toI32(BUNDLE_CARD_WIDTH / 2) - @divTrunc(key_width, 2), yi + heighti - 28, 14, palette.UI.TEXT_SECONDARY);
+    }
+}
+
+/// Handle input for first reward selection
+/// Returns true if a choice was confirmed
+pub fn handleFirstRewardInput(ui_state: *FirstRewardUIState) bool {
+    // Click to select
+    if (rl.isMouseButtonPressed(.left)) {
+        if (ui_state.hovered_bundle) |idx| {
+            ui_state.selected_bundle = idx;
+        }
+    }
+
+    // Number keys to select
+    if (rl.isKeyPressed(.one)) ui_state.selected_bundle = 0;
+    if (rl.isKeyPressed(.two)) ui_state.selected_bundle = 1;
+    if (rl.isKeyPressed(.three)) ui_state.selected_bundle = 2;
+
+    // Confirm selection
+    if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
+        if (ui_state.selected_bundle != null) {
+            ui_state.confirmed = true;
+            return true;
+        }
+    }
+
+    // Cancel selection (deselect)
+    if (rl.isKeyPressed(.escape)) {
+        if (ui_state.selected_bundle != null) {
+            ui_state.selected_bundle = null;
+        }
+    }
+
+    return false;
+}
+
+/// Apply the confirmed first reward to campaign state
+pub fn applyFirstRewardChoice(campaign_state: *CampaignState, ui_state: *const FirstRewardUIState) void {
+    if (!ui_state.confirmed) return;
+
+    if (ui_state.getSelectedBundle()) |bundle| {
+        campaign_state.skill_pool.applyFirstRewardBundle(bundle);
+    }
+}

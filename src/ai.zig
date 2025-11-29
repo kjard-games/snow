@@ -57,6 +57,17 @@ pub const Config = struct {
     // Movement
     pub const SPREAD_RADIUS: f32 = 35.0;
 
+    // ========== LAST STAND SYSTEM ==========
+    /// Max time to kite before triggering last stand (3 seconds)
+    pub const MAX_KITE_TIME_MS: u32 = 3000;
+
+    /// Team health ratio threshold - if enemy team health drops below this fraction
+    /// of player team health, trigger last stand (fight is hopeless)
+    pub const LAST_STAND_HEALTH_RATIO: f32 = 0.3;
+
+    /// If outnumbered by this many or more, trigger last stand
+    pub const LAST_STAND_OUTNUMBER_THRESHOLD: i32 = 2;
+
     // ========== ENGAGEMENT SYSTEM ==========
 
     /// Default aggro radius - how close player must be to trigger combat
@@ -180,6 +191,14 @@ pub const AIState = struct {
     focus_target_id: ?EntityId = null,
     is_kiting: bool = false,
 
+    // ========== LAST STAND SYSTEM ==========
+    /// When true, AI stops retreating and fights to the death
+    /// Triggered when the fight is clearly lost (outnumbered, low team health)
+    last_stand: bool = false,
+
+    /// Time spent kiting (resets when not kiting). After threshold, triggers last stand.
+    kite_time_ms: u32 = 0,
+
     // ========== ENGAGEMENT SYSTEM ==========
 
     /// Current engagement state (for dungeon AI)
@@ -299,6 +318,12 @@ pub const WorldState = struct {
     // Enemy healer (priority target)
     enemy_healer: ?*Character = null,
 
+    // Team health totals (for last stand calculation)
+    ally_total_health: f32 = 0,
+    ally_max_health: f32 = 0,
+    enemy_total_health: f32 = 0,
+    enemy_max_health: f32 = 0,
+
     // Positions
     enemy_center: rl.Vector3 = .{ .x = 0, .y = 0, .z = 0 },
 
@@ -338,6 +363,10 @@ pub const WorldState = struct {
                     state.allies[state.ally_count] = ent;
                     state.ally_count += 1;
 
+                    // Track team health totals
+                    state.ally_total_health += ent.stats.warmth;
+                    state.ally_max_health += ent.stats.max_warmth;
+
                     const hp = ent.stats.warmth / ent.stats.max_warmth;
                     if (hp < state.lowest_ally_health) {
                         state.lowest_ally_health = hp;
@@ -348,6 +377,10 @@ pub const WorldState = struct {
                 if (state.enemy_count < MAX_ENTITIES) {
                     state.enemies[state.enemy_count] = ent;
                     state.enemy_count += 1;
+
+                    // Track team health totals
+                    state.enemy_total_health += ent.stats.warmth;
+                    state.enemy_max_health += ent.stats.max_warmth;
 
                     enemy_pos_sum.x += ent.position.x;
                     enemy_pos_sum.z += ent.position.z;
@@ -388,6 +421,33 @@ pub const WorldState = struct {
 
     fn selfHealth(self: *const WorldState) f32 {
         return self.self.stats.warmth / self.self.stats.max_warmth;
+    }
+
+    /// Check if AI's team should enter "last stand" mode
+    /// Returns true if the fight is clearly lost and fleeing is pointless
+    fn shouldLastStand(self: *const WorldState) bool {
+        // Condition 1: Heavily outnumbered (2+ more enemies than allies)
+        const ally_count_i: i32 = @intCast(self.ally_count);
+        const enemy_count_i: i32 = @intCast(self.enemy_count);
+        if (enemy_count_i - ally_count_i >= Config.LAST_STAND_OUTNUMBER_THRESHOLD) {
+            return true;
+        }
+
+        // Condition 2: Team health is much lower than enemy team health
+        // (our team has < 30% of enemy team's current health)
+        if (self.enemy_total_health > 0) {
+            const health_ratio = self.ally_total_health / self.enemy_total_health;
+            if (health_ratio < Config.LAST_STAND_HEALTH_RATIO) {
+                return true;
+            }
+        }
+
+        // Condition 3: Last one standing (all allies dead except self)
+        if (self.ally_count == 1) {
+            return true;
+        }
+
+        return false;
     }
 
     fn hasWallTo(self: *const WorldState, target: *const Character) bool {
@@ -937,13 +997,34 @@ fn tryExecuteQueued(ent: *Character, world: *const WorldState) bool {
 // MOVEMENT
 // ============================================================================
 
-fn calcMovement(world: *const WorldState, ai: *AIState, action: ?*const SkillAction) MovementIntent {
+/// Update AI's facing angle to face their current target
+/// This is important so movement penalties (backpedal/strafe) apply correctly
+fn updateFacingAngle(self: *Character, world: *const WorldState) void {
+    // Face the nearest enemy if there is one
+    if (world.nearest_enemy) |enemy| {
+        const dx = enemy.position.x - self.position.x;
+        const dz = enemy.position.z - self.position.z;
+        const dist = @sqrt(dx * dx + dz * dz);
+        if (dist > 1.0) {
+            self.facing_angle = std.math.atan2(dz, dx);
+        }
+    }
+}
+
+fn calcMovement(world: *WorldState, ai: *AIState, action: ?*const SkillAction, is_player_ally: bool) MovementIntent {
     const self = world.self;
     var move_x: f32 = 0.0;
     var move_z: f32 = 0.0;
 
-    // Priority: Move toward queued skill target
-    if (self.hasQueuedSkill()) {
+    // Update facing angle to face enemy - critical for movement penalties to work correctly
+    updateFacingAngle(self, world);
+
+    // Ally backline (healers) should NOT chase targets - they hold position and let allies come to them
+    // Otherwise they run away from combat trying to chase fleeing allies
+    const is_ally_backline = is_player_ally and ai.formation == .backline;
+
+    // Priority: Move toward queued skill target (but not for ally backline)
+    if (self.hasQueuedSkill() and !is_ally_backline) {
         if (self.casting.queued_skill) |queued| {
             for (world.entities) |*e| {
                 if (e.id == queued.target_id and e.isAlive()) {
@@ -959,22 +1040,27 @@ fn calcMovement(world: *const WorldState, ai: *AIState, action: ?*const SkillAct
             }
         }
     }
-    // Otherwise: Move toward chosen action target if out of range
+    // Otherwise: Move toward chosen action target if out of range (but not for ally backline with ally targets)
     else if (action) |a| {
         if (!a.in_range) {
             if (a.target) |target| {
-                const dx = target.position.x - self.position.x;
-                const dz = target.position.z - self.position.z;
-                const dist = @sqrt(dx * dx + dz * dz);
-                if (dist > 1.0) {
-                    move_x = dx / dist;
-                    move_z = dz / dist;
+                // Ally backline should not chase ally targets (would run away from fight)
+                // They CAN chase enemy targets (offensive skills)
+                const is_ally_target = self.isAlly(target.*);
+                if (!is_ally_backline or !is_ally_target) {
+                    const dx = target.position.x - self.position.x;
+                    const dz = target.position.z - self.position.z;
+                    const dist = @sqrt(dx * dx + dz * dz);
+                    if (dist > 1.0) {
+                        move_x = dx / dist;
+                        move_z = dz / dist;
+                    }
                 }
             }
         }
     }
 
-    // Tactical positioning when no specific target
+    // Tactical positioning when no specific target (or ally backline holding position)
     if (move_x == 0.0 and move_z == 0.0) {
         if (world.nearest_enemy) |enemy| {
             const dx = enemy.position.x - self.position.x;
@@ -987,50 +1073,109 @@ fn calcMovement(world: *const WorldState, ai: *AIState, action: ?*const SkillAct
                 const preferred = ai.formation.preferredRange(self.player_position);
                 const self_hp = world.selfHealth();
 
-                switch (ai.formation) {
-                    .frontline => {
-                        if (dist > preferred * 1.2) {
-                            move_x = dir_x;
-                            move_z = dir_z;
-                        }
-                    },
-                    .midline => {
-                        // Kite when hurt
-                        if (self_hp < Config.LOW_HEALTH or (dist < Config.MELEE_RANGE and self_hp < Config.WOUNDED)) {
-                            move_x = -dir_x;
-                            move_z = -dir_z;
-                            ai.is_kiting = true;
-                        } else if (dist > preferred * 1.5) {
-                            // Very far - full speed approach
-                            move_x = dir_x;
-                            move_z = dir_z;
-                            ai.is_kiting = false;
-                        } else if (dist > preferred * 1.1) {
-                            // Slightly out of range - approach at reduced speed
-                            move_x = dir_x * 0.7;
-                            move_z = dir_z * 0.7;
-                            ai.is_kiting = false;
-                        } else if (dist < preferred * 0.7) {
-                            move_x = -dir_x * 0.5;
-                            move_z = -dir_z * 0.5;
-                        } else {
-                            ai.is_kiting = false;
-                        }
-                    },
-                    .backline => {
-                        // Retreat when threatened
-                        if (dist < Config.THREAT_RANGE) {
-                            move_x = -dir_x;
-                            move_z = -dir_z;
-                        } else if (dist < Config.BACKLINE_SAFE_DIST) {
-                            move_x = -dir_x * 0.5;
-                            move_z = -dir_z * 0.5;
-                        } else if (dist > preferred * 1.5) {
-                            // Too far from fight - cautiously approach
-                            move_x = dir_x * 0.5;
-                            move_z = dir_z * 0.5;
-                        }
-                    },
+                // ========== LAST STAND CHECK ==========
+                // If the fight is hopeless, stop running and fight to the death
+                // Also triggers after kiting for too long (prevents endless chases)
+                if (!ai.last_stand) {
+                    // Check situational triggers
+                    if (world.shouldLastStand()) {
+                        ai.last_stand = true;
+                    }
+                    // Check kite time trigger
+                    if (ai.kite_time_ms >= Config.MAX_KITE_TIME_MS) {
+                        ai.last_stand = true;
+                    }
+                }
+
+                // Update kite timer
+                if (ai.is_kiting) {
+                    ai.kite_time_ms +|= @intFromFloat(world.dt * 1000.0);
+                } else {
+                    // Reset kite timer when not kiting
+                    ai.kite_time_ms = 0;
+                }
+
+                // In last stand mode, always advance toward the enemy
+                if (ai.last_stand) {
+                    ai.is_kiting = false;
+                    if (dist > preferred * 0.5) {
+                        // Advance aggressively
+                        move_x = dir_x;
+                        move_z = dir_z;
+                    }
+                    // If close enough, hold position and fight
+                } else {
+                    // Normal tactical behavior based on formation
+                    switch (ai.formation) {
+                        .frontline => {
+                            if (dist > preferred * 1.2) {
+                                move_x = dir_x;
+                                move_z = dir_z;
+                            }
+                        },
+                        .midline => {
+                            // Kite when hurt (but not in last stand)
+                            if (self_hp < Config.LOW_HEALTH or (dist < Config.MELEE_RANGE and self_hp < Config.WOUNDED)) {
+                                move_x = -dir_x;
+                                move_z = -dir_z;
+                                ai.is_kiting = true;
+                            } else if (dist > preferred * 1.5) {
+                                // Very far - full speed approach
+                                move_x = dir_x;
+                                move_z = dir_z;
+                                ai.is_kiting = false;
+                            } else if (dist > preferred * 1.1) {
+                                // Slightly out of range - approach at reduced speed
+                                move_x = dir_x * 0.7;
+                                move_z = dir_z * 0.7;
+                                ai.is_kiting = false;
+                            } else if (dist < preferred * 0.7) {
+                                move_x = -dir_x * 0.5;
+                                move_z = -dir_z * 0.5;
+                            } else {
+                                ai.is_kiting = false;
+                            }
+                        },
+                        .backline => {
+                            // Ally backline (healers on player team): stay near allies, don't kite away
+                            // They should maintain healing range but not run away scared
+                            if (is_player_ally) {
+                                // Ally healer behavior: stay at preferred range, approach if too far
+                                if (dist > preferred * 1.2) {
+                                    // Too far - approach to get in healing range
+                                    move_x = dir_x * 0.6;
+                                    move_z = dir_z * 0.6;
+                                    ai.is_kiting = false;
+                                } else if (dist < preferred * 0.5) {
+                                    // Too close - back up slightly but don't flee
+                                    move_x = -dir_x * 0.3;
+                                    move_z = -dir_z * 0.3;
+                                    ai.is_kiting = false; // Not really kiting, just repositioning
+                                } else {
+                                    // Good range - hold position
+                                    ai.is_kiting = false;
+                                }
+                            } else {
+                                // Enemy backline behavior: retreat when threatened (original behavior)
+                                if (dist < Config.THREAT_RANGE) {
+                                    move_x = -dir_x;
+                                    move_z = -dir_z;
+                                    ai.is_kiting = true;
+                                } else if (dist < Config.BACKLINE_SAFE_DIST) {
+                                    move_x = -dir_x * 0.5;
+                                    move_z = -dir_z * 0.5;
+                                    ai.is_kiting = true;
+                                } else if (dist > preferred * 1.5) {
+                                    // Too far from fight - cautiously approach
+                                    move_x = dir_x * 0.5;
+                                    move_z = dir_z * 0.5;
+                                    ai.is_kiting = false;
+                                } else {
+                                    ai.is_kiting = false;
+                                }
+                            }
+                        },
+                    }
                 }
             }
         }
@@ -1098,16 +1243,21 @@ fn calcMovement(world: *const WorldState, ai: *AIState, action: ?*const SkillAct
         move_z /= mag;
     }
 
-    // Convert to local space
+    // Convert world-space movement to local-space for MovementIntent
+    // This is the INVERSE of the rotation in applyMovement
+    // applyMovement does: world = [cos θ, sin θ; -sin θ, cos θ] * local
+    // So we need: local = [cos θ, -sin θ; sin θ, cos θ] * world
     const cos_f = @cos(self.facing_angle);
     const sin_f = @sin(self.facing_angle);
 
-    return .{
-        .local_x = move_x * cos_f + move_z * sin_f,
-        .local_z = -move_x * sin_f + move_z * cos_f,
+    const result = MovementIntent{
+        .local_x = move_x * cos_f - move_z * sin_f,
+        .local_z = move_x * sin_f + move_z * cos_f,
         .facing_angle = self.facing_angle,
         .apply_penalties = true,
     };
+
+    return result;
 }
 
 fn calcSpread(self: *const Character, allies: []const *Character, count: usize) rl.Vector3 {
@@ -1697,12 +1847,24 @@ pub fn updateAI(
     // Convert delta_time to ms for engagement timers
     const delta_time_ms: u32 = @intFromFloat(delta_time * 1000.0);
 
+    // Find the player's team for ally AI behavior
+    var player_team: ?entity_types.Team = null;
+    for (entities) |*ent| {
+        if (ent.id == controlled_entity_id) {
+            player_team = ent.team;
+            break;
+        }
+    }
+
     for (entities, 0..) |*ent, i| {
         if (!ent.isAlive()) continue;
         if (ent.id == controlled_entity_id) continue;
         if (i >= ai_states.len) continue;
 
         var ai = &ai_states[i];
+
+        // Check if this AI is on the player's team (ally AI)
+        const is_player_ally = if (player_team) |pt| ent.team == pt else false;
 
         // Initialize if needed
         if (ai.role == .damage_dealer and ai.formation == .midline and ent.player_position != .pitcher and ent.player_position != .fielder) {
@@ -1754,7 +1916,7 @@ pub fn updateAI(
 
         // Movement - ALWAYS calculate and apply movement when idle (not just when action chosen)
         if (ent.casting.state == .idle) {
-            const intent = calcMovement(&world, ai, if (chosen_action) |*a| a else null);
+            const intent = calcMovement(&world, ai, if (chosen_action) |*a| a else null, is_player_ally);
             movement.applyMovement(ent, intent, entities, null, null, delta_time, terrain_grid);
         }
     }

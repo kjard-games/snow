@@ -82,10 +82,12 @@ pub const CampaignUIState = struct {
     // Scrolling for skill pool
     skill_pool_scroll: f32 = 0,
 
-    // Character creation state
-    creation_step: u8 = 0, // 0=player school, 1=player position, 2=friend school, 3=friend position, 4=confirm
+    // Character creation state (simplified: 3 steps)
+    // 0=player school, 1=player position, 2=confirm (friend auto-generated)
+    creation_step: u8 = 0,
     selected_school: School = .public_school,
     selected_position: Position = .fielder,
+    // Friend is auto-generated: Thermos if player isn't, else random non-Thermos
     friend_school: School = .waldorf,
     friend_position: Position = .thermos,
 
@@ -728,7 +730,7 @@ fn drawPoolSkill(skill: *const Skill, x: f32, y: f32, member_school: School, mem
 // CHARACTER CREATION UI
 // ============================================================================
 
-/// Draw character creation screen
+/// Draw character creation screen (simplified 3-step flow)
 pub fn drawCharacterCreation(ui_state: *CampaignUIState) void {
     const screen_width = rl.getScreenWidth();
     const screen_height = rl.getScreenHeight();
@@ -738,32 +740,30 @@ pub fn drawCharacterCreation(ui_state: *CampaignUIState) void {
     rl.clearBackground(rl.Color.init(25, 30, 40, 255));
 
     // Title
-    const title = "CREATE YOUR PARTY";
+    const title = "CREATE YOUR CHARACTER";
     const title_width = rl.measureText(title, 40);
     rl.drawText(title, toI32(center_x) - @divTrunc(title_width, 2), 40, 40, rl.Color.white);
 
-    // Subtitle based on step
+    // Subtitle based on step (3 steps: school, position, confirm)
     const step_titles = [_][:0]const u8{
         "Choose Your School",
         "Choose Your Position",
-        "Choose Friend's School",
-        "Choose Friend's Position",
-        "Confirm Your Party",
+        "Ready to Go!",
     };
-    const subtitle = step_titles[@min(ui_state.creation_step, 4)];
+    const subtitle = step_titles[@min(ui_state.creation_step, 2)];
     const subtitle_width = rl.measureText(subtitle, 24);
     rl.drawText(subtitle, toI32(center_x) - @divTrunc(subtitle_width, 2), 90, 24, rl.Color.yellow);
 
-    // Draw step indicator
+    // Draw step indicator (3 steps)
     const step_y: f32 = 130;
-    for (0..5) |i| {
-        const step_x = center_x - 100 + @as(f32, @floatFromInt(i)) * 50;
+    for (0..3) |i| {
+        const step_x = center_x - 75 + @as(f32, @floatFromInt(i)) * 75;
         const is_current = i == ui_state.creation_step;
         const is_complete = i < ui_state.creation_step;
         const color = if (is_current) rl.Color.yellow else if (is_complete) rl.Color.green else rl.Color.gray;
         rl.drawCircle(toI32(step_x), toI32(step_y), if (is_current) 12 else 8, color);
-        if (i < 4) {
-            rl.drawLine(toI32(step_x + 12), toI32(step_y), toI32(step_x + 38), toI32(step_y), rl.Color.gray);
+        if (i < 2) {
+            rl.drawLine(toI32(step_x + 12), toI32(step_y), toI32(step_x + 63), toI32(step_y), rl.Color.gray);
         }
     }
 
@@ -772,16 +772,14 @@ pub fn drawCharacterCreation(ui_state: *CampaignUIState) void {
     switch (ui_state.creation_step) {
         0 => drawSchoolSelection(ui_state.selected_school, center_x, content_y, true),
         1 => drawPositionSelection(ui_state.selected_position, center_x, content_y, true),
-        2 => drawSchoolSelection(ui_state.friend_school, center_x, content_y, false),
-        3 => drawPositionSelection(ui_state.friend_position, center_x, content_y, false),
-        4 => drawPartyConfirmation(ui_state, center_x, content_y),
+        2 => drawPartyConfirmation(ui_state, center_x, content_y),
         else => {},
     }
 
     // Navigation instructions
     const nav_y = screen_height - 60;
-    if (ui_state.creation_step < 4) {
-        rl.drawText("[W/S or Up/Down] Select  [Enter] Confirm  [Esc] Back", toI32(center_x) - 220, nav_y, 16, palette.UI.TEXT_SECONDARY);
+    if (ui_state.creation_step < 2) {
+        rl.drawText("[Arrow Keys] Select  [Enter] Confirm  [Esc] Back", toI32(center_x) - 200, nav_y, 16, palette.UI.TEXT_SECONDARY);
     } else {
         rl.drawText("[Enter] Start Campaign  [Esc] Go Back", toI32(center_x) - 150, nav_y, 16, palette.UI.TEXT_SECONDARY);
     }
@@ -940,7 +938,7 @@ fn drawPositionCard(p: Position, x: f32, y: f32, width: f32, height: f32, is_sel
     }
 }
 
-/// Draw party confirmation screen
+/// Draw party confirmation screen (shows auto-generated best friend)
 fn drawPartyConfirmation(ui_state: *CampaignUIState, center_x: f32, start_y: f32) void {
     // Player card
     const card_width: f32 = 300;
@@ -953,11 +951,20 @@ fn drawPartyConfirmation(ui_state: *CampaignUIState, center_x: f32, start_y: f32
     // Player
     drawConfirmationCard("YOU", ui_state.selected_school, ui_state.selected_position, player_x, start_y, card_width, card_height);
 
-    // Friend
+    // Friend (auto-generated)
     drawConfirmationCard("BEST FRIEND", ui_state.friend_school, ui_state.friend_position, friend_x, start_y, card_width, card_height);
 
+    // Explain auto-generated friend
+    const friend_y = start_y + card_height + 15;
+    const friend_explain = if (ui_state.selected_position == .thermos)
+        "(Your friend chose a different role since you're the healer)"
+    else
+        "(Your friend always brings a thermos - someone has to keep everyone warm!)";
+    const explain_width = rl.measureText(friend_explain, 12);
+    rl.drawText(friend_explain, toI32(center_x) - @divTrunc(explain_width, 2), toI32(friend_y), 12, palette.UI.TEXT_SECONDARY);
+
     // Mission briefing
-    const brief_y = start_y + card_height + 30;
+    const brief_y = start_y + card_height + 45;
     const brief = "MISSION: Find your little brother in the neighborhood snowball war";
     const brief_width = rl.measureText(brief, 16);
     rl.drawText(brief, toI32(center_x) - @divTrunc(brief_width, 2), toI32(brief_y), 16, rl.Color.gold);
@@ -1013,7 +1020,7 @@ fn drawConfirmationCard(label: [:0]const u8, s: School, p: Position, x: f32, y: 
     rl.drawText(range_text, xi + 20, yi + 145, 11, palette.UI.TEXT_SECONDARY);
 }
 
-/// Handle input for character creation
+/// Handle input for character creation (simplified 3-step flow)
 /// Returns true if creation is complete and should start campaign
 pub fn handleCharacterCreationInput(ui_state: *CampaignUIState) bool {
     switch (ui_state.creation_step) {
@@ -1044,6 +1051,8 @@ pub fn handleCharacterCreationInput(ui_state: *CampaignUIState) bool {
                 ui_state.selected_position = nextPosition(ui_state.selected_position);
             }
             if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
+                // Auto-generate best friend before showing confirmation
+                autoGenerateBestFriend(ui_state);
                 ui_state.creation_step = 2;
             }
             if (rl.isKeyPressed(.escape)) {
@@ -1051,47 +1060,40 @@ pub fn handleCharacterCreationInput(ui_state: *CampaignUIState) bool {
             }
         },
         2 => {
-            // School selection for friend
-            if (rl.isKeyPressed(.up) or rl.isKeyPressed(.w) or rl.isKeyPressed(.left) or rl.isKeyPressed(.a)) {
-                ui_state.friend_school = prevSchool(ui_state.friend_school);
-            }
-            if (rl.isKeyPressed(.down) or rl.isKeyPressed(.s) or rl.isKeyPressed(.right) or rl.isKeyPressed(.d)) {
-                ui_state.friend_school = nextSchool(ui_state.friend_school);
-            }
+            // Confirmation - just confirm or go back
             if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
-                ui_state.creation_step = 3;
+                return true; // Start campaign
             }
             if (rl.isKeyPressed(.escape)) {
                 ui_state.creation_step = 1;
             }
         },
-        3 => {
-            // Position selection for friend
-            if (rl.isKeyPressed(.up) or rl.isKeyPressed(.w) or rl.isKeyPressed(.left) or rl.isKeyPressed(.a)) {
-                ui_state.friend_position = prevPosition(ui_state.friend_position);
-            }
-            if (rl.isKeyPressed(.down) or rl.isKeyPressed(.s) or rl.isKeyPressed(.right) or rl.isKeyPressed(.d)) {
-                ui_state.friend_position = nextPosition(ui_state.friend_position);
-            }
-            if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
-                ui_state.creation_step = 4;
-            }
-            if (rl.isKeyPressed(.escape)) {
-                ui_state.creation_step = 2;
-            }
-        },
-        4 => {
-            // Confirmation
-            if (rl.isKeyPressed(.enter) or rl.isKeyPressed(.space)) {
-                return true; // Start campaign
-            }
-            if (rl.isKeyPressed(.escape)) {
-                ui_state.creation_step = 3;
-            }
-        },
         else => {},
     }
     return false;
+}
+
+/// Auto-generate best friend based on player's choice
+/// Rule: Friend is Thermos if player isn't, otherwise random non-Thermos position
+fn autoGenerateBestFriend(ui_state: *CampaignUIState) void {
+    // Friend position: Thermos if player isn't, else Fielder (safe generalist)
+    if (ui_state.selected_position == .thermos) {
+        // Player is healer, friend picks Fielder (balanced generalist)
+        ui_state.friend_position = .fielder;
+    } else {
+        // Player isn't healer, friend brings the Thermos
+        ui_state.friend_position = .thermos;
+    }
+
+    // Friend school: Pick something complementary to player
+    // Simple logic: cycle through schools to get variety
+    ui_state.friend_school = switch (ui_state.selected_school) {
+        .public_school => .waldorf, // Aggression + Rhythm
+        .private_school => .montessori, // Burst + Adaptation
+        .montessori => .public_school, // Adaptation + Aggression
+        .homeschool => .waldorf, // Sacrifice + Rhythm (support synergy)
+        .waldorf => .public_school, // Rhythm + Aggression
+    };
 }
 
 fn nextSchool(current: School) School {

@@ -459,3 +459,70 @@ pub fn drawSkillIcon(x: f32, y: f32, size: f32, skill: *const Skill, school: Sch
     // Generate hybrid glyph icon from skill name and type
     drawHybridGlyphIcon(x, y, size, skill.name, skill.skill_type, base_color);
 }
+
+/// Draw skill icon with multiple school/position pools to check
+/// Used for bundle rewards that contain skills from multiple sources (player + friend)
+pub fn drawSkillIconMultiSource(
+    x: f32,
+    y: f32,
+    size: f32,
+    skill: *const Skill,
+    player_school: School,
+    player_position: Position,
+    friend_school: School,
+    friend_position: Position,
+    can_afford: bool,
+) void {
+    // Check all 4 pools to find the skill's source and get the correct color
+
+    // Check player's position pool
+    for (player_position.getSkills()) |*pos_skill| {
+        if (std.mem.eql(u8, pos_skill.name, skill.name)) {
+            const base_color = adjustForAfford(getPositionColor(player_position), can_afford);
+            drawHybridGlyphIcon(x, y, size, skill.name, skill.skill_type, base_color);
+            return;
+        }
+    }
+
+    // Check player's school pool
+    for (player_school.getSkills()) |*school_skill| {
+        if (std.mem.eql(u8, school_skill.name, skill.name)) {
+            const base_color = adjustForAfford(getSchoolColor(player_school), can_afford);
+            drawHybridGlyphIcon(x, y, size, skill.name, skill.skill_type, base_color);
+            return;
+        }
+    }
+
+    // Check friend's position pool
+    for (friend_position.getSkills()) |*pos_skill| {
+        if (std.mem.eql(u8, pos_skill.name, skill.name)) {
+            const base_color = adjustForAfford(getPositionColor(friend_position), can_afford);
+            drawHybridGlyphIcon(x, y, size, skill.name, skill.skill_type, base_color);
+            return;
+        }
+    }
+
+    // Check friend's school pool
+    for (friend_school.getSkills()) |*school_skill| {
+        if (std.mem.eql(u8, school_skill.name, skill.name)) {
+            const base_color = adjustForAfford(getSchoolColor(friend_school), can_afford);
+            drawHybridGlyphIcon(x, y, size, skill.name, skill.skill_type, base_color);
+            return;
+        }
+    }
+
+    // Fallback: gray (skill not found in any pool)
+    const base_color = adjustForAfford(palette.POSITION.FALLBACK, can_afford);
+    drawHybridGlyphIcon(x, y, size, skill.name, skill.skill_type, base_color);
+}
+
+/// Helper to dim color when skill can't be afforded
+fn adjustForAfford(color: rl.Color, can_afford: bool) rl.Color {
+    if (can_afford) return color;
+    return rl.Color{
+        .r = @intFromFloat(@as(f32, @floatFromInt(color.r)) * 0.3),
+        .g = @intFromFloat(@as(f32, @floatFromInt(color.g)) * 0.3),
+        .b = @intFromFloat(@as(f32, @floatFromInt(color.b)) * 0.3),
+        .a = color.a,
+    };
+}

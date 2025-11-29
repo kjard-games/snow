@@ -18,6 +18,7 @@ const Character = @import("character.zig").Character;
 const CampaignState = campaign.CampaignState;
 const CampaignUIState = campaign_ui.CampaignUIState;
 const SkillCaptureUIState = skill_capture.SkillCaptureUIState;
+const FirstRewardUIState = skill_capture.FirstRewardUIState;
 const SkillCaptureChoice = campaign.SkillCaptureChoice;
 const EncounterNode = campaign.EncounterNode;
 const EncounterConfig = campaign.EncounterConfig;
@@ -98,6 +99,7 @@ pub const Phase = enum {
     campaign_overworld, // Viewing map, selecting encounters
     campaign_encounter, // In combat encounter
     campaign_skill_capture, // Post-boss skill capture reward
+    campaign_first_reward, // Post-tutorial first bundle selection
     campaign_victory, // Goal achieved
     campaign_defeat, // Party wiped or faction lost
 
@@ -277,8 +279,12 @@ fn generateEncounterFromNode(node: EncounterNode, party_size: usize, rng: std.Ra
     const cr = node.challenge_rating;
     const is_boss = node.encounter_type == .boss_capture;
 
+    // Tutorial encounter (CR 1) is extra easy - just one weak enemy to learn the ropes
+    const is_tutorial = cr == 1;
+
     // Generate affixes based on challenge rating
     // Higher CR = more/stronger affixes (field conditions get tougher!)
+    // Tutorial (CR 1) and CR 2: No affixes - keep it simple for newcomers
     var affix_idx: usize = 0;
     if (cr >= 3) {
         // CR 3+: Add layered_up (enemies wearing more layers = tankier)
@@ -321,7 +327,9 @@ fn generateEncounterFromNode(node: EncounterNode, party_size: usize, rng: std.Ra
     runtime_enc.affix_count = affix_idx;
 
     // Calculate enemy count based on challenge rating and party size
-    const base_enemies: usize = if (is_boss) 1 else @min(6, party_size + (cr / 3));
+    // Tutorial: Just 1 enemy so player can learn without feeling overwhelmed
+    // Normal: party_size + (cr / 3), capped at 6
+    const base_enemies: usize = if (is_boss) 1 else if (is_tutorial) 1 else @min(6, party_size + (cr / 3));
 
     // Generate enemy specs
     var enemy_idx: usize = 0;
@@ -329,17 +337,18 @@ fn generateEncounterFromNode(node: EncounterNode, party_size: usize, rng: std.Ra
         if (enemy_idx >= 8) break;
 
         const is_boss_enemy = is_boss and i == 0;
-        const difficulty: u8 = if (is_boss_enemy) 10 else @min(5, 1 + cr / 2);
+        const difficulty: u8 = if (is_boss_enemy) 10 else if (is_tutorial) 1 else @min(5, 1 + cr / 2);
 
         // Vary schools and positions based on challenge rating
-        const enemy_school: School = switch (i % 5) {
+        // Tutorial enemy: always a Fielder (straightforward attacker, no heals)
+        const enemy_school: School = if (is_tutorial) .public_school else switch (i % 5) {
             0 => .public_school,
             1 => .private_school,
             2 => .montessori,
             3 => .homeschool,
             else => .waldorf,
         };
-        const enemy_position: Position = switch (i % 6) {
+        const enemy_position: Position = if (is_tutorial) .fielder else switch (i % 6) {
             0 => .pitcher,
             1 => .fielder,
             2 => .shoveler,
@@ -348,12 +357,17 @@ fn generateEncounterFromNode(node: EncounterNode, party_size: usize, rng: std.Ra
             else => .thermos,
         };
 
+        // Tutorial enemy: significantly weaker (60% warmth, 50% damage)
+        // This ensures players can win even with basic starter skills
+        const warmth_mult: f32 = if (is_boss_enemy) 3.0 else if (is_tutorial) 0.6 else 0.8 + (@as(f32, @floatFromInt(cr)) * 0.1);
+        const damage_mult: f32 = if (is_boss_enemy) 1.5 else if (is_tutorial) 0.5 else 0.8 + (@as(f32, @floatFromInt(cr)) * 0.05);
+
         runtime_enc.enemies_storage[enemy_idx] = EnemySpec{
-            .name = if (is_boss_enemy) "Boss" else "Enemy",
+            .name = if (is_boss_enemy) "Boss" else if (is_tutorial) "Lost Kid" else "Enemy",
             .school = enemy_school,
             .position = enemy_position,
-            .warmth_multiplier = if (is_boss_enemy) 3.0 else 0.8 + (@as(f32, @floatFromInt(cr)) * 0.1),
-            .damage_multiplier = if (is_boss_enemy) 1.5 else 0.8 + (@as(f32, @floatFromInt(cr)) * 0.05),
+            .warmth_multiplier = warmth_mult,
+            .damage_multiplier = damage_mult,
             .scale = if (is_boss_enemy) 1.5 else 1.0,
             .difficulty_rating = difficulty,
             .is_champion = is_boss_enemy,
@@ -404,6 +418,7 @@ pub const GameMode = struct {
     campaign_state: ?*CampaignState,
     campaign_ui_state: CampaignUIState,
     skill_capture_ui_state: ?SkillCaptureUIState,
+    first_reward_ui_state: ?FirstRewardUIState,
     current_encounter_node: ?EncounterNode,
     current_encounter_block_id: ?u32,
 
@@ -448,6 +463,7 @@ pub const GameMode = struct {
             .campaign_state = null,
             .campaign_ui_state = .{},
             .skill_capture_ui_state = null,
+            .first_reward_ui_state = null,
             .current_encounter_node = null,
             .current_encounter_block_id = null,
             .current_runtime_encounter = null,
@@ -798,9 +814,9 @@ pub const GameMode = struct {
             .campaign_setup => {
                 // Character creation UI
                 if (campaign_ui.handleCharacterCreationInput(&self.campaign_ui_state)) {
-                    // Creation complete - setup party with selected options
+                    // Creation complete - setup party with selected options and auto-equipped starter skills
                     if (self.campaign_state) |cs| {
-                        cs.setupPartyWithPositions(
+                        cs.setupPartyWithStarterSkills(
                             "Hero",
                             self.campaign_ui_state.selected_school,
                             self.campaign_ui_state.selected_position,
@@ -842,7 +858,7 @@ pub const GameMode = struct {
                 // Update combat
                 if (self.game_state) |gs| {
                     // Track which enemies were alive before update (for death processing)
-                    var was_alive: [MAX_COMBAT_CHARS]bool = [_]bool{false} ** MAX_COMBAT_CHARS;
+                    var was_alive: [game_state.MAX_ENTITIES]bool = [_]bool{false} ** game_state.MAX_ENTITIES;
                     for (&gs.entities, 0..) |*ent, i| {
                         was_alive[i] = ent.isAlive() and ent.team != .blue;
                     }
@@ -885,6 +901,25 @@ pub const GameMode = struct {
                     }
                 } else {
                     // No skill capture, just advance
+                    self.advanceCampaignTurn();
+                }
+            },
+            .campaign_first_reward => {
+                // Update first reward UI animation
+                if (self.first_reward_ui_state) |*ui_state| {
+                    ui_state.update(rl.getFrameTime());
+
+                    // Handle input
+                    if (skill_capture.handleFirstRewardInput(ui_state)) {
+                        // Choice confirmed - apply it
+                        if (self.campaign_state) |cs| {
+                            skill_capture.applyFirstRewardChoice(cs, ui_state);
+                        }
+                        self.first_reward_ui_state = null;
+                        self.advanceCampaignTurn();
+                    }
+                } else {
+                    // No first reward UI, just advance
                     self.advanceCampaignTurn();
                 }
             },
@@ -933,6 +968,7 @@ pub const GameMode = struct {
         }
         self.campaign_ui_state.reset();
         self.skill_capture_ui_state = null;
+        self.first_reward_ui_state = null;
         self.current_encounter_node = null;
     }
 
@@ -1153,7 +1189,7 @@ pub const GameMode = struct {
 
     /// Process enemy deaths for affix effects (bolstering, bursting, sanguine)
     /// Compares current alive state with previous state to detect deaths this frame
-    fn processEnemyDeaths(self: *Self, gs: *GameState, was_alive: *const [MAX_COMBAT_CHARS]bool) void {
+    fn processEnemyDeaths(self: *Self, gs: *GameState, was_alive: *const [game_state.MAX_ENTITIES]bool) void {
         var processor = &(self.affix_processor orelse return);
 
         // Check each entity for deaths
@@ -1345,9 +1381,38 @@ pub const GameMode = struct {
             }
 
             if (victory) {
+                // Check if this is the first victory (tutorial encounter)
+                // If so, show the first reward bundle selection instead of normal skill capture
+                const is_first_victory = self.matches_won == 0;
+
                 self.matches_won += 1;
 
-                // Check for skill capture reward
+                // First victory gets the special "pick 1 of 3 bundles" reward
+                if (is_first_victory) {
+                    // Get player and friend info from party
+                    const player = cs.party.members[0] orelse {
+                        self.cleanupMatch();
+                        self.advanceCampaignTurn();
+                        return;
+                    };
+                    const friend = cs.party.members[1] orelse {
+                        self.cleanupMatch();
+                        self.advanceCampaignTurn();
+                        return;
+                    };
+
+                    self.first_reward_ui_state = FirstRewardUIState.init(
+                        player.school_type,
+                        player.position_type,
+                        friend.school_type,
+                        friend.position_type,
+                    );
+                    self.cleanupMatch();
+                    self.phase = .campaign_first_reward;
+                    return;
+                }
+
+                // Check for skill capture reward (normal encounters)
                 if (node.skill_capture_tier != .none) {
                     const choice = SkillCaptureChoice.generate(
                         node.skill_capture_tier,
@@ -1486,6 +1551,23 @@ pub const GameMode = struct {
                     const title = "VICTORY!";
                     const title_width = rl.measureText(title, 50);
                     rl.drawText(title, center_x - @divTrunc(title_width, 2), center_y - 50, 50, rl.Color.green);
+                    rl.drawText("[Enter] Continue", center_x - 70, center_y + 30, 20, rl.Color.white);
+                }
+            },
+            .campaign_first_reward => {
+                // Draw overworld dimmed in background
+                if (self.campaign_state) |cs| {
+                    campaign_ui.drawCampaignUI(cs, &self.campaign_ui_state);
+                }
+                // Draw first reward selection overlay
+                if (self.first_reward_ui_state) |*ui_state| {
+                    skill_capture.drawFirstRewardScreen(ui_state);
+                } else {
+                    // Fallback: simple "continue" message
+                    rl.drawRectangle(0, 0, screen_width, screen_height, rl.Color.init(0, 0, 0, 180));
+                    const title = "FIRST VICTORY!";
+                    const title_width = rl.measureText(title, 50);
+                    rl.drawText(title, center_x - @divTrunc(title_width, 2), center_y - 50, 50, rl.Color.gold);
                     rl.drawText("[Enter] Continue", center_x - 70, center_y + 30, 20, rl.Color.white);
                 }
             },
