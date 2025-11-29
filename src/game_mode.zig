@@ -278,19 +278,19 @@ fn generateEncounterFromNode(node: EncounterNode, party_size: usize, rng: std.Ra
     const is_boss = node.encounter_type == .boss_capture;
 
     // Generate affixes based on challenge rating
-    // Higher CR = more/stronger affixes
+    // Higher CR = more/stronger affixes (field conditions get tougher!)
     var affix_idx: usize = 0;
     if (cr >= 3) {
-        // CR 3+: Add fortified (enemies tankier)
+        // CR 3+: Add layered_up (enemies wearing more layers = tankier)
         runtime_enc.affixes_storage[affix_idx] = .{
-            .affix = .fortified,
+            .affix = .layered_up,
             .intensity = 0.8 + (@as(f32, @floatFromInt(cr)) * 0.05),
         };
         affix_idx += 1;
     }
     if (cr >= 5) {
-        // CR 5+: Add a random combat modifier
-        const combat_affixes = [_]encounter.EncounterAffix{ .bolstering, .raging, .sanguine };
+        // CR 5+: Add a random combat modifier (how the other kids fight)
+        const combat_affixes = [_]encounter.EncounterAffix{ .rally, .tantrum, .snow_angels };
         const selected = combat_affixes[rng.intRangeAtMost(usize, 0, combat_affixes.len - 1)];
         runtime_enc.affixes_storage[affix_idx] = .{
             .affix = selected,
@@ -299,8 +299,8 @@ fn generateEncounterFromNode(node: EncounterNode, party_size: usize, rng: std.Ra
         affix_idx += 1;
     }
     if (cr >= 7) {
-        // CR 7+: Add an environmental affix
-        const env_affixes = [_]encounter.EncounterAffix{ .volcanic, .quaking, .storming };
+        // CR 7+: Add an environmental affix (weather/field conditions)
+        const env_affixes = [_]encounter.EncounterAffix{ .slush_pits, .icy_patches, .blizzard };
         const selected = env_affixes[rng.intRangeAtMost(usize, 0, env_affixes.len - 1)];
         runtime_enc.affixes_storage[affix_idx] = .{
             .affix = selected,
@@ -309,10 +309,10 @@ fn generateEncounterFromNode(node: EncounterNode, party_size: usize, rng: std.Ra
         affix_idx += 1;
     }
     if (is_boss) {
-        // Bosses always get tyrannical
+        // Bosses always get snowpocalypse (they're THE challenge)
         if (affix_idx < 4) {
             runtime_enc.affixes_storage[affix_idx] = .{
-                .affix = .tyrannical,
+                .affix = .snowpocalypse,
                 .intensity = 1.2,
             };
             affix_idx += 1;

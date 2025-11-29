@@ -1071,8 +1071,8 @@ pub const EncounterBuilder = struct {
     fn buildBossFromConfig(self: *EncounterBuilder, config: BossConfig, spawn_pos: rl.Vector3) Character {
         var char = self.buildEnemyFromSpec(config.base, spawn_pos);
 
-        // Bosses get additional scaling from tyrannical affix
-        if (self.hasAffix(.tyrannical)) {
+        // Bosses get additional scaling from snowpocalypse affix (they're THE challenge!)
+        if (self.hasAffix(.snowpocalypse)) {
             char.stats.warmth *= 1.3;
             char.stats.max_warmth *= 1.3;
         }
@@ -1186,8 +1186,8 @@ pub const EncounterBuilder = struct {
         var mult: f32 = 1.0;
         for (self.active_affixes) |active| {
             switch (active.affix) {
-                .fortified => mult *= 1.2 * active.intensity,
-                .fortified_trash => mult *= 1.2 * active.intensity,
+                .layered_up => mult *= 1.2 * active.intensity, // Extra layers = more warmth
+                .horde => mult *= 1.2 * active.intensity, // More enemies but individually tankier too
                 else => {},
             }
         }

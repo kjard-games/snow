@@ -2,11 +2,30 @@
 // AFFIX PROCESSOR
 // ============================================================================
 //
-// Runtime processing for encounter affixes. Affixes modify combat in various ways:
-// - Enemy stat bonuses (fortified, tyrannical) - applied at spawn time
-// - Death triggers (bolstering, bursting, sanguine) - processed on enemy death
-// - Combat modifiers (raging, grievous, necrotic) - checked each tick
-// - Environmental effects (volcanic, quaking, storming) - spawn hazards periodically
+// Runtime processing for encounter affixes (field conditions in a kids' snowball war).
+// Affixes modify combat in various ways:
+//
+// ENEMY AFFIXES (how the other kids fight):
+// - bundled: Enemies have extra warmth (wearing more layers)
+// - rally: Enemies get fired up when allies go down (applies fire_inside cozy)
+// - tantrum: Enemies throw harder when losing (enrage below 30% warmth)
+// - snow_angels: Defeated enemies leave cozy zones that heal their team
+// - powder_burst: Defeated enemies throw one last desperate volley
+// - pep_talk: Enemies buff nearby allies (applies bundled_up cozy)
+//
+// ENVIRONMENTAL AFFIXES (weather and field conditions):
+// - slush_pits: Random slush puddles spawn (applies slippery chill)
+// - icy_patches: Periodic mass slip-and-fall (applies knocked_down chill)
+// - blizzard: Gusts of wind push players around
+// - soaked: Everyone's clothes are wet - healing reduced (healing_reduction)
+// - freezing: Bitter cold - warmth recovery reduced (applies soggy DoT)
+// - snowpocalypse: Bosses/leaders are extra tough
+// - horde: More enemies than usual
+//
+// PLAYER AFFIXES (positive field conditions):
+// - momentum: Players get fired up from victories (buff on kill)
+// - ambush: Some enemies hidden in snow until engaged
+// - supply_drops: Defeated enemies drop hot cocoa power-ups
 //
 // ============================================================================
 
@@ -16,6 +35,7 @@ const character = @import("character.zig");
 const encounter = @import("encounter.zig");
 const ai = @import("ai.zig");
 const entity = @import("entity.zig");
+const skills = @import("skills.zig");
 
 const Character = character.Character;
 const EncounterAffix = encounter.EncounterAffix;
@@ -23,20 +43,30 @@ const ActiveAffix = encounter.ActiveAffix;
 const HazardZone = encounter.HazardZone;
 const HazardType = encounter.HazardType;
 const Team = entity.Team;
+const Chill = skills.Chill;
+const Cozy = skills.Cozy;
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 
-const VOLCANIC_SPAWN_INTERVAL_MS: u32 = 8000; // Spawn volcanic patch every 8 seconds
-const QUAKING_INTERVAL_MS: u32 = 12000; // Quake every 12 seconds
-const STORMING_SPAWN_INTERVAL_MS: u32 = 6000; // Spawn tornado every 6 seconds
-const RAGING_THRESHOLD: f32 = 0.30; // Enemies enrage below 30% health
-const BOLSTERING_HEAL_PERCENT: f32 = 0.15; // Heal 15% of max HP when ally dies
-const BURSTING_DAMAGE: f32 = 20.0; // Damage per stack on burst
-const SANGUINE_POOL_DURATION_MS: u32 = 10000; // Healing pool lasts 10 seconds
-const SANGUINE_HEAL_PER_TICK: f32 = 8.0; // Heal per tick in pool
-const NECROTIC_HEALING_REDUCTION: f32 = 0.5; // 50% healing reduction
+// Environmental affix timings
+const SLUSH_PITS_SPAWN_INTERVAL_MS: u32 = 8000; // Spawn slush pit every 8 seconds
+const ICY_PATCHES_INTERVAL_MS: u32 = 12000; // Mass slip every 12 seconds
+const BLIZZARD_SPAWN_INTERVAL_MS: u32 = 6000; // Wind gust every 6 seconds
+
+// Combat modifier thresholds
+const TANTRUM_THRESHOLD: f32 = 0.30; // Enemies enrage below 30% warmth
+
+// Death trigger values
+const RALLY_BUFF_DURATION_MS: u32 = 10000; // fire_inside lasts 10 seconds
+const RALLY_BUFF_STACKS: u8 = 2; // 2 stacks of fire_inside
+const POWDER_BURST_DAMAGE: f32 = 20.0; // Damage per stack on burst
+const SNOW_ANGELS_POOL_DURATION_MS: u32 = 10000; // Healing pool lasts 10 seconds
+const SNOW_ANGELS_HEAL_PER_TICK: f32 = 8.0; // Heal per tick in pool
+
+// Healing reduction affixes
+const WET_CLOTHES_HEALING_REDUCTION: f32 = 0.5; // 50% healing reduction when clothes are wet
 
 // ============================================================================
 // AFFIX STATE
@@ -48,19 +78,19 @@ pub const AffixProcessor = struct {
     affixes: []const ActiveAffix,
 
     /// Timers for periodic effects (indexed by affix)
-    volcanic_timer_ms: u32 = 0,
-    quaking_timer_ms: u32 = 0,
-    storming_timer_ms: u32 = 0,
+    slush_pits_timer_ms: u32 = 0,
+    icy_patches_timer_ms: u32 = 0,
+    blizzard_timer_ms: u32 = 0,
 
-    /// Track which enemies have enraged (for raging affix)
+    /// Track which enemies have entered tantrum (for tantrum affix)
     /// Bitfield - supports up to 64 enemies
-    enraged_enemies: u64 = 0,
+    tantrum_enemies: u64 = 0,
 
-    /// Bursting stacks accumulated this encounter
-    bursting_stacks: u8 = 0,
+    /// Powder burst stacks accumulated this encounter
+    powder_burst_stacks: u8 = 0,
 
-    /// Bursting timer (stacks fall off after time)
-    bursting_decay_timer_ms: u32 = 0,
+    /// Powder burst timer (stacks fall off after time)
+    powder_burst_decay_timer_ms: u32 = 0,
 
     /// RNG for hazard spawning
     rng_seed: u64,
@@ -101,20 +131,23 @@ pub const AffixProcessor = struct {
         var result = AffixTickResult{};
 
         // Process environmental affixes
-        if (self.hasAffix(.volcanic)) {
-            self.volcanic_timer_ms += delta_time_ms;
-            if (self.volcanic_timer_ms >= VOLCANIC_SPAWN_INTERVAL_MS) {
-                self.volcanic_timer_ms = 0;
-                result.spawn_hazard = self.createVolcanicHazard(arena_center, arena_radius);
+
+        // slush_pits: Random slush puddles spawn that apply slippery chill
+        if (self.hasAffix(.slush_pits)) {
+            self.slush_pits_timer_ms += delta_time_ms;
+            if (self.slush_pits_timer_ms >= SLUSH_PITS_SPAWN_INTERVAL_MS) {
+                self.slush_pits_timer_ms = 0;
+                result.spawn_hazard = self.createSlushPitHazard(arena_center, arena_radius);
                 result.has_hazard = true;
             }
         }
 
-        if (self.hasAffix(.quaking)) {
-            self.quaking_timer_ms += delta_time_ms;
-            if (self.quaking_timer_ms >= QUAKING_INTERVAL_MS) {
-                self.quaking_timer_ms = 0;
-                // Quaking applies knockdown to all players
+        // icy_patches: Periodic mass slip-and-fall (applies knocked_down chill)
+        if (self.hasAffix(.icy_patches)) {
+            self.icy_patches_timer_ms += delta_time_ms;
+            if (self.icy_patches_timer_ms >= ICY_PATCHES_INTERVAL_MS) {
+                self.icy_patches_timer_ms = 0;
+                // Everyone slips and falls!
                 for (entities) |*ent| {
                     if (!ent.isAlive()) continue;
                     if (ent.team == player_team) {
@@ -128,34 +161,37 @@ pub const AffixProcessor = struct {
             }
         }
 
-        if (self.hasAffix(.storming)) {
-            self.storming_timer_ms += delta_time_ms;
-            if (self.storming_timer_ms >= STORMING_SPAWN_INTERVAL_MS) {
-                self.storming_timer_ms = 0;
-                result.spawn_hazard = self.createStormingHazard(entities, player_team, arena_center, arena_radius);
+        // blizzard: Wind gusts push players around
+        if (self.hasAffix(.blizzard)) {
+            self.blizzard_timer_ms += delta_time_ms;
+            if (self.blizzard_timer_ms >= BLIZZARD_SPAWN_INTERVAL_MS) {
+                self.blizzard_timer_ms = 0;
+                result.spawn_hazard = self.createBlizzardHazard(entities, player_team, arena_center, arena_radius);
                 result.has_hazard = true;
             }
         }
 
         // Process combat modifier affixes
-        if (self.hasAffix(.raging)) {
-            self.processRaging(entities, player_team);
+
+        // tantrum: Enemies throw harder when losing (enrage below 30% warmth)
+        if (self.hasAffix(.tantrum)) {
+            self.processTantrum(entities, player_team);
         }
 
-        // Decay bursting stacks over time
-        if (self.bursting_stacks > 0) {
-            self.bursting_decay_timer_ms += delta_time_ms;
-            if (self.bursting_decay_timer_ms >= 4000) { // 4 second decay
-                self.bursting_stacks = @max(0, self.bursting_stacks -| 1);
-                self.bursting_decay_timer_ms = 0;
+        // Decay powder_burst stacks over time
+        if (self.powder_burst_stacks > 0) {
+            self.powder_burst_decay_timer_ms += delta_time_ms;
+            if (self.powder_burst_decay_timer_ms >= 4000) { // 4 second decay
+                self.powder_burst_stacks = @max(0, self.powder_burst_stacks -| 1);
+                self.powder_burst_decay_timer_ms = 0;
             }
         }
 
         return result;
     }
 
-    /// Process enemy death - handles bolstering, bursting, sanguine
-    /// Returns any hazard zones to spawn (e.g., sanguine pools)
+    /// Process enemy death - handles rally, powder_burst, snow_angels
+    /// Returns any hazard zones to spawn (e.g., snow_angels healing pools)
     pub fn processEnemyDeath(
         self: *AffixProcessor,
         dead_enemy: *const Character,
@@ -164,10 +200,10 @@ pub const AffixProcessor = struct {
     ) ?HazardZone {
         var result_hazard: ?HazardZone = null;
 
-        // Bolstering: heal nearby allies when enemy dies
-        if (self.hasAffix(.bolstering)) {
-            const intensity = self.getAffixIntensity(.bolstering);
-            const heal_percent = BOLSTERING_HEAL_PERCENT * intensity;
+        // rally: Nearby allies get fired up when friend goes down (applies fire_inside cozy)
+        if (self.hasAffix(.rally)) {
+            const intensity = self.getAffixIntensity(.rally);
+            const buff_stacks: u8 = @intFromFloat(@as(f32, @floatFromInt(RALLY_BUFF_STACKS)) * intensity);
 
             for (entities) |*ent| {
                 if (!ent.isAlive()) continue;
@@ -175,21 +211,25 @@ pub const AffixProcessor = struct {
                     // Check if nearby (within 150 units)
                     const dist = distanceXZ(ent.position, dead_enemy.position);
                     if (dist <= 150.0) {
-                        const heal_amount = ent.stats.max_warmth * heal_percent;
-                        ent.stats.warmth = @min(ent.stats.max_warmth, ent.stats.warmth + heal_amount);
+                        // Apply fire_inside cozy - they're fighting mad!
+                        _ = ent.conditions.addCozy(.{
+                            .cozy = .fire_inside,
+                            .duration_ms = RALLY_BUFF_DURATION_MS,
+                            .stack_intensity = buff_stacks,
+                        }, null);
                     }
                 }
             }
         }
 
-        // Bursting: add a stack, damage players when stacks are high
-        if (self.hasAffix(.bursting)) {
-            self.bursting_stacks +|= 1;
-            self.bursting_decay_timer_ms = 0;
+        // powder_burst: One last desperate volley - damage players when enemy dies
+        if (self.hasAffix(.powder_burst)) {
+            self.powder_burst_stacks +|= 1;
+            self.powder_burst_decay_timer_ms = 0;
 
             // Apply burst damage to all players
-            const intensity = self.getAffixIntensity(.bursting);
-            const damage = BURSTING_DAMAGE * intensity * @as(f32, @floatFromInt(self.bursting_stacks));
+            const intensity = self.getAffixIntensity(.powder_burst);
+            const damage = POWDER_BURST_DAMAGE * intensity * @as(f32, @floatFromInt(self.powder_burst_stacks));
 
             for (entities) |*ent| {
                 if (!ent.isAlive()) continue;
@@ -199,19 +239,19 @@ pub const AffixProcessor = struct {
             }
         }
 
-        // Sanguine: leave healing pool on death
-        if (self.hasAffix(.sanguine)) {
-            const intensity = self.getAffixIntensity(.sanguine);
+        // snow_angels: Defeated enemies leave cozy zones that heal their team
+        if (self.hasAffix(.snow_angels)) {
+            const intensity = self.getAffixIntensity(.snow_angels);
             result_hazard = .{
                 .center = dead_enemy.position,
                 .radius = 40.0,
                 .shape = .circle,
                 .hazard_type = .safe_zone, // "Safe zone" inverted = heals enemies inside
-                .damage_per_tick = -SANGUINE_HEAL_PER_TICK * intensity, // Negative = healing
+                .damage_per_tick = -SNOW_ANGELS_HEAL_PER_TICK * intensity, // Negative = healing
                 .tick_rate_ms = 500,
                 .affects_players = false,
                 .affects_enemies = true, // Heals enemies!
-                .duration_ms = SANGUINE_POOL_DURATION_MS,
+                .duration_ms = SNOW_ANGELS_POOL_DURATION_MS,
                 .visual_type = .ground_marker,
                 .warning_time_ms = 0,
             };
@@ -220,20 +260,20 @@ pub const AffixProcessor = struct {
         return result_hazard;
     }
 
-    /// Get healing modifier for grievous/necrotic affixes
+    /// Get healing modifier for wet_clothes/bitter_cold affixes
     /// Returns multiplier (1.0 = normal, 0.5 = 50% reduced)
     pub fn getHealingModifier(self: *const AffixProcessor, target: *const Character, player_team: Team) f32 {
-        // Necrotic reduces all healing received by players
-        if (self.hasAffix(.necrotic) and target.team == player_team) {
-            return 1.0 - (NECROTIC_HEALING_REDUCTION * self.getAffixIntensity(.necrotic));
+        // wet_clothes: Everyone's clothes are wet - harder to warm up (healing reduced)
+        if (self.hasAffix(.wet_clothes) and target.team == player_team) {
+            return 1.0 - (WET_CLOTHES_HEALING_REDUCTION * self.getAffixIntensity(.wet_clothes));
         }
 
-        // Grievous: wounded targets (below 90% HP) receive less healing
-        if (self.hasAffix(.grievous) and target.team == player_team) {
-            const hp_percent = target.stats.warmth / target.stats.max_warmth;
-            if (hp_percent < 0.9) {
-                // More wounded = less healing
-                const reduction = (0.9 - hp_percent) * self.getAffixIntensity(.grievous);
+        // bitter_cold: Bitter cold - wounded targets receive less healing
+        if (self.hasAffix(.bitter_cold) and target.team == player_team) {
+            const warmth_percent = target.stats.warmth / target.stats.max_warmth;
+            if (warmth_percent < 0.9) {
+                // Colder you are, harder to warm up
+                const reduction = (0.9 - warmth_percent) * self.getAffixIntensity(.bitter_cold);
                 return @max(0.2, 1.0 - reduction); // Cap at 80% reduction
             }
         }
@@ -241,13 +281,13 @@ pub const AffixProcessor = struct {
         return 1.0;
     }
 
-    /// Check if an entity should get damage bonus from raging
-    pub fn getRagingDamageBonus(self: *const AffixProcessor, entity_index: usize) f32 {
-        if (!self.hasAffix(.raging)) return 1.0;
+    /// Check if an entity should get damage bonus from tantrum
+    pub fn getTantrumDamageBonus(self: *const AffixProcessor, entity_index: usize) f32 {
+        if (!self.hasAffix(.tantrum)) return 1.0;
 
         const mask: u64 = @as(u64, 1) << @intCast(@min(entity_index, 63));
-        if ((self.enraged_enemies & mask) != 0) {
-            return 1.0 + (0.5 * self.getAffixIntensity(.raging)); // 50% damage bonus when enraged
+        if ((self.tantrum_enemies & mask) != 0) {
+            return 1.0 + (0.5 * self.getAffixIntensity(.tantrum)); // 50% damage bonus when in tantrum
         }
         return 1.0;
     }
@@ -256,20 +296,20 @@ pub const AffixProcessor = struct {
     // INTERNAL HELPERS
     // ========================================================================
 
-    fn processRaging(self: *AffixProcessor, entities: []Character, player_team: Team) void {
+    fn processTantrum(self: *AffixProcessor, entities: []Character, player_team: Team) void {
         for (entities, 0..) |*ent, idx| {
             if (!ent.isAlive()) continue;
-            if (ent.team == player_team) continue; // Only enemies can enrage
+            if (ent.team == player_team) continue; // Only enemies can throw tantrums
 
-            const hp_percent = ent.stats.warmth / ent.stats.max_warmth;
+            const warmth_percent = ent.stats.warmth / ent.stats.max_warmth;
             const mask: u64 = @as(u64, 1) << @intCast(@min(idx, 63));
 
-            // Check if should enrage
-            if (hp_percent <= RAGING_THRESHOLD and (self.enraged_enemies & mask) == 0) {
-                // First time below threshold - enrage!
-                self.enraged_enemies |= mask;
+            // Check if should enter tantrum
+            if (warmth_percent <= TANTRUM_THRESHOLD and (self.tantrum_enemies & mask) == 0) {
+                // First time below threshold - tantrum!
+                self.tantrum_enemies |= mask;
 
-                // Apply visual indicator via cozy (speed boost)
+                // Apply fire_inside cozy (they're MAD)
                 _ = ent.conditions.addCozy(.{
                     .cozy = .fire_inside,
                     .duration_ms = 60000, // Permanent for encounter
@@ -279,9 +319,9 @@ pub const AffixProcessor = struct {
         }
     }
 
-    fn createVolcanicHazard(self: *AffixProcessor, arena_center: rl.Vector3, arena_radius: f32) HazardZone {
+    fn createSlushPitHazard(self: *AffixProcessor, arena_center: rl.Vector3, arena_radius: f32) HazardZone {
         // Random position within arena
-        var prng = std.Random.DefaultPrng.init(self.rng_seed +% self.volcanic_timer_ms);
+        var prng = std.Random.DefaultPrng.init(self.rng_seed +% self.slush_pits_timer_ms);
         const rng = prng.random();
 
         const angle = rng.float(f32) * std.math.pi * 2.0;
@@ -295,8 +335,8 @@ pub const AffixProcessor = struct {
             },
             .radius = 35.0,
             .shape = .circle,
-            .hazard_type = .damage,
-            .damage_per_tick = 25.0 * self.getAffixIntensity(.volcanic),
+            .hazard_type = .slow, // Slush pits slow you down
+            .damage_per_tick = 5.0 * self.getAffixIntensity(.slush_pits), // Minor warmth loss
             .tick_rate_ms = 500,
             .affects_players = true,
             .affects_enemies = false,
@@ -306,11 +346,11 @@ pub const AffixProcessor = struct {
         };
     }
 
-    fn createStormingHazard(self: *AffixProcessor, entities: []const Character, player_team: Team, arena_center: rl.Vector3, arena_radius: f32) HazardZone {
+    fn createBlizzardHazard(self: *AffixProcessor, entities: []const Character, player_team: Team, arena_center: rl.Vector3, arena_radius: f32) HazardZone {
         // Spawn near a random player
         var target_pos = arena_center;
 
-        var prng = std.Random.DefaultPrng.init(self.rng_seed +% self.storming_timer_ms);
+        var prng = std.Random.DefaultPrng.init(self.rng_seed +% self.blizzard_timer_ms);
         const rng = prng.random();
 
         // Find a random player to target
@@ -326,7 +366,7 @@ pub const AffixProcessor = struct {
             for (entities) |ent| {
                 if (ent.isAlive() and ent.team == player_team) {
                     if (target_idx == 0) {
-                        // Spawn tornado near this player (offset slightly)
+                        // Spawn wind gust near this player (offset slightly)
                         const offset_angle = rng.float(f32) * std.math.pi * 2.0;
                         target_pos = .{
                             .x = ent.position.x + @cos(offset_angle) * 50.0,
@@ -340,13 +380,13 @@ pub const AffixProcessor = struct {
             }
         }
 
-        _ = arena_radius; // Unused for storming
+        _ = arena_radius; // Unused for blizzard
 
         return .{
             .center = target_pos,
             .radius = 30.0,
             .shape = .circle,
-            .hazard_type = .knockback,
+            .hazard_type = .knockback, // Wind pushes you
             .damage_per_tick = 0.0, // Knockback only
             .tick_rate_ms = 300,
             .affects_players = true,
@@ -379,21 +419,21 @@ fn distanceXZ(a: rl.Vector3, b: rl.Vector3) f32 {
 
 test "affix processor - has affix" {
     const affixes = [_]ActiveAffix{
-        .{ .affix = .fortified, .intensity = 1.0 },
-        .{ .affix = .volcanic, .intensity = 1.5 },
+        .{ .affix = .layered_up, .intensity = 1.0 },
+        .{ .affix = .slush_pits, .intensity = 1.5 },
     };
 
     const processor = AffixProcessor.init(&affixes, 12345);
 
-    try std.testing.expect(processor.hasAffix(.fortified));
-    try std.testing.expect(processor.hasAffix(.volcanic));
-    try std.testing.expect(!processor.hasAffix(.bolstering));
-    try std.testing.expectApproxEqAbs(@as(f32, 1.5), processor.getAffixIntensity(.volcanic), 0.001);
+    try std.testing.expect(processor.hasAffix(.layered_up));
+    try std.testing.expect(processor.hasAffix(.slush_pits));
+    try std.testing.expect(!processor.hasAffix(.rally));
+    try std.testing.expectApproxEqAbs(@as(f32, 1.5), processor.getAffixIntensity(.slush_pits), 0.001);
 }
 
 test "affix processor - healing modifier" {
     const affixes = [_]ActiveAffix{
-        .{ .affix = .necrotic, .intensity = 1.0 },
+        .{ .affix = .wet_clothes, .intensity = 1.0 },
     };
 
     const processor = AffixProcessor.init(&affixes, 12345);

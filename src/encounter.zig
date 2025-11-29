@@ -472,28 +472,29 @@ pub const FailureCondition = union(enum) {
 // ============================================================================
 
 /// Modifiers that can be applied to encounters for difficulty variation
+/// Named to fit the kids' snowball war theme - these are "field conditions"
 pub const EncounterAffix = enum {
-    // Enemy affixes
-    fortified, // Enemies have +20% health
-    bolstering, // Enemies heal when allies die
-    raging, // Enemies enrage below 30% health
-    sanguine, // Enemies leave healing pools on death
-    bursting, // Enemies explode on death (damage players)
-    inspiring, // Enemies buff nearby allies
+    // Enemy affixes (how the other kids fight)
+    layered_up, // Enemies have extra warmth (wearing more layers) - distinct from bundled_up cozy
+    rally, // Enemies get fired up when allies go down (applies fire_inside)
+    tantrum, // Enemies throw harder when losing (enrage below 30% warmth)
+    snow_angels, // Defeated enemies leave cozy zones that heal their team
+    powder_burst, // Defeated enemies throw one last desperate volley
+    pep_talk, // Enemies buff nearby allies (applies bundled_up)
 
-    // Environmental affixes
-    volcanic, // Random fire patches spawn
-    quaking, // Periodic knockdowns
-    storming, // Random tornadoes that push players
-    grievous, // Wounds don't heal naturally
-    necrotic, // Healing is reduced
-    tyrannical, // Bosses are empowered
-    fortified_trash, // Trash mobs are empowered
+    // Environmental affixes (weather and field conditions)
+    slush_pits, // Random slush puddles spawn (applies slippery)
+    icy_patches, // Periodic mass slip-and-fall (applies knocked_down)
+    blizzard, // Gusts of wind push players around
+    wet_clothes, // Everyone's clothes are wet - harder to warm up (healing reduced) - distinct from soggy chill
+    bitter_cold, // Bitter cold - warmth recovery reduced over time - distinct from generic "freezing"
+    snowpocalypse, // Bosses/leaders are extra tough (tyrannical equivalent)
+    horde, // More enemies than usual (fortified_trash equivalent)
 
-    // Player affixes (positive)
-    prideful, // Players get buff for killing enemies
-    shrouded, // Some enemies are invisible until attacked
-    encrypted, // Enemies drop buffs that empower players
+    // Player affixes (positive field conditions)
+    momentum, // Players get fired up from victories (buff on kill)
+    ambush, // Some enemies hidden in snow until engaged
+    supply_drops, // Defeated enemies drop hot cocoa power-ups
 };
 
 /// Active affix with its configuration
@@ -642,34 +643,33 @@ pub const EncounterPhase = struct {
 
 /// Simple arena encounter - just waves of enemies
 pub const example_trash_pull = Encounter{
-    .id = "tutorial_trash",
-    .name = "Training Grounds",
-    .description = "A simple encounter to learn the basics.",
+    .id = "tutorial_backyard",
+    .name = "Backyard Skirmish",
+    .description = "Some neighborhood kids want to test your arm.",
     .enemy_waves = &[_]EnemyWave{
         .{
             .enemies = &[_]EnemySpec{
-                .{ .name = "Snowball Scout", .position = .pitcher, .difficulty_rating = 1 },
-                .{ .name = "Snowball Scout", .position = .pitcher, .difficulty_rating = 1 },
+                .{ .name = "Neighborhood Kid", .position = .pitcher, .difficulty_rating = 1 },
+                .{ .name = "Neighborhood Kid", .position = .pitcher, .difficulty_rating = 1 },
             },
             .spawn_position = .{ .x = 0, .y = 0, .z = -100 },
             .engagement_radius = 120.0,
         },
     },
     .objectives = &[_]Objective{
-        .{ .objective_type = .kill_all, .description = "Defeat all enemies" },
+        .{ .objective_type = .kill_all, .description = "Send them home crying" },
     },
 };
 
-/// Boss encounter with phases
+/// Boss encounter with phases - a snow golem animated by an imaginative kid
 pub const example_boss_encounter = Encounter{
-    .id = "frost_giant",
-    .name = "The Frost Giant's Lair",
-    .description = "Face the ancient Frost Giant in his frozen domain.",
+    .id = "the_snowlord",
+    .name = "The Snowlord's Domain",
+    .description = "Tommy built the biggest snowman anyone's ever seen. Then it started moving.",
     .arena_bounds = .{
         .shape = .circle,
         .primary_size = 400.0,
-        .boundary_behavior = .damaging,
-        .boundary_damage = 20.0,
+        .boundary_behavior = .soft_wall,
     },
     .terrain_patches = &[_]TerrainPatch{
         .{ .center = .{ .x = 0, .y = 0, .z = 0 }, .radius = 100.0, .terrain_type = .icy_ground },
@@ -678,16 +678,18 @@ pub const example_boss_encounter = Encounter{
         .{
             .center = .{ .x = -200, .y = 0, .z = 0 },
             .radius = 50.0,
-            .hazard_type = .damage,
-            .damage_per_tick = 15.0,
+            .hazard_type = .slow,
+            .damage_per_tick = 0.0,
             .tick_rate_ms = 1000,
+            .affects_players = true,
+            .affects_enemies = false,
         },
     },
     .boss = .{
         .base = .{
-            .name = "Frost Giant",
+            .name = "The Snowlord",
             .school = .homeschool,
-            .position = .shoveler,
+            .position = .animator,
             .warmth_multiplier = 5.0,
             .damage_multiplier = 1.5,
             .scale = 2.0,
@@ -697,34 +699,38 @@ pub const example_boss_encounter = Encounter{
         .phases = &[_]BossPhase{
             .{
                 .trigger = .combat_start,
-                .phase_name = "The Giant Awakens",
-                .boss_yell = "WHO DISTURBS MY SLUMBER?!",
+                .phase_name = "It's Alive!",
+                .boss_yell = "*GROANING ICE SOUNDS*",
             },
             .{
                 .trigger = .{ .warmth_percent = 0.5 },
-                .phase_name = "Frozen Rage",
-                .boss_yell = "YOU WILL FREEZE!",
+                .phase_name = "Snow Fury",
+                .boss_yell = "*ANGRY RUMBLING*",
                 .damage_multiplier = 1.3,
                 .add_spawn = &[_]EnemySpec{
-                    .{ .name = "Ice Sprite", .position = .pitcher, .difficulty_rating = 2 },
-                    .{ .name = "Ice Sprite", .position = .pitcher, .difficulty_rating = 2 },
+                    .{ .name = "Snow Sprite", .position = .pitcher, .scale = 0.6, .difficulty_rating = 2 },
+                    .{ .name = "Snow Sprite", .position = .pitcher, .scale = 0.6, .difficulty_rating = 2 },
                 },
             },
             .{
                 .trigger = .{ .warmth_percent = 0.2 },
-                .phase_name = "Final Stand",
-                .boss_yell = "I WILL NOT FALL!",
+                .phase_name = "Meltdown",
+                .boss_yell = "*DESPERATE CREAKING*",
                 .damage_multiplier = 1.5,
                 .speed_multiplier = 1.2,
                 .arena_changes = &[_]ArenaMod{
-                    .{ .add_hazard = .{
-                        .center = .{ .x = 0, .y = 0, .z = 0 },
-                        .radius = 150.0,
-                        .hazard_type = .damage,
-                        .damage_per_tick = 5.0,
-                        .tick_rate_ms = 2000,
-                        .shape = .ring,
-                    } },
+                    .{
+                        .add_hazard = .{
+                            .center = .{ .x = 0, .y = 0, .z = 0 },
+                            .radius = 150.0,
+                            .hazard_type = .slow, // Slush from melting
+                            .damage_per_tick = 5.0,
+                            .tick_rate_ms = 2000,
+                            .shape = .ring,
+                            .affects_players = true,
+                            .affects_enemies = false,
+                        },
+                    },
                 },
             },
         },
@@ -732,8 +738,8 @@ pub const example_boss_encounter = Encounter{
         .enrage_timer_ms = 300000, // 5 minute enrage
     },
     .objectives = &[_]Objective{
-        .{ .objective_type = .kill_boss, .description = "Defeat the Frost Giant" },
-        .{ .objective_type = .no_deaths, .description = "No party deaths", .is_bonus = true },
+        .{ .objective_type = .kill_boss, .description = "Melt the Snowlord" },
+        .{ .objective_type = .no_deaths, .description = "Nobody gets frostbite", .is_bonus = true },
     },
     .difficulty_rating = 5,
     .time_limit_ms = 600000, // 10 minute hard limit
