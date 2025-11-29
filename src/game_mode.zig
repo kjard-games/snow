@@ -9,6 +9,9 @@ const campaign_ui = @import("campaign_ui.zig");
 const skill_capture = @import("skill_capture.zig");
 const entity = @import("entity.zig");
 const palette = @import("color_palette.zig");
+const encounter = @import("encounter.zig");
+const ai = @import("ai.zig");
+const affix_processor = @import("affix_processor.zig");
 
 const GameState = game_state.GameState;
 const Character = @import("character.zig").Character;
@@ -21,8 +24,18 @@ const EncounterConfig = campaign.EncounterConfig;
 const GoalType = campaign.GoalType;
 const School = school.School;
 const Position = @import("position.zig").Position;
+const Encounter = encounter.Encounter;
+const EnemySpec = encounter.EnemySpec;
+const EnemyWave = encounter.EnemyWave;
+const BossConfig = encounter.BossConfig;
+const HazardZone = encounter.HazardZone;
+const HazardZoneState = ai.HazardZoneState;
+const AIState = ai.AIState;
+const AffixProcessor = affix_processor.AffixProcessor;
+const ActiveAffix = encounter.ActiveAffix;
 
 const MAX_COMBAT_CHARS: usize = 16; // Max characters in a single encounter
+const MAX_HAZARD_ZONES: usize = 8; // Max active hazard zones per encounter
 
 // ============================================
 // GAME MODE INTERFACE
@@ -204,6 +217,169 @@ pub const ArcState = struct {
 };
 
 // ============================================
+// ENCOUNTER GENERATION FROM NODE
+// ============================================
+// Creates proper Encounter definitions from campaign EncounterNodes.
+// This bridges the campaign system with the encounter.zig primitives.
+
+/// Runtime encounter storage - holds generated encounter data
+/// Since Encounter uses slices, we need stable storage for runtime-generated encounters
+const RuntimeEncounter = struct {
+    /// The encounter definition
+    enc: Encounter,
+
+    /// Storage for enemy waves (runtime-allocated)
+    waves_storage: [4]EnemyWave = undefined,
+    wave_count: usize = 0,
+
+    /// Storage for enemies within waves (runtime-allocated)
+    enemies_storage: [8]EnemySpec = undefined,
+    enemy_count: usize = 0,
+
+    /// Storage for affixes (runtime-generated based on CR)
+    affixes_storage: [4]ActiveAffix = undefined,
+    affix_count: usize = 0,
+
+    /// Get the encounter with proper slices
+    pub fn getEncounter(self: *RuntimeEncounter) *const Encounter {
+        // Wire up the slices to our storage
+        if (self.wave_count > 0) {
+            self.waves_storage[0].enemies = self.enemies_storage[0..self.enemy_count];
+            self.enc.enemy_waves = self.waves_storage[0..self.wave_count];
+        }
+        if (self.affix_count > 0) {
+            self.enc.affixes = self.affixes_storage[0..self.affix_count];
+        }
+        return &self.enc;
+    }
+
+    /// Get affixes slice for AffixProcessor
+    pub fn getAffixes(self: *RuntimeEncounter) []const ActiveAffix {
+        return self.affixes_storage[0..self.affix_count];
+    }
+};
+
+/// Generate an Encounter definition from an EncounterNode
+/// Returns a RuntimeEncounter that owns its data
+fn generateEncounterFromNode(node: EncounterNode, party_size: usize, rng: std.Random) RuntimeEncounter {
+    var runtime_enc = RuntimeEncounter{
+        .enc = Encounter{
+            .id = "campaign_encounter",
+            .name = node.name,
+            .description = "Campaign encounter",
+            .difficulty_rating = node.challenge_rating,
+            .min_party_size = 1,
+            .max_party_size = 6,
+            .recommended_party_size = @intCast(@min(party_size, 4)),
+        },
+    };
+
+    const cr = node.challenge_rating;
+    const is_boss = node.encounter_type == .boss_capture;
+
+    // Generate affixes based on challenge rating
+    // Higher CR = more/stronger affixes
+    var affix_idx: usize = 0;
+    if (cr >= 3) {
+        // CR 3+: Add fortified (enemies tankier)
+        runtime_enc.affixes_storage[affix_idx] = .{
+            .affix = .fortified,
+            .intensity = 0.8 + (@as(f32, @floatFromInt(cr)) * 0.05),
+        };
+        affix_idx += 1;
+    }
+    if (cr >= 5) {
+        // CR 5+: Add a random combat modifier
+        const combat_affixes = [_]encounter.EncounterAffix{ .bolstering, .raging, .sanguine };
+        const selected = combat_affixes[rng.intRangeAtMost(usize, 0, combat_affixes.len - 1)];
+        runtime_enc.affixes_storage[affix_idx] = .{
+            .affix = selected,
+            .intensity = 1.0,
+        };
+        affix_idx += 1;
+    }
+    if (cr >= 7) {
+        // CR 7+: Add an environmental affix
+        const env_affixes = [_]encounter.EncounterAffix{ .volcanic, .quaking, .storming };
+        const selected = env_affixes[rng.intRangeAtMost(usize, 0, env_affixes.len - 1)];
+        runtime_enc.affixes_storage[affix_idx] = .{
+            .affix = selected,
+            .intensity = 1.0 + (@as(f32, @floatFromInt(cr - 7)) * 0.1),
+        };
+        affix_idx += 1;
+    }
+    if (is_boss) {
+        // Bosses always get tyrannical
+        if (affix_idx < 4) {
+            runtime_enc.affixes_storage[affix_idx] = .{
+                .affix = .tyrannical,
+                .intensity = 1.2,
+            };
+            affix_idx += 1;
+        }
+    }
+    runtime_enc.affix_count = affix_idx;
+
+    // Calculate enemy count based on challenge rating and party size
+    const base_enemies: usize = if (is_boss) 1 else @min(6, party_size + (cr / 3));
+
+    // Generate enemy specs
+    var enemy_idx: usize = 0;
+    for (0..base_enemies) |i| {
+        if (enemy_idx >= 8) break;
+
+        const is_boss_enemy = is_boss and i == 0;
+        const difficulty: u8 = if (is_boss_enemy) 10 else @min(5, 1 + cr / 2);
+
+        // Vary schools and positions based on challenge rating
+        const enemy_school: School = switch (i % 5) {
+            0 => .public_school,
+            1 => .private_school,
+            2 => .montessori,
+            3 => .homeschool,
+            else => .waldorf,
+        };
+        const enemy_position: Position = switch (i % 6) {
+            0 => .pitcher,
+            1 => .fielder,
+            2 => .shoveler,
+            3 => .sledder,
+            4 => .animator,
+            else => .thermos,
+        };
+
+        runtime_enc.enemies_storage[enemy_idx] = EnemySpec{
+            .name = if (is_boss_enemy) "Boss" else "Enemy",
+            .school = enemy_school,
+            .position = enemy_position,
+            .warmth_multiplier = if (is_boss_enemy) 3.0 else 0.8 + (@as(f32, @floatFromInt(cr)) * 0.1),
+            .damage_multiplier = if (is_boss_enemy) 1.5 else 0.8 + (@as(f32, @floatFromInt(cr)) * 0.05),
+            .scale = if (is_boss_enemy) 1.5 else 1.0,
+            .difficulty_rating = difficulty,
+            .is_champion = is_boss_enemy,
+            .immune_to_knockdown = is_boss_enemy,
+        };
+        enemy_idx += 1;
+    }
+    runtime_enc.enemy_count = enemy_idx;
+
+    // Create a single wave containing all enemies
+    if (enemy_idx > 0) {
+        runtime_enc.waves_storage[0] = EnemyWave{
+            .enemies = &[_]EnemySpec{}, // Will be wired up in getEncounter()
+            .spawn_position = .{ .x = 0, .y = 0, .z = -400 },
+            .spawn_radius = 80.0,
+            .engagement_radius = 200.0,
+            .leash_radius = 500.0,
+            .respawns_on_wipe = false,
+        };
+        runtime_enc.wave_count = 1;
+    }
+
+    return runtime_enc;
+}
+
+// ============================================
 // GAME MODE STRUCT
 // ============================================
 
@@ -230,6 +406,17 @@ pub const GameMode = struct {
     skill_capture_ui_state: ?SkillCaptureUIState,
     current_encounter_node: ?EncounterNode,
     current_encounter_block_id: ?u32,
+
+    // Active encounter data (for boss phase tracking)
+    current_runtime_encounter: ?RuntimeEncounter,
+    boss_entity_index: ?usize, // Index of boss in entities array (if present)
+
+    // Active hazard zones during combat
+    active_hazard_zones: [MAX_HAZARD_ZONES]?HazardZoneState,
+    active_hazard_count: usize,
+
+    // Active affix processor for encounters
+    affix_processor: ?AffixProcessor,
 
     // Match tracking
     matches_played: u32,
@@ -263,6 +450,11 @@ pub const GameMode = struct {
             .skill_capture_ui_state = null,
             .current_encounter_node = null,
             .current_encounter_block_id = null,
+            .current_runtime_encounter = null,
+            .boss_entity_index = null,
+            .active_hazard_zones = [_]?HazardZoneState{null} ** MAX_HAZARD_ZONES,
+            .active_hazard_count = 0,
+            .affix_processor = null,
             .matches_played = 0,
             .matches_won = 0,
             .selected_menu_item = 0,
@@ -480,6 +672,14 @@ pub const GameMode = struct {
             self.allocator.destroy(gs);
             self.game_state = null;
         }
+        // Clear encounter tracking
+        self.current_runtime_encounter = null;
+        self.boss_entity_index = null;
+        // Clear hazard zones
+        self.active_hazard_zones = [_]?HazardZoneState{null} ** MAX_HAZARD_ZONES;
+        self.active_hazard_count = 0;
+        // Clear affix processor
+        self.affix_processor = null;
     }
 
     fn drawArena(self: *Self) void {
@@ -641,7 +841,27 @@ pub const GameMode = struct {
             .campaign_encounter, .encounter_active => {
                 // Update combat
                 if (self.game_state) |gs| {
+                    // Track which enemies were alive before update (for death processing)
+                    var was_alive: [MAX_COMBAT_CHARS]bool = [_]bool{false} ** MAX_COMBAT_CHARS;
+                    for (&gs.entities, 0..) |*ent, i| {
+                        was_alive[i] = ent.isAlive() and ent.team != .blue;
+                    }
+
                     gs.update();
+
+                    // Check boss phase transitions (if we have a boss)
+                    self.checkBossPhaseTransitions(gs);
+
+                    // Process hazard zones (at tick rate ~50ms)
+                    // We use frame time here; hazard zones have their own tick timers
+                    const frame_time_ms: u32 = @intFromFloat(rl.getFrameTime() * 1000.0);
+                    self.processHazardZones(gs, frame_time_ms);
+
+                    // Process encounter affixes (environmental effects, etc.)
+                    self.processAffixes(gs, frame_time_ms);
+
+                    // Process enemy deaths for affix effects (bolstering, bursting, sanguine)
+                    self.processEnemyDeaths(gs, &was_alive);
 
                     // Check if combat ended
                     if (gs.combat_state != .active) {
@@ -717,6 +937,7 @@ pub const GameMode = struct {
     }
 
     /// Start a campaign encounter from a node
+    /// Uses EncounterBuilder to spawn enemies with proper AI states
     fn startCampaignEncounter(self: *Self, node: EncounterNode) void {
         self.cleanupMatch();
 
@@ -730,12 +951,10 @@ pub const GameMode = struct {
             return;
         };
 
-        // Generate encounter config
-        const config = EncounterConfig.fromNode(node, cs.party);
-
-        // Build combined character array
+        // Build combined character and AI state arrays
         var id_gen = entity.EntityIdGenerator{};
         var all_chars: [MAX_COMBAT_CHARS]Character = undefined;
+        var all_ai_states: [MAX_COMBAT_CHARS]AIState = undefined;
         var char_count: usize = 0;
 
         // Create party characters (blue team) with their skill bars
@@ -748,64 +967,56 @@ pub const GameMode = struct {
         for (party_chars) |char| {
             if (char_count >= MAX_COMBAT_CHARS) break;
             all_chars[char_count] = char;
+            // Party members get basic AI states (player-controlled or ally AI)
+            all_ai_states[char_count] = AIState.init(char.player_position);
             char_count += 1;
         }
 
-        // Create enemy characters (red team)
-        const enemy_spawn_positions = [_]rl.Vector3{
-            .{ .x = -80, .y = 0, .z = -400 },
-            .{ .x = 80, .y = 0, .z = -400 },
-            .{ .x = -120, .y = 0, .z = -500 },
-            .{ .x = 0, .y = 0, .z = -550 },
-            .{ .x = 120, .y = 0, .z = -500 },
-            .{ .x = -160, .y = 0, .z = -600 },
-            .{ .x = 160, .y = 0, .z = -600 },
-            .{ .x = 0, .y = 0, .z = -700 },
+        const party_size = char_count;
+
+        // Generate encounter from node and use EncounterBuilder
+        var rng = self.prng.random();
+        var runtime_enc = generateEncounterFromNode(node, party_size, rng);
+        const enc_def = runtime_enc.getEncounter();
+
+        var enc_builder = factory.EncounterBuilder.init(
+            self.allocator,
+            &rng,
+            &id_gen,
+            enc_def,
+        );
+        _ = enc_builder.withEnemyTeam(.red);
+        _ = enc_builder.withDifficulty(1.0 + (@as(f32, @floatFromInt(node.challenge_rating)) * 0.1));
+
+        // Build enemies using EncounterBuilder
+        const enc_result = enc_builder.build() catch {
+            std.log.err("Failed to build encounter enemies", .{});
+            self.allocator.destroy(gs_ptr);
+            return;
         };
+        defer self.allocator.free(enc_result.enemies);
+        defer self.allocator.free(enc_result.ai_states);
 
-        for (0..config.enemy_team_size) |i| {
+        // Track boss index if present
+        var boss_idx: ?usize = null;
+        if (enc_result.boss_index >= 0) {
+            boss_idx = party_size + @as(usize, @intCast(enc_result.boss_index));
+        }
+
+        // Copy enemies and AI states to our arrays
+        for (enc_result.enemies, 0..) |enemy, i| {
             if (char_count >= MAX_COMBAT_CHARS) break;
-
-            const pos_idx = @min(i, enemy_spawn_positions.len - 1);
-            const pos = enemy_spawn_positions[pos_idx];
-            const enemy_school = config.enemy_schools[@min(i, config.enemy_schools.len - 1)];
-            const enemy_position = config.enemy_positions[@min(i, config.enemy_positions.len - 1)];
-            const is_boss = config.has_boss and i == 0;
-            const enemy_name: [:0]const u8 = if (is_boss) "Boss" else "Enemy";
-
-            var enemy = Character{
-                .id = id_gen.generate(),
-                .name = enemy_name,
-                .team = .red,
-                .position = pos,
-                .previous_position = pos,
-                .radius = if (is_boss) 15 else 10,
-                .color = palette.getCharacterColor(enemy_school, enemy_position),
-                .school_color = palette.getSchoolColor(enemy_school),
-                .position_color = palette.getPositionColor(enemy_position),
-                .school = enemy_school,
-                .player_position = enemy_position,
-            };
-
-            // Set enemy stats with difficulty multipliers
-            const base_warmth: f32 = if (is_boss) 200.0 else 150.0;
-            enemy.stats.max_warmth = base_warmth * config.enemy_warmth_multiplier;
-            enemy.stats.warmth = enemy.stats.max_warmth;
-            enemy.stats.energy = enemy_school.getMaxEnergy();
-            enemy.stats.max_energy = enemy_school.getMaxEnergy();
-
-            // Load default skills for enemies
-            loadEnemySkills(&enemy);
-
             all_chars[char_count] = enemy;
+            all_ai_states[char_count] = enc_result.ai_states[i];
             char_count += 1;
         }
 
-        // Build game state with our characters
+        // Build game state with our characters and AI states
         var builder = game_state.GameStateBuilder.init(self.allocator);
         _ = builder.withRendering(true);
         _ = builder.withPlayerControl(true);
         _ = builder.withCharacters(all_chars[0..char_count]);
+        _ = builder.withAIStates(all_ai_states[0..char_count]);
 
         gs_ptr.* = builder.build() catch {
             std.log.err("Failed to build GameState for encounter", .{});
@@ -814,10 +1025,158 @@ pub const GameMode = struct {
         };
 
         self.game_state = gs_ptr;
+        self.current_runtime_encounter = runtime_enc;
+        self.boss_entity_index = boss_idx;
+
+        // Initialize hazard zones from encounter definition
+        self.initializeHazardZones(enc_def);
+
+        // Initialize affix processor from generated affixes
+        self.initializeAffixProcessor(&runtime_enc);
+
         self.phase = .campaign_encounter;
     }
 
-    /// Load default skills for enemy characters
+    /// Initialize hazard zones from an encounter definition
+    fn initializeHazardZones(self: *Self, enc_def: *const Encounter) void {
+        self.active_hazard_zones = [_]?HazardZoneState{null} ** MAX_HAZARD_ZONES;
+        self.active_hazard_count = 0;
+
+        // Add hazard zones from encounter definition
+        for (enc_def.hazard_zones) |*hazard| {
+            if (self.active_hazard_count >= MAX_HAZARD_ZONES) break;
+            self.active_hazard_zones[self.active_hazard_count] = HazardZoneState.init(hazard);
+            self.active_hazard_count += 1;
+        }
+    }
+
+    /// Initialize affix processor from RuntimeEncounter's generated affixes
+    fn initializeAffixProcessor(self: *Self, runtime_enc: *RuntimeEncounter) void {
+        const affixes = runtime_enc.getAffixes();
+        if (affixes.len > 0) {
+            const seed = self.prng.random().int(u64);
+            self.affix_processor = AffixProcessor.init(affixes, seed);
+
+            // Log active affixes for debugging
+            std.log.info("Encounter affixes active:", .{});
+            for (affixes) |affix| {
+                std.log.info("  - {s} (intensity: {d:.1})", .{ @tagName(affix.affix), affix.intensity });
+            }
+        } else {
+            self.affix_processor = null;
+        }
+    }
+
+    /// Add a hazard zone during combat (e.g., from boss phase transition)
+    fn addHazardZone(self: *Self, hazard: *const HazardZone) void {
+        if (self.active_hazard_count >= MAX_HAZARD_ZONES) {
+            std.log.warn("Cannot add hazard zone: max zones reached", .{});
+            return;
+        }
+        self.active_hazard_zones[self.active_hazard_count] = HazardZoneState.init(hazard);
+        self.active_hazard_count += 1;
+    }
+
+    /// Process all active hazard zones for the current tick
+    fn processHazardZones(self: *Self, gs: *GameState, delta_time_ms: u32) void {
+        // Build array of active hazard states for processing
+        var active_states: [MAX_HAZARD_ZONES]HazardZoneState = undefined;
+        var active_count: usize = 0;
+
+        // Collect active (non-null) hazard states
+        for (&self.active_hazard_zones) |*maybe_state| {
+            if (maybe_state.*) |state| {
+                active_states[active_count] = state;
+                active_count += 1;
+            }
+        }
+
+        if (active_count == 0) return;
+
+        // Process hazards against all entities
+        ai.processHazardZones(&gs.entities, active_states[0..active_count], delta_time_ms);
+
+        // Update hazard zone timers and remove expired ones
+        for (&self.active_hazard_zones) |*maybe_state| {
+            if (maybe_state.*) |*state| {
+                const expired = state.update(delta_time_ms);
+                if (expired) {
+                    maybe_state.* = null;
+                    self.active_hazard_count -|= 1;
+                }
+            }
+        }
+    }
+
+    /// Process encounter affixes for the current tick
+    /// Handles environmental effects (volcanic, storming, etc.) and combat modifiers
+    fn processAffixes(self: *Self, gs: *GameState, delta_time_ms: u32) void {
+        var processor = &(self.affix_processor orelse return);
+
+        // Get arena bounds for spawning hazards
+        const arena_center = rl.Vector3{ .x = 0, .y = 0, .z = 0 };
+        const arena_radius: f32 = 600.0; // Default arena radius
+
+        // Process tick - may spawn new hazards from environmental affixes
+        const result = processor.processTick(
+            &gs.entities,
+            .blue, // Player team
+            delta_time_ms,
+            arena_center,
+            arena_radius,
+        );
+
+        // If affix spawned a hazard (volcanic, storming), add it
+        if (result.has_hazard) {
+            self.addHazardZoneFromAffix(result.spawn_hazard);
+        }
+    }
+
+    /// Add a hazard zone spawned by an affix (needs storage since HazardZoneState needs pointer)
+    /// We use a static buffer since affix-spawned hazards are temporary
+    var affix_hazard_storage: [4]HazardZone = undefined;
+    var affix_hazard_idx: usize = 0;
+
+    fn addHazardZoneFromAffix(self: *Self, hazard: HazardZone) void {
+        if (self.active_hazard_count >= MAX_HAZARD_ZONES) {
+            std.log.warn("Cannot add affix hazard: max zones reached", .{});
+            return;
+        }
+        // Store in static buffer (wraps around)
+        const storage_idx = affix_hazard_idx % affix_hazard_storage.len;
+        affix_hazard_storage[storage_idx] = hazard;
+        affix_hazard_idx +%= 1;
+
+        self.active_hazard_zones[self.active_hazard_count] = HazardZoneState.init(&affix_hazard_storage[storage_idx]);
+        self.active_hazard_count += 1;
+    }
+
+    /// Process enemy deaths for affix effects (bolstering, bursting, sanguine)
+    /// Compares current alive state with previous state to detect deaths this frame
+    fn processEnemyDeaths(self: *Self, gs: *GameState, was_alive: *const [MAX_COMBAT_CHARS]bool) void {
+        var processor = &(self.affix_processor orelse return);
+
+        // Check each entity for deaths
+        for (&gs.entities, 0..) |*ent, i| {
+            // Skip if wasn't alive before or is still alive
+            if (!was_alive[i]) continue;
+            if (ent.isAlive()) continue;
+
+            // This entity died this frame - process affix effects
+            const maybe_hazard = processor.processEnemyDeath(
+                ent,
+                &gs.entities,
+                .blue, // Player team
+            );
+
+            // If affix created a hazard (sanguine pool), add it
+            if (maybe_hazard) |hazard| {
+                self.addHazardZoneFromAffix(hazard);
+            }
+        }
+    }
+
+    /// Load default skills for enemy characters (kept for backwards compatibility)
     fn loadEnemySkills(char: *Character) void {
         const position_skills = char.player_position.getSkills();
         const school_skills = char.school.getSkills();
@@ -832,6 +1191,79 @@ pub const GameMode = struct {
         for (school_skills, 0..) |*skill, i| {
             if (i >= 4) break;
             char.casting.skills[4 + i] = skill;
+        }
+    }
+
+    /// Check and apply boss phase transitions during combat
+    /// Called every frame during campaign encounters
+    fn checkBossPhaseTransitions(self: *Self, gs: *GameState) void {
+        // Skip if no boss in this encounter
+        const boss_idx = self.boss_entity_index orelse return;
+
+        // Get boss and AI state
+        if (boss_idx >= gs.entities.len) return;
+        const boss = &gs.entities[boss_idx];
+        const boss_ai = &gs.ai_states[boss_idx];
+
+        // Only check phases if boss is engaged and alive
+        if (boss_ai.engagement != .engaged or boss.is_dead) return;
+
+        // For now, we create a simple boss config from the encounter node
+        // In a full implementation, the RuntimeEncounter would store the BossConfig
+        const node = self.current_encounter_node orelse return;
+        if (node.encounter_type != .boss_capture) return;
+
+        // Create a minimal boss config for phase checking
+        // This is a simplified version - full implementation would store phases in RuntimeEncounter
+        const boss_phases = [_]encounter.BossPhase{
+            .{
+                .trigger = .combat_start,
+                .phase_name = "Engage!",
+            },
+            .{
+                .trigger = .{ .warmth_percent = 0.5 },
+                .phase_name = "Phase 2",
+                .damage_multiplier = 1.3,
+            },
+            .{
+                .trigger = .{ .warmth_percent = 0.2 },
+                .phase_name = "Final Stand",
+                .damage_multiplier = 1.5,
+            },
+        };
+
+        const boss_config = encounter.BossConfig{
+            .base = .{
+                .name = "Boss",
+                .school = boss.school,
+                .position = boss.player_position,
+                .warmth_multiplier = 2.0,
+                .difficulty_rating = @intCast(node.challenge_rating),
+            },
+            .phases = &boss_phases,
+        };
+
+        // Check for phase transitions
+        const phase_result = ai.checkBossPhases(boss, boss_ai, &boss_config);
+
+        if (phase_result.phase_triggered) {
+            if (phase_result.triggered_phase) |phase| {
+                // Apply the phase transition
+                ai.applyBossPhase(boss, phase);
+
+                // Handle arena modifications from phase.arena_changes
+                for (phase.arena_changes) |arena_mod| {
+                    switch (arena_mod) {
+                        .add_hazard => |hazard| {
+                            self.addHazardZone(&hazard);
+                        },
+                        // TODO: Handle other arena modifications
+                        .add_terrain, .clear_terrain, .shrink_bounds, .spawn_obstacle => {},
+                    }
+                }
+
+                // TODO: Handle add spawning from phase.add_spawn
+            }
         }
     }
 

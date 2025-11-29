@@ -8,6 +8,8 @@ const equipment = @import("equipment.zig");
 const gear_slot = @import("gear_slot.zig");
 const entity = @import("entity.zig");
 const campaign = @import("campaign.zig");
+const encounter = @import("encounter.zig");
+const ai = @import("ai.zig");
 
 const Character = character.Character;
 const School = school.School;
@@ -18,6 +20,11 @@ const Gear = gear_slot.Gear;
 const EntityId = entity.EntityId;
 const Team = entity.Team;
 const SkillPool = campaign.SkillPool;
+const Encounter = encounter.Encounter;
+const EnemySpec = encounter.EnemySpec;
+const EnemyWave = encounter.EnemyWave;
+const BossConfig = encounter.BossConfig;
+const AIState = ai.AIState;
 
 const print = std.debug.print;
 
@@ -894,4 +901,347 @@ fn getRandomAPSkillFromPool(pool: *const SkillPool, rng: *std.Random) ?*const Sk
     }
 
     return null;
+}
+
+// ============================================
+// ENCOUNTER BUILDER
+// ============================================
+//
+// Builds characters and AI states from an Encounter definition.
+// Handles enemy waves, bosses, and initializes AI with proper
+// engagement parameters (aggro radius, leash, spawn positions).
+//
+
+/// Result of building an encounter - includes both characters and their AI states
+pub const EncounterBuildResult = struct {
+    /// All spawned enemy characters
+    enemies: []Character,
+    /// AI states for each enemy (parallel array)
+    ai_states: []AIState,
+    /// Index of the boss character (-1 if no boss)
+    boss_index: i32,
+    /// Total enemy count
+    count: usize,
+};
+
+pub const EncounterBuilder = struct {
+    allocator: std.mem.Allocator,
+    rng: *std.Random,
+    id_gen: *entity.EntityIdGenerator,
+
+    /// The encounter definition to build from
+    enc: *const Encounter,
+
+    /// Team for spawned enemies (default: red = enemy team)
+    enemy_team: Team = .red,
+
+    /// Difficulty multiplier (affects stats)
+    difficulty_multiplier: f32 = 1.0,
+
+    /// Active affixes to apply
+    active_affixes: []const encounter.ActiveAffix = &[_]encounter.ActiveAffix{},
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        rng: *std.Random,
+        id_gen: *entity.EntityIdGenerator,
+        enc: *const Encounter,
+    ) EncounterBuilder {
+        return .{
+            .allocator = allocator,
+            .rng = rng,
+            .id_gen = id_gen,
+            .enc = enc,
+        };
+    }
+
+    pub fn withEnemyTeam(self: *EncounterBuilder, team: Team) *EncounterBuilder {
+        self.enemy_team = team;
+        return self;
+    }
+
+    pub fn withDifficulty(self: *EncounterBuilder, mult: f32) *EncounterBuilder {
+        self.difficulty_multiplier = mult;
+        return self;
+    }
+
+    pub fn withAffixes(self: *EncounterBuilder, affixes: []const encounter.ActiveAffix) *EncounterBuilder {
+        self.active_affixes = affixes;
+        return self;
+    }
+
+    /// Build all enemies from the encounter definition
+    /// Returns characters and their corresponding AI states
+    pub fn build(self: *EncounterBuilder) !EncounterBuildResult {
+        // Count total enemies
+        var total_count: usize = 0;
+        for (self.enc.enemy_waves) |wave| {
+            total_count += wave.enemies.len;
+        }
+        if (self.enc.boss != null) {
+            total_count += 1;
+        }
+
+        // Allocate arrays
+        var enemies = try self.allocator.alloc(Character, total_count);
+        var ai_states = try self.allocator.alloc(AIState, total_count);
+
+        var idx: usize = 0;
+        var boss_index: i32 = -1;
+
+        // Spawn enemy waves
+        for (self.enc.enemy_waves, 0..) |wave, wave_idx| {
+            for (wave.enemies, 0..) |enemy_spec, enemy_idx| {
+                // Calculate spawn position within wave
+                const spawn_pos = self.calculateSpawnPosition(wave, enemy_idx);
+
+                // Build the character
+                enemies[idx] = self.buildEnemyFromSpec(enemy_spec, spawn_pos);
+
+                // Build the AI state with engagement parameters
+                ai_states[idx] = self.buildAIStateForWave(wave, @intCast(wave_idx), spawn_pos, enemy_spec);
+
+                idx += 1;
+            }
+        }
+
+        // Spawn boss if present
+        if (self.enc.boss) |boss_config| {
+            boss_index = @intCast(idx);
+
+            const boss_pos = self.enc.arena_bounds.center;
+            enemies[idx] = self.buildBossFromConfig(boss_config, boss_pos);
+            ai_states[idx] = self.buildAIStateForBoss(boss_config, boss_pos);
+
+            idx += 1;
+        }
+
+        return .{
+            .enemies = enemies,
+            .ai_states = ai_states,
+            .boss_index = boss_index,
+            .count = idx,
+        };
+    }
+
+    /// Build a single enemy character from an EnemySpec
+    fn buildEnemyFromSpec(self: *EncounterBuilder, spec: EnemySpec, spawn_pos: rl.Vector3) Character {
+        const base_warmth: f32 = 150.0;
+        const scaled_warmth = base_warmth * spec.warmth_multiplier * self.difficulty_multiplier * self.getAffixHealthMultiplier();
+
+        var char = Character{
+            .id = self.id_gen.generate(),
+            .position = spawn_pos,
+            .previous_position = spawn_pos,
+            .radius = 10.0 * spec.scale,
+            .color = spec.color_tint orelse getTeamColor(self.enemy_team),
+            .school_color = getTeamColor(self.enemy_team),
+            .position_color = getTeamColor(self.enemy_team),
+            .name = spec.name,
+            .stats = .{
+                .warmth = scaled_warmth,
+                .max_warmth = scaled_warmth,
+                .energy = spec.school.getMaxEnergy(),
+                .max_energy = @intFromFloat(@as(f32, @floatFromInt(spec.school.getMaxEnergy())) * spec.energy_multiplier),
+            },
+            .team = self.enemy_team,
+            .school = spec.school,
+            .player_position = spec.position,
+            .casting = .{
+                .skills = [_]?*const Skill{null} ** character.MAX_SKILLS,
+                .selected_index = 0,
+            },
+            .gear = [_]?*const character.Gear{null} ** 6,
+        };
+
+        // Apply skill overrides or use defaults
+        if (spec.skill_overrides) |overrides| {
+            for (overrides, 0..) |maybe_skill, slot| {
+                char.casting.skills[slot] = maybe_skill;
+            }
+        } else {
+            // Use default skills from position/school
+            self.applyDefaultSkills(&char);
+        }
+
+        return char;
+    }
+
+    /// Build a boss character from BossConfig
+    fn buildBossFromConfig(self: *EncounterBuilder, config: BossConfig, spawn_pos: rl.Vector3) Character {
+        var char = self.buildEnemyFromSpec(config.base, spawn_pos);
+
+        // Bosses get additional scaling from tyrannical affix
+        if (self.hasAffix(.tyrannical)) {
+            char.stats.warmth *= 1.3;
+            char.stats.max_warmth *= 1.3;
+        }
+
+        // Apply signature skills if present
+        for (config.signature_skills, 0..) |skill, idx| {
+            if (idx < character.MAX_SKILLS) {
+                char.casting.skills[idx] = skill;
+            }
+        }
+
+        return char;
+    }
+
+    /// Build AI state for a wave enemy
+    fn buildAIStateForWave(self: *EncounterBuilder, wave: EnemyWave, wave_idx: u8, spawn_pos: rl.Vector3, spec: EnemySpec) AIState {
+        var ai_state = AIState.initForEncounter(spec.position, spawn_pos, wave_idx);
+
+        // Set engagement parameters from wave config
+        ai_state.aggro_radius = wave.engagement_radius;
+        ai_state.leash_radius = wave.leash_radius;
+
+        // Start in idle state (not engaged)
+        ai_state.engagement = .idle;
+
+        // Apply engagement rules from encounter
+        if (self.enc.engagement_rules.default_aggro_radius > 0 and wave.engagement_radius == 0) {
+            ai_state.aggro_radius = self.enc.engagement_rules.default_aggro_radius;
+        }
+        if (self.enc.engagement_rules.default_leash_radius > 0 and wave.leash_radius == 0) {
+            ai_state.leash_radius = self.enc.engagement_rules.default_leash_radius;
+        }
+
+        return ai_state;
+    }
+
+    /// Build AI state for a boss
+    fn buildAIStateForBoss(self: *EncounterBuilder, config: BossConfig, spawn_pos: rl.Vector3) AIState {
+        _ = self; // Encounter rules applied via config
+        var ai_state = AIState.initForEncounter(config.base.position, spawn_pos, 255); // Wave 255 = boss
+
+        // Bosses have larger aggro radius (their arena)
+        ai_state.aggro_radius = config.arena_radius;
+        ai_state.leash_radius = config.arena_radius * 1.5;
+
+        // Bosses start idle until players enter their arena
+        ai_state.engagement = .idle;
+
+        // Initialize phase tracking
+        ai_state.current_phase = 0;
+        ai_state.triggered_phases = 0;
+
+        return ai_state;
+    }
+
+    /// Calculate spawn position for an enemy within a wave
+    fn calculateSpawnPosition(self: *EncounterBuilder, wave: EnemyWave, enemy_idx: usize) rl.Vector3 {
+        const base = wave.spawn_position;
+
+        if (wave.enemies.len <= 1) {
+            return base;
+        }
+
+        // Spread enemies in a circle around the spawn point
+        const angle = (@as(f32, @floatFromInt(enemy_idx)) / @as(f32, @floatFromInt(wave.enemies.len))) * std.math.pi * 2.0;
+        const radius = wave.spawn_radius * (0.5 + self.rng.float(f32) * 0.5);
+
+        return .{
+            .x = base.x + @cos(angle) * radius,
+            .y = base.y,
+            .z = base.z + @sin(angle) * radius,
+        };
+    }
+
+    /// Apply default skills from position and school
+    fn applyDefaultSkills(self: *EncounterBuilder, char: *Character) void {
+        const position_skills = char.player_position.getSkills();
+        const school_skills = char.school.getSkills();
+
+        // Slot 0: Wall skill if available
+        for (position_skills) |*skill| {
+            if (skill.creates_wall) {
+                char.casting.skills[0] = skill;
+                break;
+            }
+        }
+
+        // Slots 1-3: Position skills
+        var slot: usize = 1;
+        for (position_skills, 0..) |*skill, idx| {
+            if (slot >= 4) break;
+            if (idx == 0 and skill.creates_wall) continue; // Skip wall skill
+            char.casting.skills[slot] = skill;
+            slot += 1;
+        }
+
+        // Slots 4-6: School skills
+        slot = 4;
+        for (school_skills) |*skill| {
+            if (slot >= 7) break;
+            char.casting.skills[slot] = skill;
+            slot += 1;
+        }
+
+        // Slot 7: Random AP skill
+        char.casting.skills[7] = getRandomAPSkillFromPools(position_skills, school_skills, self.rng);
+    }
+
+    /// Get health multiplier from active affixes
+    fn getAffixHealthMultiplier(self: *EncounterBuilder) f32 {
+        var mult: f32 = 1.0;
+        for (self.active_affixes) |active| {
+            switch (active.affix) {
+                .fortified => mult *= 1.2 * active.intensity,
+                .fortified_trash => mult *= 1.2 * active.intensity,
+                else => {},
+            }
+        }
+        return mult;
+    }
+
+    /// Check if an affix is active
+    fn hasAffix(self: *EncounterBuilder, affix: encounter.EncounterAffix) bool {
+        for (self.active_affixes) |active| {
+            if (active.affix == affix) return true;
+        }
+        return false;
+    }
+};
+
+/// Get team color
+fn getTeamColor(team: Team) rl.Color {
+    return switch (team) {
+        .red => rl.Color{ .r = 220, .g = 60, .b = 60, .a = 255 },
+        .blue => rl.Color{ .r = 60, .g = 120, .b = 220, .a = 255 },
+        .yellow => rl.Color{ .r = 220, .g = 200, .b = 60, .a = 255 },
+        .green => rl.Color{ .r = 60, .g = 180, .b = 80, .a = 255 },
+        .none => rl.Color{ .r = 128, .g = 128, .b = 128, .a = 255 },
+    };
+}
+
+// ============================================
+// ENCOUNTER SPAWNING HELPERS
+// ============================================
+
+/// Spawn enemies from an encounter into existing entity arrays
+/// Returns the number of enemies spawned
+pub fn spawnEncounterEnemies(
+    enc: *const Encounter,
+    entities: []Character,
+    ai_states: []AIState,
+    start_index: usize,
+    allocator: std.mem.Allocator,
+    rng: *std.Random,
+    id_gen: *entity.EntityIdGenerator,
+) !usize {
+    var builder = EncounterBuilder.init(allocator, rng, id_gen, enc);
+    const result = try builder.build();
+    defer allocator.free(result.enemies);
+    defer allocator.free(result.ai_states);
+
+    // Copy into destination arrays
+    const copy_count = @min(result.count, entities.len - start_index);
+    for (0..copy_count) |i| {
+        entities[start_index + i] = result.enemies[i];
+        if (start_index + i < ai_states.len) {
+            ai_states[start_index + i] = result.ai_states[i];
+        }
+    }
+
+    return copy_count;
 }

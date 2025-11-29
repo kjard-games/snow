@@ -175,6 +175,81 @@ pub const TerrainEffect = struct {
 };
 
 // ============================================================================
+// AUTO-CAST CONDITIONS - For Boss Phase Transitions & Reactive Skills
+// ============================================================================
+// AutoCastCondition enables skills to trigger automatically when conditions are met.
+// Primary use case: Boss phase transitions (e.g., "at 50% warmth, cast Enrage")
+// Also supports: Reactive abilities, auras that pulse, etc.
+//
+// The AI system checks these conditions and auto-casts matching skills.
+// This is DATA, not code - new phase behaviors are just new skill definitions.
+
+/// Condition that triggers automatic skill casting
+pub const AutoCastCondition = union(enum) {
+    /// Never auto-cast (default for player skills)
+    none,
+
+    /// Cast when self warmth crosses below threshold (e.g., phase transitions)
+    /// Only triggers once per threshold crossing (not continuously)
+    warmth_below_percent: struct {
+        threshold: f32, // 0.0 to 1.0 (e.g., 0.5 = 50%)
+        only_once: bool = true, // Only trigger once per combat
+    },
+
+    /// Cast when self warmth crosses above threshold
+    warmth_above_percent: struct {
+        threshold: f32,
+        only_once: bool = true,
+    },
+
+    /// Cast periodically while in combat
+    periodic: struct {
+        interval_ms: u32, // Time between casts
+        start_delay_ms: u32 = 0, // Delay before first cast
+    },
+
+    /// Cast when a certain number of allies die
+    ally_death_count: struct {
+        count: u8, // Number of ally deaths to trigger
+        within_radius: f32 = 0.0, // 0 = any ally, >0 = allies within radius
+    },
+
+    /// Cast when combat starts (good for opening moves / buffs)
+    on_combat_start,
+
+    /// Cast when entering aggro (when first player enters aggro radius)
+    on_aggro,
+
+    /// Cast when target acquired
+    on_target_acquired,
+
+    /// Cast when a specific number of enemies are in range
+    enemies_in_range: struct {
+        count: u8,
+        range: f32,
+    },
+
+    /// Cast when any ally's warmth drops below threshold
+    any_ally_warmth_below: struct {
+        threshold: f32,
+        cooldown_ms: u32 = 5000, // Don't spam heals
+    },
+
+    // Helper constructors
+    pub fn phaseAt(health_percent: f32) AutoCastCondition {
+        return .{ .warmth_below_percent = .{ .threshold = health_percent, .only_once = true } };
+    }
+
+    pub fn every(interval_ms: u32) AutoCastCondition {
+        return .{ .periodic = .{ .interval_ms = interval_ms } };
+    }
+
+    pub fn everyWithDelay(interval_ms: u32, delay_ms: u32) AutoCastCondition {
+        return .{ .periodic = .{ .interval_ms = interval_ms, .start_delay_ms = delay_ms } };
+    }
+};
+
+// ============================================================================
 // SKILL BEHAVIORS - Composable Trigger + Response System
 // ============================================================================
 // Behaviors intercept game events and respond with actions. They compose from:

@@ -45,11 +45,21 @@ pub const HealingResult = struct {
 
 /// Calculate healing multiplier from target's buffs
 pub fn calculateHealingMultiplier(target: *const Character) f32 {
+    return calculateHealingMultiplierWithExternal(target, null);
+}
+
+/// Calculate healing multiplier with optional external modifier (e.g., from encounter affixes)
+pub fn calculateHealingMultiplierWithExternal(target: *const Character, external_modifier: ?f32) f32 {
     var multiplier: f32 = 1.0;
 
     // Hot Cocoa buff increases healing received
     if (target.hasCozy(.hot_cocoa)) {
         multiplier *= 1.5; // 50% increased healing
+    }
+
+    // Apply external modifier if present (e.g., necrotic/grievous affixes)
+    if (external_modifier) |ext| {
+        multiplier *= ext;
     }
 
     // Future: Add more healing modifiers here
@@ -73,8 +83,20 @@ pub fn applyHealing(
     vfx_manager: *vfx.VFXManager,
     telem: ?*MatchTelemetry,
 ) HealingResult {
+    return applyHealingWithModifier(caster, target, base_healing, vfx_manager, telem, null);
+}
+
+/// Apply healing with an optional external modifier (e.g., encounter affixes)
+pub fn applyHealingWithModifier(
+    caster: *Character,
+    target: *Character,
+    base_healing: f32,
+    vfx_manager: *vfx.VFXManager,
+    telem: ?*MatchTelemetry,
+    external_modifier: ?f32,
+) HealingResult {
     // Calculate modified healing
-    const multiplier = calculateHealingMultiplier(target);
+    const multiplier = calculateHealingMultiplierWithExternal(target, external_modifier);
     const raw_healing = base_healing * multiplier;
 
     // Track previous health for overheal detection

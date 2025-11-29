@@ -1,6 +1,6 @@
 {
-  "match_duration_ticks": 1452,
-  "winning_team": 1,
+  "match_duration_ticks": 3000,
+  "winning_team": 255,
   "total_damage_dealt_ally": 0,
   "total_damage_dealt_enemy": 0,
   "total_healing_ally": 0,
@@ -13,7 +13,7 @@
   "entities": [
     {
       "entity_id": 1,
-      "name": "BlueFielder",
+      "name": "BlueAnimator",
       "school": "homeschool",
       "position": "animator",
       "team": 0,
@@ -55,7 +55,7 @@
     {
       "entity_id": 2,
       "name": "BlueSledder",
-      "school": "montessori",
+      "school": "public_school",
       "position": "fielder",
       "team": 0,
       "damage_dealt": 0,
@@ -95,9 +95,9 @@
     },
     {
       "entity_id": 3,
-      "name": "BlueFielder",
-      "school": "waldorf",
-      "position": "animator",
+      "name": "BlueSledder",
+      "school": "homeschool",
+      "position": "fielder",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -136,8 +136,8 @@
     },
     {
       "entity_id": 4,
-      "name": "RedShoveler",
-      "school": "homeschool",
+      "name": "RedPitcher",
+      "school": "public_school",
       "position": "fielder",
       "team": 1,
       "damage_dealt": 0,
@@ -177,9 +177,9 @@
     },
     {
       "entity_id": 5,
-      "name": "RedFielder",
-      "school": "public_school",
-      "position": "pitcher",
+      "name": "RedAnimator",
+      "school": "private_school",
+      "position": "sledder",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -218,8 +218,8 @@
     },
     {
       "entity_id": 6,
-      "name": "RedShoveler",
-      "school": "waldorf",
+      "name": "RedSledder",
+      "school": "montessori",
       "position": "animator",
       "team": 1,
       "damage_dealt": 0,
@@ -260,7 +260,7 @@
     {
       "entity_id": 7,
       "name": "YellowAnimator",
-      "school": "homeschool",
+      "school": "private_school",
       "position": "shoveler",
       "team": 1,
       "damage_dealt": 0,
@@ -301,8 +301,8 @@
     {
       "entity_id": 8,
       "name": "YellowShoveler",
-      "school": "waldorf",
-      "position": "pitcher",
+      "school": "homeschool",
+      "position": "shoveler",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,

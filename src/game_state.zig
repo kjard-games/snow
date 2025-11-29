@@ -40,6 +40,8 @@ pub const GameStateConfig = struct {
     seed: ?u64 = null,
     /// Pre-built characters (null = generate random teams)
     characters: ?[]const Character = null,
+    /// Pre-built AI states (null = generate from characters)
+    ai_states: ?[]const AIState = null,
     /// Number of characters per team (used when generating random teams)
     characters_per_team: usize = 4,
     /// Terrain grid dimensions
@@ -88,6 +90,12 @@ pub const GameStateBuilder = struct {
     /// Provide pre-built characters (skips random team generation)
     pub fn withCharacters(self: *GameStateBuilder, characters: []const Character) *GameStateBuilder {
         self.config.characters = characters;
+        return self;
+    }
+
+    /// Provide pre-built AI states (skips automatic AI state generation)
+    pub fn withAIStates(self: *GameStateBuilder, ai_states: []const AIState) *GameStateBuilder {
+        self.config.ai_states = ai_states;
         return self;
     }
 
@@ -180,10 +188,23 @@ pub const GameStateBuilder = struct {
             }
         }
 
-        // Build AI states - healers get support role, others get damage_dealer
+        // Build AI states - use provided or generate from entities
         var ai_states: [MAX_ENTITIES]AIState = undefined;
-        for (entities, 0..) |ent, i| {
-            ai_states[i] = AIState.init(ent.player_position);
+        if (self.config.ai_states) |provided_ai| {
+            // Use provided AI states
+            for (provided_ai, 0..) |ai_state, i| {
+                if (i >= MAX_ENTITIES) break;
+                ai_states[i] = ai_state;
+            }
+            // Fill remaining with defaults
+            for (provided_ai.len..MAX_ENTITIES) |i| {
+                ai_states[i] = AIState.init(entities[i].player_position);
+            }
+        } else {
+            // Generate from entities - healers get support role, others get damage_dealer
+            for (entities, 0..) |ent, i| {
+                ai_states[i] = AIState.init(ent.player_position);
+            }
         }
 
         return GameState{
@@ -489,7 +510,7 @@ const MatchTelemetry = telemetry.MatchTelemetry;
 const SkillRangePreviewState = ground_targeting.SkillRangePreviewState;
 
 // Game configuration constants
-pub const MAX_ENTITIES: usize = 12; // Support 3 teams x 4 characters (currently using 8 for 4v4, slots 8-11 reserved for 3rd team)
+pub const MAX_ENTITIES: usize = 128; // Support dungeon encounters with many enemies (4 player party + up to 124 enemies/NPCs)
 
 // Tick-based game loop (Guild Wars / tab-targeting style)
 pub const TICK_RATE_HZ: u32 = 20; // 20 ticks per second

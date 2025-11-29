@@ -258,6 +258,8 @@ fn executeTargetedSkill(
     }
 
     // Apply healing
+    // TODO: Integrate encounter affix healing modifiers (necrotic/grievous) via
+    // healing.applyHealingWithModifier() once GameState/combat has access to AffixProcessor
     if (skill.healing > 0) {
         _ = healing.applyHealing(caster, tgt, skill.healing, vfx_manager, telem);
     }

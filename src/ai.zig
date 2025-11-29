@@ -56,6 +56,26 @@ pub const Config = struct {
 
     // Movement
     pub const SPREAD_RADIUS: f32 = 35.0;
+
+    // ========== ENGAGEMENT SYSTEM ==========
+
+    /// Default aggro radius - how close player must be to trigger combat
+    pub const AGGRO_RADIUS: f32 = 150.0;
+
+    /// Default leash radius - how far enemies will chase before returning
+    pub const LEASH_RADIUS: f32 = 400.0;
+
+    /// Social aggro radius - enemies within this range join when ally is pulled
+    pub const SOCIAL_AGGRO_RADIUS: f32 = 100.0;
+
+    /// Alert duration before engaging (dramatic pause)
+    pub const ALERT_DURATION_MS: u32 = 500;
+
+    /// Time to wait at spawn before resetting health
+    pub const RESET_DELAY_MS: u32 = 3000;
+
+    /// Speed multiplier when leashing back to spawn
+    pub const LEASH_SPEED_MULTIPLIER: f32 = 1.5;
 };
 
 // ============================================================================
@@ -129,6 +149,27 @@ pub const FormationRole = enum {
 };
 
 // ============================================================================
+// ENGAGEMENT STATE - Aggro and Combat Engagement (GW1-style)
+// ============================================================================
+
+pub const EngagementState = enum {
+    /// Not in combat, following patrol path or idle
+    idle,
+
+    /// Player detected within aggro radius, transitioning to combat
+    alerted,
+
+    /// Actively engaged in combat
+    engaged,
+
+    /// Target escaped beyond leash radius, returning to spawn
+    leashing,
+
+    /// Returned to spawn point, resetting health/skills
+    resetting,
+};
+
+// ============================================================================
 // AI STATE
 // ============================================================================
 
@@ -139,11 +180,92 @@ pub const AIState = struct {
     focus_target_id: ?EntityId = null,
     is_kiting: bool = false,
 
+    // ========== ENGAGEMENT SYSTEM ==========
+
+    /// Current engagement state (for dungeon AI)
+    engagement: EngagementState = .idle,
+
+    /// Original spawn position (for leashing/resetting)
+    spawn_position: ?rl.Vector3 = null,
+
+    /// Aggro radius override (0 = use default from encounter)
+    aggro_radius: f32 = 0.0,
+
+    /// Leash radius override (0 = use default from encounter)
+    leash_radius: f32 = 0.0,
+
+    /// Wave index this AI belongs to (for link pulls)
+    wave_index: u8 = 0,
+
+    /// Time spent in current engagement state (for alert delays, reset timers)
+    engagement_timer_ms: u32 = 0,
+
+    /// Entity that pulled aggro (for returning to correct spawn)
+    aggro_source_id: ?EntityId = null,
+
+    /// Has this AI been pulled this encounter? (for respawn logic)
+    was_pulled: bool = false,
+
+    // ========== BOSS PHASE SYSTEM ==========
+
+    /// Current phase index (for bosses)
+    current_phase: u8 = 0,
+
+    /// Phase triggers that have fired (bitfield, supports up to 8 phases)
+    triggered_phases: u8 = 0,
+
+    /// Time in combat (for time-based phase triggers)
+    combat_time_ms: u32 = 0,
+
+    /// Adds killed count (for add-based phase triggers)
+    adds_killed: u8 = 0,
+
     pub fn init(pos: Position) AIState {
         return .{
             .role = AIRole.fromPosition(pos),
             .formation = FormationRole.fromPosition(pos),
         };
+    }
+
+    /// Initialize for encounter-based AI with spawn position
+    pub fn initForEncounter(pos: Position, spawn_pos: rl.Vector3, wave_idx: u8) AIState {
+        return .{
+            .role = AIRole.fromPosition(pos),
+            .formation = FormationRole.fromPosition(pos),
+            .spawn_position = spawn_pos,
+            .wave_index = wave_idx,
+            .engagement = .idle,
+        };
+    }
+
+    /// Check if AI is in an active combat state
+    pub fn isInCombat(self: *const AIState) bool {
+        return self.engagement == .engaged or self.engagement == .alerted;
+    }
+
+    /// Check if AI should be updated (not resetting/leashing)
+    pub fn shouldUpdateCombat(self: *const AIState) bool {
+        return self.engagement == .engaged;
+    }
+
+    /// Get effective aggro radius (with default fallback)
+    pub fn getAggroRadius(self: *const AIState) f32 {
+        return if (self.aggro_radius > 0) self.aggro_radius else Config.AGGRO_RADIUS;
+    }
+
+    /// Get effective leash radius (with default fallback)
+    pub fn getLeashRadius(self: *const AIState) f32 {
+        return if (self.leash_radius > 0) self.leash_radius else Config.LEASH_RADIUS;
+    }
+
+    /// Record that a phase trigger has fired
+    pub fn markPhaseTriggered(self: *AIState, phase_index: u8) void {
+        self.triggered_phases |= (@as(u8, 1) << @intCast(phase_index));
+    }
+
+    /// Check if a phase has already triggered
+    pub fn hasPhaseTriggered(self: *const AIState, phase_index: u8) bool {
+        return (self.triggered_phases & (@as(u8, 1) << @intCast(phase_index))) != 0;
     }
 };
 
@@ -151,9 +273,9 @@ pub const AIState = struct {
 // WORLD STATE - Combat snapshot for decision making
 // ============================================================================
 
-const MAX_ENTITIES: usize = 12;
+const MAX_ENTITIES: usize = 128;
 
-const WorldState = struct {
+pub const WorldState = struct {
     self: *Character,
     entities: []Character,
 
@@ -187,7 +309,7 @@ const WorldState = struct {
     telem: ?*MatchTelemetry,
     dt: f32,
 
-    fn build(
+    pub fn build(
         self_char: *Character,
         all_entities: []Character,
         terrain: *const TerrainGrid,
@@ -1029,6 +1151,530 @@ fn manageAutoAttack(ent: *Character, world: *const WorldState) void {
 }
 
 // ============================================================================
+// ENGAGEMENT STATE MACHINE
+// ============================================================================
+// Handles aggro, leashing, and reset behavior for dungeon/encounter AI.
+// Standard arena AI (no spawn_position set) skips this and always fights.
+
+/// Update engagement state for a single AI entity
+/// Returns true if the AI should proceed with combat logic, false if idle/leashing/resetting
+pub fn updateEngagementState(
+    ent: *Character,
+    ai: *AIState,
+    world: *const WorldState,
+    delta_time_ms: u32,
+) bool {
+    // Skip engagement logic if no spawn position set (standard arena AI)
+    if (ai.spawn_position == null) {
+        ai.engagement = .engaged;
+        return true;
+    }
+
+    const spawn_pos = ai.spawn_position.?;
+
+    switch (ai.engagement) {
+        .idle => {
+            // Check if any enemy is within aggro radius
+            if (world.nearest_enemy) |_| {
+                if (world.nearest_enemy_dist <= ai.getAggroRadius()) {
+                    // Player entered aggro range - transition to alerted
+                    ai.engagement = .alerted;
+                    ai.engagement_timer_ms = 0;
+                    ai.aggro_source_id = if (world.nearest_enemy) |e| e.id else null;
+                    ai.was_pulled = true;
+                }
+            }
+            return false; // Don't run combat AI while idle
+        },
+
+        .alerted => {
+            // Brief alert phase before engaging (dramatic pause)
+            ai.engagement_timer_ms += delta_time_ms;
+
+            if (ai.engagement_timer_ms >= Config.ALERT_DURATION_MS) {
+                // Finished alert animation - engage!
+                ai.engagement = .engaged;
+                ai.combat_time_ms = 0;
+            }
+            return false; // Don't run combat AI during alert
+        },
+
+        .engaged => {
+            // Track combat time (for phase triggers)
+            ai.combat_time_ms += delta_time_ms;
+
+            // Check if should leash (all enemies too far)
+            if (world.nearest_enemy) |_| {
+                const dist_to_spawn = distanceXZ(ent.position, spawn_pos);
+
+                if (dist_to_spawn > ai.getLeashRadius()) {
+                    // Too far from spawn - start leashing
+                    ai.engagement = .leashing;
+                    ent.stopAutoAttack();
+                }
+            } else {
+                // No enemies visible - could leash or enemies all dead
+                // For now, stay engaged (victory condition handles this)
+            }
+            return true; // Run combat AI
+        },
+
+        .leashing => {
+            // Move back toward spawn position
+            const dist_to_spawn = distanceXZ(ent.position, spawn_pos);
+
+            if (dist_to_spawn < 20.0) {
+                // Reached spawn - start resetting
+                ai.engagement = .resetting;
+                ai.engagement_timer_ms = 0;
+                ent.stopAutoAttack();
+            }
+            return false; // Don't run combat AI while leashing
+        },
+
+        .resetting => {
+            // Wait at spawn before fully resetting
+            ai.engagement_timer_ms += delta_time_ms;
+
+            if (ai.engagement_timer_ms >= Config.RESET_DELAY_MS) {
+                // Reset complete - heal to full and return to idle
+                ent.stats.warmth = ent.stats.max_warmth;
+                ent.stats.energy = ent.stats.max_energy;
+
+                // Clear all conditions (chills, cozies, effects)
+                ent.conditions.clearAll();
+
+                // Reset phase tracking (for bosses)
+                ai.current_phase = 0;
+                ai.triggered_phases = 0;
+                ai.combat_time_ms = 0;
+                ai.adds_killed = 0;
+
+                ai.engagement = .idle;
+            }
+            return false; // Don't run combat AI while resetting
+        },
+    }
+}
+
+/// Calculate movement for leashing AI (returning to spawn)
+pub fn calcLeashMovement(ent: *const Character, ai_state: *const AIState) MovementIntent {
+    const spawn_pos = ai_state.spawn_position orelse return .{
+        .local_x = 0,
+        .local_z = 0,
+        .facing_angle = ent.facing_angle,
+        .apply_penalties = true,
+    };
+
+    const dx = spawn_pos.x - ent.position.x;
+    const dz = spawn_pos.z - ent.position.z;
+    const dist = @sqrt(dx * dx + dz * dz);
+
+    if (dist < 1.0) {
+        return .{
+            .local_x = 0,
+            .local_z = 0,
+            .facing_angle = ent.facing_angle,
+            .apply_penalties = true,
+        };
+    }
+
+    // Move toward spawn at increased speed
+    const move_x = (dx / dist) * Config.LEASH_SPEED_MULTIPLIER;
+    const move_z = (dz / dist) * Config.LEASH_SPEED_MULTIPLIER;
+
+    // Convert to local space
+    const cos_f = @cos(ent.facing_angle);
+    const sin_f = @sin(ent.facing_angle);
+
+    return .{
+        .local_x = move_x * cos_f + move_z * sin_f,
+        .local_z = -move_x * sin_f + move_z * cos_f,
+        .facing_angle = ent.facing_angle,
+        .apply_penalties = false, // No terrain penalties when leashing
+    };
+}
+
+/// Helper: distance in XZ plane (ignoring Y)
+fn distanceXZ(a: rl.Vector3, b: rl.Vector3) f32 {
+    const dx = a.x - b.x;
+    const dz = a.z - b.z;
+    return @sqrt(dx * dx + dz * dz);
+}
+
+// ============================================================================
+// BOSS PHASE SYSTEM
+// ============================================================================
+// Checks phase triggers and applies phase transitions for boss AI.
+// Phase triggers are checked every tick while boss is engaged.
+// Phase transitions can:
+// - Override the boss's skill bar
+// - Spawn adds
+// - Modify arena (terrain/hazards)
+// - Change boss stats (damage/speed multipliers)
+
+const encounter = @import("encounter.zig");
+const BossConfig = encounter.BossConfig;
+const BossPhase = encounter.BossPhase;
+const PhaseTrigger = encounter.PhaseTrigger;
+
+/// Result of checking boss phases
+pub const PhaseCheckResult = struct {
+    /// Did a new phase trigger?
+    phase_triggered: bool = false,
+    /// Index of the triggered phase
+    triggered_phase_index: u8 = 0,
+    /// The triggered phase (if any)
+    triggered_phase: ?*const BossPhase = null,
+};
+
+/// Check if any boss phases should trigger
+/// Call this every tick for boss AI entities
+pub fn checkBossPhases(
+    ent: *const Character,
+    ai: *AIState,
+    boss_config: *const BossConfig,
+) PhaseCheckResult {
+    var result = PhaseCheckResult{};
+
+    const current_warmth_percent = ent.stats.warmth / ent.stats.max_warmth;
+
+    for (boss_config.phases, 0..) |*phase, phase_idx| {
+        const idx: u8 = @intCast(phase_idx);
+
+        // Skip already triggered phases
+        if (ai.hasPhaseTriggered(idx)) continue;
+
+        // Check if this phase should trigger
+        const should_trigger = switch (phase.trigger) {
+            .warmth_percent => |threshold| current_warmth_percent <= threshold,
+            .time_in_combat_ms => |time| ai.combat_time_ms >= time,
+            .adds_killed => |count| ai.adds_killed >= count,
+            .skill_interrupted => false, // Handled elsewhere via interrupt callback
+            .combat_start => ai.combat_time_ms == 0, // Only on first tick of combat
+            .manual => false, // Triggered externally
+        };
+
+        if (should_trigger) {
+            ai.markPhaseTriggered(idx);
+            ai.current_phase = idx;
+
+            result.phase_triggered = true;
+            result.triggered_phase_index = idx;
+            result.triggered_phase = phase;
+
+            // Only trigger one phase per tick
+            break;
+        }
+    }
+
+    return result;
+}
+
+/// Apply a boss phase transition to a character
+/// This updates skills, stats, and returns info about adds to spawn
+pub fn applyBossPhase(
+    ent: *Character,
+    phase: *const BossPhase,
+) void {
+    // Apply skill bar override
+    if (phase.skill_bar_override) |skill_bar| {
+        for (skill_bar, 0..) |maybe_skill, slot| {
+            ent.casting.skills[slot] = maybe_skill;
+        }
+    }
+
+    // Note: Arena changes and add spawning need to be handled by the game state
+    // since they affect the world, not just this character.
+    // The caller should check phase.arena_changes and phase.add_spawn
+
+    // Stat multipliers are typically handled by the combat system reading from
+    // the current phase. For now, we could store the multipliers on the AI state
+    // or apply them directly. Let's log for debugging.
+    if (phase.phase_name) |name| {
+        std.debug.print("=== BOSS PHASE: {s} ===\n", .{name});
+    }
+    if (phase.boss_yell) |yell| {
+        std.debug.print("Boss: \"{s}\"\n", .{yell});
+    }
+}
+
+/// Get the current phase's damage multiplier for a boss
+pub fn getBossPhaseMultiplier(
+    ai: *const AIState,
+    boss_config: *const BossConfig,
+) struct { damage: f32, speed: f32 } {
+    if (ai.current_phase < boss_config.phases.len) {
+        const phase = &boss_config.phases[ai.current_phase];
+        return .{
+            .damage = phase.damage_multiplier,
+            .speed = phase.speed_multiplier,
+        };
+    }
+    return .{ .damage = 1.0, .speed = 1.0 };
+}
+
+// ============================================================================
+// PATROL BEHAVIOR
+// ============================================================================
+// Movement for idle AI following patrol paths.
+
+/// Calculate movement for patrolling AI
+/// Returns movement intent to follow patrol path
+pub fn calcPatrolMovement(
+    ent: *const Character,
+    patrol_path: []const rl.Vector3,
+    current_waypoint: *usize,
+    patrol_speed: f32,
+) MovementIntent {
+    if (patrol_path.len == 0) {
+        return .{
+            .local_x = 0,
+            .local_z = 0,
+            .facing_angle = ent.facing_angle,
+            .apply_penalties = true,
+        };
+    }
+
+    // Get current target waypoint
+    const target = patrol_path[current_waypoint.*];
+
+    // Check if reached waypoint
+    const dist = distanceXZ(ent.position, target);
+    if (dist < 20.0) {
+        // Move to next waypoint (loop around)
+        current_waypoint.* = (current_waypoint.* + 1) % patrol_path.len;
+    }
+
+    // Calculate direction to waypoint
+    const dx = target.x - ent.position.x;
+    const dz = target.z - ent.position.z;
+
+    if (dist < 1.0) {
+        return .{
+            .local_x = 0,
+            .local_z = 0,
+            .facing_angle = ent.facing_angle,
+            .apply_penalties = true,
+        };
+    }
+
+    const move_x = (dx / dist) * patrol_speed;
+    const move_z = (dz / dist) * patrol_speed;
+
+    // Convert to local space
+    const cos_f = @cos(ent.facing_angle);
+    const sin_f = @sin(ent.facing_angle);
+
+    return .{
+        .local_x = move_x * cos_f + move_z * sin_f,
+        .local_z = -move_x * sin_f + move_z * cos_f,
+        .facing_angle = ent.facing_angle,
+        .apply_penalties = true,
+    };
+}
+
+// ============================================================================
+// HAZARD ZONE PROCESSING
+// ============================================================================
+// Runtime processing for hazard zones defined in encounters.
+// Hazards deal damage, apply effects, or knockback characters inside them.
+
+const HazardZone = encounter.HazardZone;
+const HazardType = encounter.HazardType;
+const HazardShape = encounter.HazardShape;
+
+/// State for tracking active hazard zones in an encounter
+pub const HazardZoneState = struct {
+    zone: *const HazardZone,
+    time_remaining_ms: u32,
+    tick_timer_ms: u32 = 0,
+    warning_complete: bool = false,
+
+    pub fn init(zone: *const HazardZone) HazardZoneState {
+        return .{
+            .zone = zone,
+            .time_remaining_ms = if (zone.duration_ms > 0) zone.duration_ms else std.math.maxInt(u32),
+            .warning_complete = zone.warning_time_ms == 0,
+        };
+    }
+
+    /// Update the hazard zone, returns true if zone should be removed
+    pub fn update(self: *HazardZoneState, delta_time_ms: u32) bool {
+        // Handle warning phase
+        if (!self.warning_complete) {
+            if (self.tick_timer_ms >= self.zone.warning_time_ms) {
+                self.warning_complete = true;
+                self.tick_timer_ms = 0;
+            } else {
+                self.tick_timer_ms += delta_time_ms;
+                return false;
+            }
+        }
+
+        // Update duration
+        if (self.time_remaining_ms != std.math.maxInt(u32)) {
+            if (delta_time_ms >= self.time_remaining_ms) {
+                return true; // Zone expired
+            }
+            self.time_remaining_ms -= delta_time_ms;
+        }
+
+        // Update tick timer
+        self.tick_timer_ms += delta_time_ms;
+
+        return false;
+    }
+
+    /// Check if hazard should tick damage this frame
+    pub fn shouldTick(self: *HazardZoneState) bool {
+        if (!self.warning_complete) return false;
+        if (self.tick_timer_ms >= self.zone.tick_rate_ms) {
+            self.tick_timer_ms = 0;
+            return true;
+        }
+        return false;
+    }
+};
+
+/// Check if a position is inside a hazard zone
+pub fn isInsideHazard(pos: rl.Vector3, zone: *const HazardZone) bool {
+    const dx = pos.x - zone.center.x;
+    const dz = pos.z - zone.center.z;
+    const dist = @sqrt(dx * dx + dz * dz);
+
+    return switch (zone.shape) {
+        .circle => dist <= zone.radius,
+        .ring => dist <= zone.radius and dist >= zone.radius * 0.5, // Inner radius = 50% of outer
+        .cone, .line, .moving_line => {
+            // Simplified: treat as circle for now
+            return dist <= zone.radius;
+        },
+    };
+}
+
+/// Apply hazard effects to a character
+/// Returns damage dealt (for telemetry/feedback)
+pub fn applyHazardEffect(
+    ent: *Character,
+    zone: *const HazardZone,
+) f32 {
+    var damage_dealt: f32 = 0.0;
+
+    switch (zone.hazard_type) {
+        .damage => {
+            damage_dealt = zone.damage_per_tick;
+            ent.stats.warmth = @max(0, ent.stats.warmth - damage_dealt);
+        },
+        .slow => {
+            // Apply slippery chill (movement slow)
+            _ = ent.conditions.addChill(.{
+                .chill = .slippery,
+                .duration_ms = zone.tick_rate_ms + 100, // Slightly longer than tick rate
+                .stack_intensity = 1,
+            }, null);
+        },
+        .knockback => {
+            // Push character away from center
+            const dx = ent.position.x - zone.center.x;
+            const dz = ent.position.z - zone.center.z;
+            const dist = @sqrt(dx * dx + dz * dz);
+            if (dist > 0.1) {
+                const push_strength: f32 = 50.0;
+                ent.position.x += (dx / dist) * push_strength;
+                ent.position.z += (dz / dist) * push_strength;
+            }
+        },
+        .knockdown => {
+            // Apply knocked_down chill
+            _ = ent.conditions.addChill(.{
+                .chill = .knocked_down,
+                .duration_ms = 2000,
+                .stack_intensity = 1,
+            }, null);
+        },
+        .freeze => {
+            // Apply frost_eyes (blind) and slippery
+            _ = ent.conditions.addChill(.{
+                .chill = .frost_eyes,
+                .duration_ms = 3000,
+                .stack_intensity = 1,
+            }, null);
+            _ = ent.conditions.addChill(.{
+                .chill = .slippery,
+                .duration_ms = 3000,
+                .stack_intensity = 2,
+            }, null);
+        },
+        .blind => {
+            _ = ent.conditions.addChill(.{
+                .chill = .frost_eyes,
+                .duration_ms = zone.tick_rate_ms + 100,
+                .stack_intensity = 1,
+            }, null);
+        },
+        .pull => {
+            // Pull character toward center
+            const dx = zone.center.x - ent.position.x;
+            const dz = zone.center.z - ent.position.z;
+            const dist = @sqrt(dx * dx + dz * dz);
+            if (dist > 10.0) {
+                const pull_strength: f32 = 30.0;
+                ent.position.x += (dx / dist) * pull_strength;
+                ent.position.z += (dz / dist) * pull_strength;
+            }
+        },
+        .safe_zone => {
+            // Safe zones don't do anything to characters inside
+            // Damage is applied to those OUTSIDE (handled by caller inverting the check)
+        },
+    }
+
+    return damage_dealt;
+}
+
+/// Process all hazard zones for all entities
+/// Call this once per tick from game state
+pub fn processHazardZones(
+    entities: []Character,
+    hazard_states: []HazardZoneState,
+    delta_time_ms: u32,
+) void {
+    for (hazard_states) |*state| {
+        // Update the hazard zone timer
+        const expired = state.update(delta_time_ms);
+        if (expired) continue; // Will be cleaned up by caller
+
+        // Check if should apply effects this tick
+        if (!state.shouldTick()) continue;
+
+        const zone = state.zone;
+
+        // Check each entity
+        for (entities) |*ent| {
+            if (!ent.isAlive()) continue;
+
+            // Check team filtering
+            const is_player_team = ent.team == .blue; // Assuming blue = player team
+            if (is_player_team and !zone.affects_players) continue;
+            if (!is_player_team and !zone.affects_enemies) continue;
+
+            // Check if inside hazard
+            var should_apply = isInsideHazard(ent.position, zone);
+
+            // Invert for safe zones (damage outside, safe inside)
+            if (zone.hazard_type == .safe_zone) {
+                should_apply = !should_apply;
+            }
+
+            if (should_apply) {
+                _ = applyHazardEffect(ent, zone);
+            }
+        }
+    }
+}
+
+// ============================================================================
 // MAIN UPDATE
 // ============================================================================
 
@@ -1048,6 +1694,9 @@ pub fn updateAI(
     // Increment global tick counter each update (works for both real-time and headless)
     ai_global_tick +%= 1;
 
+    // Convert delta_time to ms for engagement timers
+    const delta_time_ms: u32 = @intFromFloat(delta_time * 1000.0);
+
     for (entities, 0..) |*ent, i| {
         if (!ent.isAlive()) continue;
         if (ent.id == controlled_entity_id) continue;
@@ -1062,6 +1711,24 @@ pub fn updateAI(
 
         // Build world state
         var world = WorldState.build(ent, entities, terrain_grid, vfx_manager, rng, match_telemetry, delta_time);
+
+        // ========== ENGAGEMENT STATE MACHINE ==========
+        // Check aggro, leashing, and reset states for dungeon AI
+        const should_combat = updateEngagementState(ent, ai, &world, delta_time_ms);
+
+        // Handle leashing movement (return to spawn)
+        if (ai.engagement == .leashing) {
+            const intent = calcLeashMovement(ent, ai);
+            movement.applyMovement(ent, intent, entities, null, null, delta_time, terrain_grid);
+            continue; // Skip combat logic
+        }
+
+        // Skip combat AI if not engaged
+        if (!should_combat) {
+            continue;
+        }
+
+        // ========== COMBAT AI (only when engaged) ==========
 
         // Handle queued skills first
         if (ent.hasQueuedSkill()) {
@@ -1089,6 +1756,69 @@ pub fn updateAI(
         if (ent.casting.state == .idle) {
             const intent = calcMovement(&world, ai, if (chosen_action) |*a| a else null);
             movement.applyMovement(ent, intent, entities, null, null, delta_time, terrain_grid);
+        }
+    }
+}
+
+// ============================================================================
+// SOCIAL AGGRO / LINK PULLING
+// ============================================================================
+
+/// Pull linked waves when a wave is engaged
+/// Call this when an AI transitions from idle to alerted/engaged
+pub fn pullLinkedWaves(
+    pulled_wave_index: u8,
+    wave_link_groups: []const []const u8,
+    ai_states: []AIState,
+    aggro_source_id: EntityId,
+) void {
+    if (pulled_wave_index >= wave_link_groups.len) return;
+
+    const linked_waves = wave_link_groups[pulled_wave_index];
+
+    for (ai_states) |*ai| {
+        // Check if this AI is in a linked wave
+        for (linked_waves) |linked_idx| {
+            if (ai.wave_index == linked_idx and ai.engagement == .idle) {
+                // Pull this AI
+                ai.engagement = .alerted;
+                ai.engagement_timer_ms = 0;
+                ai.aggro_source_id = aggro_source_id;
+                ai.was_pulled = true;
+            }
+        }
+    }
+}
+
+/// Check for social aggro (nearby allies pull each other)
+pub fn checkSocialAggro(
+    ai_states: []AIState,
+    entities: []const Character,
+    aggro_source_id: EntityId,
+) void {
+    // Find all engaged AI and pull nearby idle AI
+    for (ai_states, 0..) |*ai, i| {
+        if (ai.engagement != .engaged) continue;
+        if (i >= entities.len) continue;
+
+        const engaged_pos = entities[i].position;
+
+        // Check nearby AI for social aggro
+        for (ai_states, 0..) |*other_ai, j| {
+            if (other_ai.engagement != .idle) continue;
+            if (j >= entities.len) continue;
+            if (entities[i].team != entities[j].team) continue; // Only same team
+
+            const other_pos = entities[j].position;
+            const dist = distanceXZ(engaged_pos, other_pos);
+
+            if (dist <= Config.SOCIAL_AGGRO_RADIUS) {
+                // Pull this AI via social aggro
+                other_ai.engagement = .alerted;
+                other_ai.engagement_timer_ms = 0;
+                other_ai.aggro_source_id = aggro_source_id;
+                other_ai.was_pulled = true;
+            }
         }
     }
 }

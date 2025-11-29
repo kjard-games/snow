@@ -137,10 +137,48 @@ pub fn build(b: *std.Build) void {
     const batch_test_step = b.step("batch-test", "Run batch simulations and collect aggregate statistics");
     batch_test_step.dependOn(&batch_test_cmd.step);
 
+    // Encounter system integration test
+    const test_encounter = b.addExecutable(.{
+        .name = "test-encounter",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/test_encounter.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    test_encounter.linkLibrary(raylib_dep.artifact("raylib"));
+    test_encounter.root_module.addImport("raylib", raylib_dep.module("raylib"));
+
+    b.installArtifact(test_encounter);
+
+    const test_encounter_cmd = b.addRunArtifact(test_encounter);
+    test_encounter_cmd.step.dependOn(b.getInstallStep());
+
+    const test_encounter_step = b.step("test-encounter", "Run encounter system integration tests");
+    test_encounter_step.dependOn(&test_encounter_cmd.step);
+
+    // Unit tests for encounter module
+    const encounter_unit_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/test_encounter.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    encounter_unit_tests.linkLibrary(raylib_dep.artifact("raylib"));
+    encounter_unit_tests.root_module.addImport("raylib", raylib_dep.module("raylib"));
+
+    const run_encounter_unit_tests = b.addRunArtifact(encounter_unit_tests);
+    const unit_test_step = b.step("unit-test", "Run unit tests");
+    unit_test_step.dependOn(&run_encounter_unit_tests.step);
+
     // Unified test step that runs all test suites
-    const test_all_step = b.step("test", "Run all test suites (simulation, factory, balance, batch)");
+    const test_all_step = b.step("test", "Run all test suites (simulation, factory, balance, batch, encounter)");
     test_all_step.dependOn(&test_cmd.step);
     test_all_step.dependOn(&test_factory_cmd.step);
     test_all_step.dependOn(&balance_test_cmd.step);
     test_all_step.dependOn(&batch_test_cmd.step);
+    test_all_step.dependOn(&test_encounter_cmd.step);
 }
