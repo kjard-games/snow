@@ -7,6 +7,7 @@ const skill_icons = @import("skill_icons.zig");
 const palette = @import("color_palette.zig");
 const skills = @import("skills.zig");
 const terrain_mod = @import("terrain.zig");
+const buildings = @import("buildings.zig");
 
 const Character = character.Character;
 const InputState = input.InputState;
@@ -14,6 +15,8 @@ const EntityId = entity_types.EntityId;
 const SkillType = skills.SkillType;
 const Skill = skills.Skill;
 const TerrainGrid = terrain_mod.TerrainGrid;
+const BuildingType = buildings.BuildingType;
+const BuildingManager = buildings.BuildingManager;
 
 // ============================================================================
 // SCHOOL MECHANIC HINTS - Visual indicators for skill synergy
@@ -460,6 +463,58 @@ fn drawTerrainIndicator(player: *const Character, terrain_grid: *const TerrainGr
     // Center line at 100% (normal speed)
     const center_x = bar_x + (bar_width * (1.0 / 1.2)); // Position for 100% speed
     rl.drawLine(toI32(center_x), toI32(bar_y - 2), toI32(center_x), toI32(bar_y + bar_height + 2), rl.Color.init(200, 200, 200, 200));
+}
+
+// ============================================================================
+// BUILDING LEGEND - Shows building type colors
+// ============================================================================
+
+/// Draw a legend showing building type colors (for Haysboro map debugging)
+pub fn drawBuildingLegend(building_manager: ?*const BuildingManager) void {
+    // Only show legend if buildings are present
+    if (building_manager == null) return;
+    const bm = building_manager.?;
+    if (bm.building_count == 0) return;
+
+    // Count building types present in the map
+    var type_counts: [@typeInfo(BuildingType).@"enum".fields.len]u32 = .{0} ** @typeInfo(BuildingType).@"enum".fields.len;
+    for (0..bm.building_count) |i| {
+        const idx = @intFromEnum(bm.buildings[i].building_type);
+        type_counts[idx] += 1;
+    }
+
+    // Position in top-right corner
+    const screen_width = @as(f32, @floatFromInt(rl.getScreenWidth()));
+    const x = screen_width - 150;
+    var y: f32 = 10;
+
+    // Header
+    rl.drawRectangle(toI32(x - 5), toI32(y - 5), 145, 20, rl.Color.init(0, 0, 0, 180));
+    rl.drawText("Building Types", toI32(x), toI32(y), 12, rl.Color.white);
+    y += 20;
+
+    // Draw legend entries for types that are present
+    inline for (@typeInfo(BuildingType).@"enum".fields, 0..) |field, idx| {
+        if (type_counts[idx] > 0) {
+            const btype: BuildingType = @enumFromInt(field.value);
+            const color = btype.getLegendColor();
+            const name = btype.getName();
+
+            // Background
+            rl.drawRectangle(toI32(x - 5), toI32(y - 2), 145, 16, rl.Color.init(0, 0, 0, 150));
+
+            // Color swatch
+            rl.drawRectangle(toI32(x), toI32(y), 12, 12, color);
+            rl.drawRectangleLines(toI32(x), toI32(y), 12, 12, rl.Color.init(100, 100, 100, 200));
+
+            // Type name and count
+            var buf: [64]u8 = undefined;
+            const label = std.fmt.bufPrintZ(&buf, "{s} ({d})", .{ name, type_counts[idx] }) catch "???";
+            rl.drawText(label, toI32(x + 18), toI32(y), 10, rl.Color.init(200, 200, 200, 255));
+
+            y += 16;
+        }
+    }
 }
 
 pub fn drawUI(player: *const Character, entities: []const Character, selected_target: ?EntityId, input_state: *InputState, camera: rl.Camera, terrain_grid: *const TerrainGrid) void {

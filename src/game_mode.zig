@@ -13,6 +13,8 @@ const encounter = @import("encounter.zig");
 const ai = @import("ai.zig");
 const affix_processor = @import("affix_processor.zig");
 const arena_gen = @import("arena_gen.zig");
+const gis_loader = @import("gis_loader.zig");
+const buildings = @import("buildings.zig");
 
 const GameState = game_state.GameState;
 const Character = @import("character.zig").Character;
@@ -151,6 +153,60 @@ pub const ArenaFormat = enum {
             .teams_2v2, .team_ffa_2v2v2, .team_ffa_2v2v2v2 => 2,
             .teams_3v3 => 3,
             .teams_4v4 => 4,
+        };
+    }
+};
+
+/// Arena map selection (random or Haysboro regions)
+pub const ArenaSelection = enum {
+    random, // Random procedural arena
+    haysboro_eugene_coste, // Eugene Coste School
+    haysboro_woodman, // Woodman School
+    haysboro_central, // Central residential streets
+    haysboro_our_lady, // Our Lady of the Rockies
+    haysboro_school, // Haysboro School
+
+    pub fn getName(self: ArenaSelection) [:0]const u8 {
+        return switch (self) {
+            .random => "Random Arena",
+            .haysboro_eugene_coste => "Eugene Coste School",
+            .haysboro_woodman => "Woodman School",
+            .haysboro_central => "Haysboro Streets",
+            .haysboro_our_lady => "Our Lady of the Rockies",
+            .haysboro_school => "Haysboro School",
+        };
+    }
+
+    pub fn getHaysboroRegion(self: ArenaSelection) ?gis_loader.HaysboroRegion {
+        return switch (self) {
+            .random => null,
+            .haysboro_eugene_coste => .eugene_coste_school,
+            .haysboro_woodman => .woodman_school,
+            .haysboro_central => .central_streets,
+            .haysboro_our_lady => .our_lady_of_rockies,
+            .haysboro_school => .haysboro_school,
+        };
+    }
+
+    pub fn cycle(self: ArenaSelection) ArenaSelection {
+        return switch (self) {
+            .random => .haysboro_eugene_coste,
+            .haysboro_eugene_coste => .haysboro_woodman,
+            .haysboro_woodman => .haysboro_central,
+            .haysboro_central => .haysboro_our_lady,
+            .haysboro_our_lady => .haysboro_school,
+            .haysboro_school => .random,
+        };
+    }
+
+    pub fn cycleBack(self: ArenaSelection) ArenaSelection {
+        return switch (self) {
+            .random => .haysboro_school,
+            .haysboro_eugene_coste => .random,
+            .haysboro_woodman => .haysboro_eugene_coste,
+            .haysboro_central => .haysboro_woodman,
+            .haysboro_our_lady => .haysboro_central,
+            .haysboro_school => .haysboro_our_lady,
         };
     }
 };
@@ -411,6 +467,7 @@ pub const GameMode = struct {
 
     // Mode-specific state
     arena_format: ArenaFormat,
+    arena_selection: ArenaSelection,
     draft_rules: DraftRules,
     run_state: RunState,
     arc_state: ArcState,
@@ -458,6 +515,7 @@ pub const GameMode = struct {
             .result = .running,
             .game_state = null,
             .arena_format = .teams_4v4,
+            .arena_selection = .random,
             .draft_rules = .none,
             .run_state = .{},
             .arc_state = .{},
@@ -623,6 +681,14 @@ pub const GameMode = struct {
                 if (rl.isKeyPressed(.three)) self.arena_format = .teams_3v3;
                 if (rl.isKeyPressed(.four)) self.arena_format = .teams_4v4;
 
+                // Arena selection (Left/Right arrows or A/D)
+                if (rl.isKeyPressed(.left) or rl.isKeyPressed(.a)) {
+                    self.arena_selection = self.arena_selection.cycleBack();
+                }
+                if (rl.isKeyPressed(.right) or rl.isKeyPressed(.d)) {
+                    self.arena_selection = self.arena_selection.cycle();
+                }
+
                 // Back to menu
                 if (rl.isKeyPressed(.escape)) {
                     self.result = .{ .transition = .{ .target_mode = .main_menu } };
@@ -679,7 +745,45 @@ pub const GameMode = struct {
             return;
         };
 
-        // Apply a random arena template for visual variety
+        // Apply arena based on selection
+        if (self.arena_selection.getHaysboroRegion()) |region| {
+            // Load Haysboro region with building data
+            var arena_data = gis_loader.loadHaysboroArenaData(self.allocator, region) catch |err| {
+                std.log.err("Failed to load Haysboro region: {any}", .{err});
+                // Fall back to random template
+                self.applyRandomArenaTemplate(gs_ptr);
+                self.game_state = gs_ptr;
+                self.phase = .match_active;
+                return;
+            };
+            defer arena_data.deinit();
+
+            arena_gen.applyRecipe(&gs_ptr.terrain_grid, arena_data.recipe.*);
+
+            // Place props from the Haysboro recipe
+            if (gs_ptr.prop_manager) |*pm| {
+                arena_gen.placePropsFromRecipe(pm, arena_data.recipe.*, &gs_ptr.terrain_grid);
+            }
+
+            // Populate buildings from GIS building data
+            if (gs_ptr.building_manager) |*bm| {
+                for (arena_data.building_data) |bd| {
+                    _ = bm.addBuilding(bd.vertices, bd.building_type, bd.height);
+                }
+                // Update building elevations from terrain
+                bm.updateElevations(&gs_ptr.terrain_grid);
+                std.log.info("Loaded {d} buildings from Haysboro region", .{bm.building_count});
+            }
+        } else {
+            // Random procedural arena
+            self.applyRandomArenaTemplate(gs_ptr);
+        }
+
+        self.game_state = gs_ptr;
+        self.phase = .match_active;
+    }
+
+    fn applyRandomArenaTemplate(self: *Self, gs_ptr: *GameState) void {
         const arena_templates = [_]*const arena_gen.ArenaRecipe{
             &arena_gen.template_school_yard,
             &arena_gen.template_cul_de_sac,
@@ -697,9 +801,6 @@ pub const GameMode = struct {
         if (gs_ptr.prop_manager) |*pm| {
             arena_gen.placePropsFromRecipe(pm, selected_recipe, &gs_ptr.terrain_grid);
         }
-
-        self.game_state = gs_ptr;
-        self.phase = .match_active;
     }
 
     fn cleanupMatch(self: *Self) void {
@@ -771,10 +872,19 @@ pub const GameMode = struct {
         const format_width = rl.measureText(format_text, 30);
         rl.drawText(format_text, center_x - @divTrunc(format_width, 2), 150, 30, rl.Color.yellow);
 
+        // Arena selection display
+        const arena_name = self.arena_selection.getName();
+        var arena_buf: [64:0]u8 = undefined;
+        const arena_text = std.fmt.bufPrintZ(&arena_buf, "< {s} >", .{arena_name}) catch "< ??? >";
+        const arena_width = rl.measureText(arena_text, 24);
+        rl.drawText("Arena:", center_x - @divTrunc(rl.measureText("Arena:", 24), 2), 190, 24, rl.Color.light_gray);
+        rl.drawText(arena_text, center_x - @divTrunc(arena_width, 2), 220, 24, rl.Color.sky_blue);
+
         // Instructions
-        rl.drawText("[1] 1v1  [2] 2v2  [3] 3v3  [4] 4v4", center_x - 180, 220, 20, rl.Color.gray);
-        rl.drawText("[Enter/Space] Start Match", center_x - 130, 260, 20, rl.Color.white);
-        rl.drawText("[Esc] Back to Menu", center_x - 90, 300, 20, rl.Color.gray);
+        rl.drawText("[1] 1v1  [2] 2v2  [3] 3v3  [4] 4v4", center_x - 180, 270, 20, rl.Color.gray);
+        rl.drawText("[Left/Right] or [A/D] Change Arena", center_x - 170, 300, 20, rl.Color.gray);
+        rl.drawText("[Enter/Space] Start Match", center_x - 130, 340, 20, rl.Color.white);
+        rl.drawText("[Esc] Back to Menu", center_x - 90, 380, 20, rl.Color.gray);
 
         // Stats
         var stats_buf: [128:0]u8 = undefined;

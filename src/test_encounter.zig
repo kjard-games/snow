@@ -274,7 +274,7 @@ const TestContext = struct {
                 // Handle leashing movement
                 if (ai_state.engagement == .leashing) {
                     const intent = ai.calcLeashMovement(ent, ai_state);
-                    movement.applyMovement(ent, intent, self.entities[0..self.totalCount()], null, null, dt, &self.terrain);
+                    movement.applyMovement(ent, intent, self.entities[0..self.totalCount()], null, null, dt, &self.terrain, null);
                 }
             }
         }

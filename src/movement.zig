@@ -1,8 +1,10 @@
 const std = @import("std");
 const rl = @import("raylib");
 const character = @import("character.zig");
+const buildings = @import("buildings.zig");
 
 const Character = character.Character;
+const BuildingManager = buildings.BuildingManager;
 
 // Movement speed constants (Guild Wars style)
 // Tick-based: units per SECOND (not per frame)
@@ -36,6 +38,7 @@ pub const MovementIntent = struct {
 
 /// Apply movement to a character with collision detection (tick-based)
 /// terrain_grid: Optional terrain grid for terrain-based speed modifiers
+/// building_manager: Optional building manager for building collision
 pub fn applyMovement(
     entity: *Character,
     intent: MovementIntent,
@@ -44,6 +47,7 @@ pub fn applyMovement(
     entity_index: ?usize,
     delta_time: f32, // Time since last tick (e.g., 0.05 seconds for 20Hz)
     terrain_grid: ?*const @import("terrain.zig").TerrainGrid,
+    building_manager: ?*const BuildingManager,
 ) void {
     // Skip if no movement
     if (intent.local_x == 0.0 and intent.local_z == 0.0) return;
@@ -108,6 +112,16 @@ pub fn applyMovement(
             entity.position.x = old_x;
             entity.position.z = old_z;
             return; // Can't move into walls
+        }
+    }
+
+    // Check collision with buildings
+    if (building_manager) |bm| {
+        if (bm.checkCollision(new_x, new_z) != null) {
+            // Hit a building - revert to old position
+            entity.position.x = old_x;
+            entity.position.z = old_z;
+            return; // Can't move into buildings
         }
     }
 

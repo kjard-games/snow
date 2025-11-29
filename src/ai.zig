@@ -10,6 +10,7 @@ const position = @import("position.zig");
 const vfx = @import("vfx.zig");
 const terrain_mod = @import("terrain.zig");
 const telemetry = @import("telemetry.zig");
+const buildings = @import("buildings.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
@@ -19,6 +20,7 @@ const Position = position.Position;
 const TerrainGrid = terrain_mod.TerrainGrid;
 const VFXManager = vfx.VFXManager;
 const MatchTelemetry = telemetry.MatchTelemetry;
+const BuildingManager = buildings.BuildingManager;
 
 // ============================================================================
 // UTILITY AI SYSTEM
@@ -1840,6 +1842,7 @@ pub fn updateAI(
     vfx_manager: *VFXManager,
     terrain_grid: *const TerrainGrid,
     match_telemetry: ?*MatchTelemetry,
+    building_manager: ?*const BuildingManager,
 ) void {
     // Increment global tick counter each update (works for both real-time and headless)
     ai_global_tick +%= 1;
@@ -1881,7 +1884,7 @@ pub fn updateAI(
         // Handle leashing movement (return to spawn)
         if (ai.engagement == .leashing) {
             const intent = calcLeashMovement(ent, ai);
-            movement.applyMovement(ent, intent, entities, null, null, delta_time, terrain_grid);
+            movement.applyMovement(ent, intent, entities, null, null, delta_time, terrain_grid, building_manager);
             continue; // Skip combat logic
         }
 
@@ -1917,7 +1920,7 @@ pub fn updateAI(
         // Movement - ALWAYS calculate and apply movement when idle (not just when action chosen)
         if (ent.casting.state == .idle) {
             const intent = calcMovement(&world, ai, if (chosen_action) |*a| a else null, is_player_ally);
-            movement.applyMovement(ent, intent, entities, null, null, delta_time, terrain_grid);
+            movement.applyMovement(ent, intent, entities, null, null, delta_time, terrain_grid, building_manager);
         }
     }
 }

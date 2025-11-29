@@ -74,6 +74,12 @@ pub const BlendMode = enum {
     smooth_blend, // Weighted average based on falloff
 };
 
+/// Interpolation mode for external heightmap sampling
+pub const HeightmapInterpolation = enum {
+    nearest, // Nearest neighbor (blocky)
+    bilinear, // Bilinear interpolation (smooth)
+};
+
 /// An atomic elevation modification
 pub const ElevationPrimitive = union(enum) {
     // === BASIC SHAPES ===
@@ -173,6 +179,48 @@ pub const ElevationPrimitive = union(enum) {
         steepness: f32 = 0.02, // Normalized width of transition
     },
 
+    // === GIS/EXTERNAL DATA ===
+
+    /// External heightmap data from GIS source (DEM/GeoTIFF)
+    /// Data is expected to be normalized 0.0-1.0, scaled by amplitude
+    external_heightmap: struct {
+        /// Pointer to heightmap data (row-major, normalized 0-1)
+        data: []const f32,
+        /// Dimensions of source data
+        source_width: usize,
+        source_height: usize,
+        /// Scale factor for height values (world units)
+        amplitude: f32 = 50.0,
+        /// Offset added after scaling
+        base_height: f32 = 0.0,
+        /// Interpolation mode
+        interpolation: HeightmapInterpolation = .bilinear,
+    },
+
+    /// Polygon extrusion - for building footprints from OSM
+    /// Vertices define a closed polygon in normalized coordinates
+    polygon: struct {
+        /// Vertices of the polygon (normalized 0-1 coordinates)
+        /// Must be at least 3 vertices, implicitly closed
+        vertices: []const NormalizedPos,
+        /// Height of the extruded polygon
+        height: f32 = 40.0,
+        /// Falloff distance from edges (0 = sharp, >0 = sloped)
+        edge_falloff: f32 = 0.01,
+    },
+
+    /// Polyline as a path/road with width - for streets from OSM
+    polyline: struct {
+        /// Points along the path (normalized 0-1 coordinates)
+        points: []const NormalizedPos,
+        /// Width of the path (normalized)
+        width: f32 = 0.05,
+        /// Height offset (negative for depressed roads)
+        height: f32 = -3.0,
+        /// Falloff at edges
+        falloff: Falloff = .smooth,
+    },
+
     pub fn apply(
         self: ElevationPrimitive,
         heightmap: []f32,
@@ -208,6 +256,9 @@ pub const ElevationPrimitive = union(enum) {
             .arena_flatten => 0.0, // Flatten is a blend operation
             .crater => |c| sampleCrater(pos, c),
             .cliff => |c| sampleCliff(pos, c),
+            .external_heightmap => |e| sampleExternalHeightmap(pos, e),
+            .polygon => |p| samplePolygon(pos, p),
+            .polyline => |p| samplePolyline(pos, p),
         };
     }
 };
@@ -383,6 +434,161 @@ fn sampleCliff(pos: NormalizedPos, c: anytype) f32 {
 
     const t = (perp_dist + c.steepness) / (c.steepness * 2.0);
     return -c.drop * t;
+}
+
+// === GIS SAMPLING FUNCTIONS ===
+
+fn sampleExternalHeightmap(pos: NormalizedPos, e: anytype) f32 {
+    // Map normalized position to source heightmap coordinates
+    const src_x = pos.x * @as(f32, @floatFromInt(e.source_width - 1));
+    const src_z = pos.z * @as(f32, @floatFromInt(e.source_height - 1));
+
+    const height_value = switch (e.interpolation) {
+        .nearest => blk: {
+            const ix = @as(usize, @intFromFloat(@round(src_x)));
+            const iz = @as(usize, @intFromFloat(@round(src_z)));
+            const clamped_x = @min(ix, e.source_width - 1);
+            const clamped_z = @min(iz, e.source_height - 1);
+            break :blk e.data[clamped_z * e.source_width + clamped_x];
+        },
+        .bilinear => blk: {
+            // Get the four nearest samples
+            const x0 = @as(usize, @intFromFloat(@floor(src_x)));
+            const z0 = @as(usize, @intFromFloat(@floor(src_z)));
+            const x1 = @min(x0 + 1, e.source_width - 1);
+            const z1 = @min(z0 + 1, e.source_height - 1);
+
+            // Interpolation weights
+            const tx = src_x - @floor(src_x);
+            const tz = src_z - @floor(src_z);
+
+            // Sample four corners
+            const h00 = e.data[z0 * e.source_width + x0];
+            const h10 = e.data[z0 * e.source_width + x1];
+            const h01 = e.data[z1 * e.source_width + x0];
+            const h11 = e.data[z1 * e.source_width + x1];
+
+            // Bilinear interpolation
+            const h0 = h00 * (1.0 - tx) + h10 * tx;
+            const h1 = h01 * (1.0 - tx) + h11 * tx;
+            break :blk h0 * (1.0 - tz) + h1 * tz;
+        },
+    };
+
+    return e.base_height + height_value * e.amplitude;
+}
+
+fn samplePolygon(pos: NormalizedPos, p: anytype) f32 {
+    if (p.vertices.len < 3) return 0.0;
+
+    // Check if point is inside polygon using ray casting
+    const inside = pointInPolygon(pos, p.vertices);
+
+    if (p.edge_falloff <= 0.0) {
+        // Sharp edges - just return height if inside
+        return if (inside) p.height else 0.0;
+    }
+
+    // Calculate distance to nearest edge for falloff
+    const edge_dist = distanceToPolygonEdge(pos, p.vertices);
+
+    if (inside) {
+        // Inside: full height, with falloff near edges
+        if (edge_dist < p.edge_falloff) {
+            const t = edge_dist / p.edge_falloff;
+            return p.height * t; // Ramp up from edge
+        }
+        return p.height;
+    } else {
+        // Outside: falloff from edge
+        if (edge_dist < p.edge_falloff) {
+            const t = 1.0 - (edge_dist / p.edge_falloff);
+            return p.height * t; // Ramp down from edge
+        }
+        return 0.0;
+    }
+}
+
+fn samplePolyline(pos: NormalizedPos, p: anytype) f32 {
+    if (p.points.len < 2) return 0.0;
+
+    // Find minimum distance to any segment
+    var min_dist: f32 = std.math.floatMax(f32);
+
+    for (0..p.points.len - 1) |i| {
+        const dist = distanceToSegment(pos, p.points[i], p.points[i + 1]);
+        min_dist = @min(min_dist, dist);
+    }
+
+    if (min_dist >= p.width) return 0.0;
+
+    // Apply falloff
+    const t = min_dist / p.width;
+    return p.height * p.falloff.apply(t);
+}
+
+// === POLYGON HELPER FUNCTIONS ===
+
+/// Point-in-polygon test using ray casting algorithm
+fn pointInPolygon(pos: NormalizedPos, vertices: []const NormalizedPos) bool {
+    var inside = false;
+    const n = vertices.len;
+
+    var j = n - 1;
+    for (0..n) |i| {
+        const vi = vertices[i];
+        const vj = vertices[j];
+
+        // Check if ray from pos going right crosses this edge
+        if ((vi.z > pos.z) != (vj.z > pos.z)) {
+            // Calculate x coordinate of intersection
+            const slope = (vj.x - vi.x) / (vj.z - vi.z);
+            const intersect_x = vi.x + slope * (pos.z - vi.z);
+
+            if (pos.x < intersect_x) {
+                inside = !inside;
+            }
+        }
+        j = i;
+    }
+
+    return inside;
+}
+
+/// Calculate minimum distance from point to polygon edge
+fn distanceToPolygonEdge(pos: NormalizedPos, vertices: []const NormalizedPos) f32 {
+    var min_dist: f32 = std.math.floatMax(f32);
+    const n = vertices.len;
+
+    var j = n - 1;
+    for (0..n) |i| {
+        const dist = distanceToSegment(pos, vertices[j], vertices[i]);
+        min_dist = @min(min_dist, dist);
+        j = i;
+    }
+
+    return min_dist;
+}
+
+/// Calculate distance from point to line segment
+fn distanceToSegment(pos: NormalizedPos, a: NormalizedPos, b: NormalizedPos) f32 {
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len_sq = dx * dx + dz * dz;
+
+    if (len_sq < 0.0001) {
+        // Degenerate segment (point)
+        return pos.distanceTo(a);
+    }
+
+    // Project point onto line, clamped to segment
+    const t = @max(0.0, @min(1.0, ((pos.x - a.x) * dx + (pos.z - a.z) * dz) / len_sq));
+    const proj = NormalizedPos{
+        .x = a.x + t * dx,
+        .z = a.z + t * dz,
+    };
+
+    return pos.distanceTo(proj);
 }
 
 fn applyBlend(existing: f32, new: f32, mode: BlendMode) f32 {
@@ -1459,8 +1665,8 @@ pub const ArenaBuilder = struct {
     rng: std.Random,
 
     // Buffers for building the recipe
-    elevation_ops: std.ArrayList(ElevationOp),
-    snow_ops: std.ArrayList(SnowZonePrimitive),
+    elevation_ops: std.ArrayListUnmanaged(ElevationOp),
+    snow_ops: std.ArrayListUnmanaged(SnowZonePrimitive),
 
     pub fn init(allocator: std.mem.Allocator, seed: u64) ArenaBuilder {
         var prng = std.Random.DefaultPrng.init(seed);
@@ -1468,19 +1674,19 @@ pub const ArenaBuilder = struct {
             .allocator = allocator,
             .seed = seed,
             .rng = prng.random(),
-            .elevation_ops = std.ArrayList(ElevationOp).init(allocator),
-            .snow_ops = std.ArrayList(SnowZonePrimitive).init(allocator),
+            .elevation_ops = .empty,
+            .snow_ops = .empty,
         };
     }
 
     pub fn deinit(self: *ArenaBuilder) void {
-        self.elevation_ops.deinit();
-        self.snow_ops.deinit();
+        self.elevation_ops.deinit(self.allocator);
+        self.snow_ops.deinit(self.allocator);
     }
 
     /// Add base noise terrain
     pub fn addBaseNoise(self: *ArenaBuilder, amplitude: f32, frequency: f32) !void {
-        try self.elevation_ops.append(.{
+        try self.elevation_ops.append(self.allocator, .{
             .primitive = .{ .noise = .{
                 .seed = self.seed,
                 .amplitude = amplitude,
@@ -1493,7 +1699,7 @@ pub const ArenaBuilder = struct {
 
     /// Add boundary walls
     pub fn addBoundaryWalls(self: *ArenaBuilder, height: f32, thickness: f32) !void {
-        try self.elevation_ops.append(.{
+        try self.elevation_ops.append(self.allocator, .{
             .primitive = .{ .boundary_wall = .{
                 .height = height,
                 .thickness = thickness,
@@ -1506,7 +1712,7 @@ pub const ArenaBuilder = struct {
 
     /// Add a mound at a position
     pub fn addMound(self: *ArenaBuilder, center: NormalizedPos, radius: f32, height: f32) !void {
-        try self.elevation_ops.append(.{
+        try self.elevation_ops.append(self.allocator, .{
             .primitive = .{ .mound = .{
                 .center = center,
                 .radius = radius,
@@ -1519,7 +1725,7 @@ pub const ArenaBuilder = struct {
 
     /// Add a ridge between two points
     pub fn addRidge(self: *ArenaBuilder, start: NormalizedPos, end: NormalizedPos, width: f32, height: f32) !void {
-        try self.elevation_ops.append(.{
+        try self.elevation_ops.append(self.allocator, .{
             .primitive = .{ .ridge = .{
                 .start = start,
                 .end = end,
@@ -1533,7 +1739,7 @@ pub const ArenaBuilder = struct {
 
     /// Add center flattening
     pub fn addCenterFlatten(self: *ArenaBuilder, radius: f32, strength: f32) !void {
-        try self.elevation_ops.append(.{
+        try self.elevation_ops.append(self.allocator, .{
             .primitive = .{ .arena_flatten = .{
                 .center = .{ .x = 0.5, .z = 0.5 },
                 .radius = radius,
@@ -1545,7 +1751,7 @@ pub const ArenaBuilder = struct {
 
     /// Add a snow zone
     pub fn addSnowCircle(self: *ArenaBuilder, center: NormalizedPos, radius: f32, terrain: TerrainType) !void {
-        try self.snow_ops.append(.{ .circle = .{
+        try self.snow_ops.append(self.allocator, .{ .circle = .{
             .center = center,
             .radius = radius,
             .terrain_type = terrain,
@@ -1554,7 +1760,7 @@ pub const ArenaBuilder = struct {
 
     /// Add snow path
     pub fn addSnowPath(self: *ArenaBuilder, start: NormalizedPos, end: NormalizedPos, width: f32, terrain: TerrainType) !void {
-        try self.snow_ops.append(.{ .path = .{
+        try self.snow_ops.append(self.allocator, .{ .path = .{
             .start = start,
             .end = end,
             .width = width,
@@ -1592,7 +1798,7 @@ pub const ArenaBuilder = struct {
             },
             .frozen_pond => {
                 // Central depression
-                try self.elevation_ops.append(.{
+                try self.elevation_ops.append(self.allocator, .{
                     .primitive = .{ .crater = .{
                         .center = .{ .x = 0.5, .z = 0.5 },
                         .outer_radius = 0.3,
@@ -1605,7 +1811,7 @@ pub const ArenaBuilder = struct {
             },
             .fortress => {
                 // Central plateau
-                try self.elevation_ops.append(.{
+                try self.elevation_ops.append(self.allocator, .{
                     .primitive = .{ .plateau = .{
                         .min = .{ .x = 0.35, .z = 0.35 },
                         .max = .{ .x = 0.65, .z = 0.65 },
@@ -1644,7 +1850,7 @@ pub const ArenaBuilder = struct {
         // === SNOW LAYER ===
 
         // 1. Base fill
-        try self.snow_ops.append(.{ .fill = .{ .terrain_type = .packed_snow } });
+        try self.snow_ops.append(self.allocator, .{ .fill = .{ .terrain_type = .packed_snow } });
 
         // 2. Ice coverage
         if (params.ice_coverage > 0.1) {
@@ -1679,7 +1885,7 @@ pub const ArenaBuilder = struct {
         }
 
         // 4. Deep powder at edges (between arena and boundary)
-        try self.snow_ops.append(.{ .ring = .{
+        try self.snow_ops.append(self.allocator, .{ .ring = .{
             .center = .{ .x = 0.5, .z = 0.5 },
             .inner_radius = 0.38,
             .outer_radius = 0.48,

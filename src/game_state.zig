@@ -21,6 +21,7 @@ const palette = @import("color_palette.zig");
 const telemetry = @import("telemetry.zig");
 const factory = @import("factory.zig");
 const arena_props = @import("arena_props.zig");
+const buildings_mod = @import("buildings.zig");
 
 const print = std.debug.print;
 
@@ -231,6 +232,7 @@ pub const GameStateBuilder = struct {
             .allocator = self.allocator,
             .simulation_mode = !self.config.rendering,
             .prop_manager = PropManager.init(self.allocator),
+            .building_manager = BuildingManager.init(self.allocator),
         };
     }
 
@@ -511,6 +513,7 @@ pub const TerrainGrid = terrain.TerrainGrid;
 const MatchTelemetry = telemetry.MatchTelemetry;
 const SkillRangePreviewState = ground_targeting.SkillRangePreviewState;
 const PropManager = arena_props.PropManager;
+const BuildingManager = buildings_mod.BuildingManager;
 
 // Game configuration constants
 pub const MAX_ENTITIES: usize = 128; // Support dungeon encounters with many enemies (4 player party + up to 124 enemies/NPCs)
@@ -564,6 +567,9 @@ pub const GameState = struct {
     // Arena props system (placed environment objects)
     prop_manager: ?PropManager = null,
 
+    // Building system (3D buildings from OSM data)
+    building_manager: ?BuildingManager = null,
+
     // ============================================
     // INITIALIZATION METHODS
     // ============================================
@@ -606,6 +612,9 @@ pub const GameState = struct {
     /// Clean up allocated resources. Must be called before GameState goes out of scope.
     pub fn deinit(self: *GameState) void {
         self.terrain_grid.deinit();
+        if (self.building_manager) |*bm| {
+            bm.deinit();
+        }
     }
 
     // ============================================
@@ -697,12 +706,12 @@ pub const GameState = struct {
 
                 // Only apply movement if not casting (GW1 rule: can't move while casting)
                 if (player.casting.state == .idle) {
-                    movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC, &self.terrain_grid);
+                    movement.applyMovement(player, player_movement, &self.entities, null, null, TICK_RATE_SEC, &self.terrain_grid, if (self.building_manager) |*bm| bm else null);
                 }
             }
 
             // Update AI for all entities (in AI-only mode) or non-player entities (in interactive mode)
-            ai.updateAI(&self.entities, self.controlled_entity_id, TICK_RATE_SEC, &self.ai_states, &random_state, &self.vfx_manager, &self.terrain_grid, self.match_telemetry);
+            ai.updateAI(&self.entities, self.controlled_entity_id, TICK_RATE_SEC, &self.ai_states, &random_state, &self.vfx_manager, &self.terrain_grid, self.match_telemetry, if (self.building_manager) |*bm| bm else null);
 
             // Update auto-attacks for all entities
             auto_attack.updateAutoAttacks(&self.entities, TICK_RATE_SEC, &random_state, &self.vfx_manager);
@@ -915,12 +924,15 @@ pub const GameState = struct {
             self.selected_target,
         );
 
-        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid, &self.input_state.ground_targeting, &self.skill_range_preview, if (self.prop_manager) |*pm| pm else null);
+        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid, &self.input_state.ground_targeting, &self.skill_range_preview, if (self.prop_manager) |*pm| pm else null, if (self.building_manager) |*bm| bm else null);
     }
 
     /// Render UI elements (skill bars, target info, etc.) on top of the 3D scene.
     pub fn drawUI(self: *GameState) void {
         const player = self.getPlayerConst();
         ui.drawUI(player, &self.entities, self.selected_target, &self.input_state, self.camera, &self.terrain_grid);
+
+        // Draw building legend (only shown when buildings are present)
+        ui.drawBuildingLegend(if (self.building_manager) |*bm| bm else null);
     }
 };
