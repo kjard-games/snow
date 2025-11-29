@@ -1,5 +1,5 @@
 {
-  "match_duration_ticks": 813,
+  "match_duration_ticks": 836,
   "winning_team": 1,
   "total_damage_dealt_ally": 0,
   "total_damage_dealt_enemy": 0,
@@ -13,9 +13,9 @@
   "entities": [
     {
       "entity_id": 5,
-      "name": "BlueShoveler",
-      "school": "montessori",
-      "position": "pitcher",
+      "name": "BlueSledder",
+      "school": "private_school",
+      "position": "shoveler",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -54,9 +54,9 @@
     },
     {
       "entity_id": 6,
-      "name": "BluePitcher",
-      "school": "private_school",
-      "position": "sledder",
+      "name": "BlueFielder",
+      "school": "montessori",
+      "position": "fielder",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -95,7 +95,7 @@
     },
     {
       "entity_id": 7,
-      "name": "RedSledder",
+      "name": "RedAnimator",
       "school": "homeschool",
       "position": "fielder",
       "team": 1,
@@ -136,9 +136,9 @@
     },
     {
       "entity_id": 8,
-      "name": "RedShoveler",
-      "school": "waldorf",
-      "position": "shoveler",
+      "name": "RedSledder",
+      "school": "homeschool",
+      "position": "fielder",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,

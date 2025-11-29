@@ -28,6 +28,9 @@ pub fn main() !void {
         return err;
     };
 
+    // Initialize skybox (cubemap texture for winter sky)
+    render.initSkybox();
+
     // Enable window resizing and toggling fullscreen
     rl.setWindowState(rl.ConfigFlags{ .window_resizable = true });
 

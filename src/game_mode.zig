@@ -737,7 +737,28 @@ pub const GameMode = struct {
         _ = builder.withRendering(true);
         _ = builder.withPlayerControl(true);
         _ = builder.withCharactersPerTeam(self.arena_format.charactersPerTeam());
-        // TODO: Support team_count in builder for FFA modes
+
+        // Pre-load arena data to get dimensions (if using Haysboro)
+        var arena_data: ?gis_loader.HaysboroArenaData = null;
+        if (self.arena_selection.getHaysboroRegion()) |region| {
+            if (gis_loader.loadHaysboroArenaData(self.allocator, region)) |data| {
+                arena_data = data;
+
+                // Configure terrain to match GIS data dimensions
+                // arena_width/height are in world units, cell_size is 20
+                const cell_size: f32 = 20.0;
+                const grid_width: usize = @intFromFloat(data.arena_width / cell_size);
+                const grid_height: usize = @intFromFloat(data.arena_height / cell_size);
+                _ = builder.withTerrainSize(grid_width, grid_height, cell_size);
+                std.log.info("Arena dimensions: {d}x{d} units ({d}x{d} cells)", .{
+                    data.arena_width, data.arena_height, grid_width, grid_height,
+                });
+            } else |err| {
+                std.log.err("Failed to load Haysboro region: {any}", .{err});
+                // arena_data stays null, will fall back to random arena
+            }
+        }
+        defer if (arena_data) |*data| data.deinit();
 
         gs_ptr.* = builder.build() catch {
             std.log.err("Failed to build GameState", .{});
@@ -745,29 +766,18 @@ pub const GameMode = struct {
             return;
         };
 
-        // Apply arena based on selection
-        if (self.arena_selection.getHaysboroRegion()) |region| {
-            // Load Haysboro region with building data
-            var arena_data = gis_loader.loadHaysboroArenaData(self.allocator, region) catch |err| {
-                std.log.err("Failed to load Haysboro region: {any}", .{err});
-                // Fall back to random template
-                self.applyRandomArenaTemplate(gs_ptr);
-                self.game_state = gs_ptr;
-                self.phase = .match_active;
-                return;
-            };
-            defer arena_data.deinit();
-
-            arena_gen.applyRecipe(&gs_ptr.terrain_grid, arena_data.recipe.*);
+        // Apply arena data if we have it
+        if (arena_data) |data| {
+            arena_gen.applyRecipe(&gs_ptr.terrain_grid, data.recipe.*);
 
             // Place props from the Haysboro recipe
             if (gs_ptr.prop_manager) |*pm| {
-                arena_gen.placePropsFromRecipe(pm, arena_data.recipe.*, &gs_ptr.terrain_grid);
+                arena_gen.placePropsFromRecipe(pm, data.recipe.*, &gs_ptr.terrain_grid);
             }
 
             // Populate buildings from GIS building data
             if (gs_ptr.building_manager) |*bm| {
-                for (arena_data.building_data) |bd| {
+                for (data.building_data) |bd| {
                     _ = bm.addBuilding(bd.vertices, bd.building_type, bd.height);
                 }
                 // Update building elevations from terrain
@@ -775,7 +785,7 @@ pub const GameMode = struct {
                 std.log.info("Loaded {d} buildings from Haysboro region", .{bm.building_count});
             }
         } else {
-            // Random procedural arena
+            // Random procedural arena (or Haysboro load failed)
             self.applyRandomArenaTemplate(gs_ptr);
         }
 

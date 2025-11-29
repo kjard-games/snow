@@ -61,6 +61,14 @@ var vertex_color_shader: ?rl.Shader = null;
 var terrain_material: ?rl.Material = null;
 var viewPos_loc: i32 = -1; // Shader uniform location for camera position
 
+// Cubemap skybox system
+var skybox_texture: ?rl.Texture2D = null;
+var skybox_model: ?rl.Model = null;
+var skybox_shader: ?rl.Shader = null;
+var skybox_initialized: bool = false;
+var skybox_cubemap_loc: i32 = -1; // Shader uniform location for cubemap sampler
+const SKYBOX_SCALE: f32 = 5000.0; // Large scale to surround the scene
+
 /// Initialize the outline shader system for team-based silhouette rendering.
 /// Returns an error if shader resources fail to load.
 pub fn initOutlineShader(screen_width: i32, screen_height: i32) !void {
@@ -97,6 +105,78 @@ pub fn initTerrainMaterial() !void {
     }
 }
 
+/// Initialize the cubemap skybox with a cloudy winter sky texture.
+/// Call this after window initialization.
+pub fn initSkybox() void {
+    if (skybox_initialized) return;
+
+    // Load skybox shader first
+    skybox_shader = rl.loadShader("shaders/skybox.vs", "shaders/skybox.fs") catch {
+        std.log.warn("Failed to load skybox shader, falling back to gradient sky", .{});
+        return;
+    };
+
+    // Get the cubemap uniform location in the shader
+    if (skybox_shader) |shader| {
+        skybox_cubemap_loc = rl.getShaderLocation(shader, "textureCubemap");
+    }
+
+    // Load cubemap image - using sky 08 which has nice winter afternoon look
+    // The image is in cross layout format
+    const img = rl.loadImage("reference/snowrefs/Cubemap/Cubemap_Sky_08-512x512.png") catch {
+        std.log.warn("Failed to load skybox image, falling back to gradient sky", .{});
+        if (skybox_shader) |shader| {
+            rl.unloadShader(shader);
+            skybox_shader = null;
+        }
+        return;
+    };
+    defer rl.unloadImage(img);
+
+    // Load cubemap texture from the cross-layout image
+    // Image is 2048x1536, which is 4 columns x 3 rows of 512x512 faces
+    skybox_texture = rl.loadTextureCubemap(img, rl.CubemapLayout.cross_four_by_three) catch {
+        std.log.warn("Failed to create cubemap texture, falling back to gradient sky", .{});
+        if (skybox_shader) |shader| {
+            rl.unloadShader(shader);
+            skybox_shader = null;
+        }
+        skybox_texture = null;
+        return;
+    };
+
+    // Generate a cube mesh for the skybox (we render from inside)
+    const mesh = rl.genMeshCube(1.0, 1.0, 1.0);
+    skybox_model = rl.loadModelFromMesh(mesh) catch {
+        std.log.warn("Failed to create skybox model, falling back to gradient sky", .{});
+        if (skybox_texture) |tex| {
+            rl.unloadTexture(tex);
+            skybox_texture = null;
+        }
+        if (skybox_shader) |shader| {
+            rl.unloadShader(shader);
+            skybox_shader = null;
+        }
+        return;
+    };
+
+    if (skybox_model) |*model| {
+        // Apply the shader and cubemap texture to the model
+        if (skybox_shader) |shader| {
+            model.materials[0].shader = shader;
+            // Set cubemap texture location in shader (texture unit 0)
+            const cubemap_value: i32 = @intFromEnum(rl.MaterialMapIndex.cubemap);
+            rl.setShaderValue(shader, skybox_cubemap_loc, &cubemap_value, rl.ShaderUniformDataType.int);
+        }
+        if (skybox_texture) |tex| {
+            model.materials[0].maps[@intFromEnum(rl.MaterialMapIndex.cubemap)].texture = tex;
+        }
+    }
+
+    skybox_initialized = true;
+    std.log.info("Skybox initialized successfully", .{});
+}
+
 /// Clean up all render resources (shaders, textures, materials).
 /// Safe to call multiple times.
 pub fn deinitRenderResources() void {
@@ -116,6 +196,17 @@ pub fn deinitRenderResources() void {
         terrain_material = null;
     }
     vertex_color_shader = null;
+
+    // Clean up skybox resources
+    if (skybox_model) |model| {
+        rl.unloadModel(model);
+        skybox_model = null;
+    }
+    if (skybox_texture) |tex| {
+        rl.unloadTexture(tex);
+        skybox_texture = null;
+    }
+    skybox_initialized = false;
 }
 
 /// Handle window resize by recreating render textures and updating shader uniforms.
@@ -146,9 +237,40 @@ inline fn toScreenPos(pos: rl.Vector2) struct { x: i32, y: i32 } {
     };
 }
 
-/// Draw a simple atmospheric skybox with winter sky gradient and distant mountains.
+/// Draw the skybox - either textured cubemap or fallback gradient.
 fn drawSkybox(camera: rl.Camera) void {
-    // Sky color gradient: darker blue-gray at top, lighter blue-white at horizon
+    // If we have a loaded skybox model with texture, use it
+    if (skybox_initialized and skybox_model != null and skybox_texture != null) {
+        // Disable backface culling to see inside the cube
+        rl.gl.rlDisableBackfaceCulling();
+        rl.gl.rlDisableDepthMask();
+
+        if (skybox_model) |model| {
+            // Explicitly set the active texture before drawing
+            if (skybox_texture) |tex| {
+                rl.gl.rlActiveTextureSlot(0);
+                rl.gl.rlEnableTextureCubemap(tex.id);
+            }
+
+            // Draw the skybox centered on camera position, scaled up
+            rl.drawModel(
+                model,
+                camera.position,
+                SKYBOX_SCALE,
+                rl.Color.white,
+            );
+
+            if (skybox_texture != null) {
+                rl.gl.rlDisableTextureCubemap();
+            }
+        }
+
+        rl.gl.rlEnableDepthMask();
+        rl.gl.rlEnableBackfaceCulling();
+        return;
+    }
+
+    // Fallback: simple gradient sky spheres
     const sky_top = rl.Color{ .r = 120, .g = 140, .b = 180, .a = 255 };
     const sky_horizon = rl.Color{ .r = 200, .g = 210, .b = 230, .a = 255 };
 
@@ -156,7 +278,7 @@ fn drawSkybox(camera: rl.Camera) void {
     rl.drawSphereEx(
         rl.Vector3{ .x = camera.position.x, .y = camera.position.y + skybox.top_offset, .z = camera.position.z },
         skybox.radius,
-        16, // Lower poly count for performance
+        16,
         16,
         sky_top,
     );
@@ -173,20 +295,18 @@ fn drawSkybox(camera: rl.Camera) void {
     // Add distant mountain silhouettes
     const mountain_color = rl.Color{ .r = 90, .g = 100, .b = 120, .a = 200 };
 
-    // Draw peaks around the horizon
     for (0..mountain.count) |i| {
         const angle = @as(f32, @floatFromInt(i)) * std.math.pi * 2.0 / @as(f32, @floatFromInt(mountain.count));
         const height = mountain.base_height + @sin(angle * 3.0) * mountain.height_variation;
         const peak_x = camera.position.x + @cos(angle) * mountain.distance;
         const peak_z = camera.position.z + @sin(angle) * mountain.distance;
 
-        // Draw tapered mountain using cylinder (top radius smaller than bottom)
         rl.drawCylinder(
             rl.Vector3{ .x = peak_x, .y = -50 + height / 2.0, .z = peak_z },
-            50.0, // Top radius (small peak)
-            200.0, // Bottom radius (wide base)
+            50.0,
+            200.0,
             height,
-            8, // Sides
+            8,
             mountain_color,
         );
     }

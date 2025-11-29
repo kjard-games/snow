@@ -102,10 +102,13 @@ pub const GeoBounds = struct {
     }
 
     /// Convert a geographic point to normalized arena coordinates (0-1)
+    /// Note: Z is flipped so that north (higher latitude) maps to -Z (into screen)
+    /// This matches typical game coordinate conventions where camera looks "north"
     pub fn toNormalized(self: GeoBounds, point: GeoPoint) NormalizedPos {
         return .{
             .x = @floatCast((point.lon - self.min_lon) / (self.max_lon - self.min_lon)),
-            .z = @floatCast((point.lat - self.min_lat) / (self.max_lat - self.min_lat)),
+            // Flip Z: higher latitude (north) -> lower Z value
+            .z = @floatCast(1.0 - (point.lat - self.min_lat) / (self.max_lat - self.min_lat)),
         };
     }
 
@@ -560,16 +563,70 @@ pub const ConversionConfig = struct {
     /// Footpath width (normalized)
     footpath_width: f32 = 0.01,
 
-    /// Terrain type for roads
-    road_terrain: TerrainType = .packed_snow,
-    /// Terrain type for footpaths
-    footpath_terrain: TerrainType = .cleared_ground,
-    /// Terrain type for water
+    // ========================================================================
+    // TERRAIN TYPE ASSIGNMENTS - Calgary Winter Patterns
+    // ========================================================================
+
+    /// Base terrain for open yards (default before other features applied)
+    yard_terrain: TerrainType = .thick_snow,
+
+    /// Roads - plowed but refreezes, cars pack it down
+    road_terrain: TerrainType = .icy_ground,
+
+    /// Sidewalks/footpaths - foot traffic packs snow
+    footpath_terrain: TerrainType = .packed_snow,
+
+    /// Parking lots - cars compress and polish
+    parking_terrain: TerrainType = .icy_ground,
+
+    /// Parks/open fields - untouched pristine snow
+    park_terrain: TerrainType = .deep_powder,
+
+    /// Frozen water bodies
     water_terrain: TerrainType = .icy_ground,
-    /// Terrain type for parks
-    park_terrain: TerrainType = .thick_snow,
-    /// Terrain type for parking lots
-    parking_terrain: TerrainType = .cleared_ground,
+
+    /// Building perimeter - snow cleared/packed near walls
+    building_perimeter_terrain: TerrainType = .packed_snow,
+    /// Width of cleared zone around buildings (normalized)
+    building_perimeter_width: f32 = 0.008,
+
+    /// Building snow taper - thick snow ring outside perimeter
+    /// Creates natural accumulation pattern around buildings
+    enable_building_snow_taper: bool = true,
+    /// Outer ring of thick snow around buildings (normalized width)
+    building_taper_width: f32 = 0.02,
+    /// Terrain type for taper zone
+    building_taper_terrain: TerrainType = .thick_snow,
+
+    /// Building entrance zones - shoveled clear
+    entrance_terrain: TerrainType = .cleared_ground,
+    /// Size of entrance clearing (normalized)
+    entrance_size: f32 = 0.012,
+
+    // ========================================================================
+    // WIND DRIFT SETTINGS - Snow piles up on leeward side of buildings
+    // ========================================================================
+
+    /// Enable wind drift elevation bumps
+    enable_wind_drifts: bool = true,
+    /// Prevailing wind direction (radians, 0 = from north, accumulates on south side)
+    /// Calgary's prevailing winter winds come from the west/northwest
+    wind_direction: f32 = 0.7, // ~40 degrees, from NW (accumulates on SE side)
+    /// How far drifts extend from buildings (normalized)
+    drift_distance: f32 = 0.015,
+    /// Maximum drift height (world units)
+    drift_height: f32 = 15.0,
+
+    // ========================================================================
+    // KID PATH SETTINGS - Shortcuts through yards
+    // ========================================================================
+
+    /// Enable procedural kid shortcuts between buildings
+    enable_kid_paths: bool = true,
+    /// Terrain type for kid-worn paths
+    kid_path_terrain: TerrainType = .packed_snow,
+    /// Width of kid paths (normalized)
+    kid_path_width: f32 = 0.006,
 };
 
 /// Building data extracted from OSM for 3D rendering
@@ -623,6 +680,18 @@ pub fn convertFeaturesToPrimitives(
         building_data.deinit(allocator);
     }
 
+    // Track building centers for kid path generation
+    var building_centers: std.ArrayListUnmanaged(NormalizedPos) = .empty;
+    defer building_centers.deinit(allocator);
+
+    // ========================================================================
+    // PASS 1: Base terrain - everything starts as yard snow
+    // ========================================================================
+    try snow_ops.append(allocator, .{ .fill = .{ .terrain_type = config.yard_terrain } });
+
+    // ========================================================================
+    // PASS 2: Process all features
+    // ========================================================================
     for (features) |feature| {
         switch (feature.feature_class) {
             .building => {
@@ -638,10 +707,72 @@ pub fn convertFeaturesToPrimitives(
                         .height = null, // Use default for type
                     });
 
-                    // Also add a snow zone around building footprint (cleared area)
+                    // Get normalized coordinates for snow/terrain ops
                     const norm_coords = try geoToNormalized(allocator, feature.coordinates, bounds);
                     defer allocator.free(norm_coords);
-                    try addPolygonSnowZone(allocator, &snow_ops, norm_coords, .packed_snow);
+
+                    // Calculate building center for paths
+                    const center = calculatePolygonCenter(norm_coords);
+                    try building_centers.append(allocator, center);
+
+                    // Add thick snow taper ring around building (before packed perimeter)
+                    // This creates the natural snow accumulation pattern
+                    if (config.enable_building_snow_taper) {
+                        // Add a circle of thick snow around the building center
+                        // Size based on building footprint plus taper width
+                        const bbox = calculatePolygonBBox(norm_coords);
+                        const building_radius = @max(bbox.width, bbox.height) / 2.0;
+                        try snow_ops.append(allocator, .{ .circle = .{
+                            .center = center,
+                            .radius = building_radius + config.building_taper_width,
+                            .terrain_type = config.building_taper_terrain,
+                        } });
+                    }
+
+                    // Building footprint is packed snow (people walk around buildings)
+                    try addPolygonSnowZone(allocator, &snow_ops, norm_coords, config.building_perimeter_terrain);
+
+                    // Add entrance clearing (south-facing side typically)
+                    // Entrance is on the side facing away from wind (protected)
+                    const entrance_offset_x = @sin(config.wind_direction + std.math.pi) * config.entrance_size;
+                    const entrance_offset_z = @cos(config.wind_direction + std.math.pi) * config.entrance_size;
+                    try snow_ops.append(allocator, .{ .circle = .{
+                        .center = .{
+                            .x = std.math.clamp(center.x + entrance_offset_x, 0.0, 1.0),
+                            .z = std.math.clamp(center.z + entrance_offset_z, 0.0, 1.0),
+                        },
+                        .radius = config.entrance_size,
+                        .terrain_type = config.entrance_terrain,
+                    } });
+
+                    // Add wind drift on leeward side (snow piles up)
+                    if (config.enable_wind_drifts) {
+                        const drift_offset_x = @sin(config.wind_direction) * config.drift_distance;
+                        const drift_offset_z = @cos(config.wind_direction) * config.drift_distance;
+
+                        // Drift zone is thick snow / deep powder
+                        try snow_ops.append(allocator, .{ .circle = .{
+                            .center = .{
+                                .x = std.math.clamp(center.x + drift_offset_x, 0.0, 1.0),
+                                .z = std.math.clamp(center.z + drift_offset_z, 0.0, 1.0),
+                            },
+                            .radius = config.drift_distance * 1.5,
+                            .terrain_type = .deep_powder,
+                        } });
+
+                        // Add elevation bump for the drift
+                        try elevation_ops.append(allocator, .{
+                            .primitive = .{ .mound = .{
+                                .center = .{
+                                    .x = std.math.clamp(center.x + drift_offset_x, 0.0, 1.0),
+                                    .z = std.math.clamp(center.z + drift_offset_z, 0.0, 1.0),
+                                },
+                                .radius = config.drift_distance * 1.2,
+                                .height = config.drift_height,
+                            } },
+                            .blend = .add,
+                        });
+                    }
                 }
             },
 
@@ -650,13 +781,26 @@ pub fn convertFeaturesToPrimitives(
                     const norm_coords = try geoToNormalized(allocator, feature.coordinates, bounds);
                     defer allocator.free(norm_coords);
 
-                    const RoadConfig = struct { depth: f32, width: f32 };
+                    const RoadConfig = struct { depth: f32, width: f32, terrain: TerrainType };
                     const road_config: RoadConfig = switch (feature.feature_class) {
-                        .highway_primary => .{ .depth = config.primary_road_depth, .width = config.primary_road_width },
-                        .highway_secondary => .{ .depth = config.secondary_road_depth, .width = config.secondary_road_width },
-                        else => .{ .depth = config.residential_road_depth, .width = config.residential_road_width },
+                        .highway_primary => .{
+                            .depth = config.primary_road_depth,
+                            .width = config.primary_road_width,
+                            .terrain = config.road_terrain,
+                        },
+                        .highway_secondary => .{
+                            .depth = config.secondary_road_depth,
+                            .width = config.secondary_road_width,
+                            .terrain = config.road_terrain,
+                        },
+                        else => .{
+                            .depth = config.residential_road_depth,
+                            .width = config.residential_road_width,
+                            .terrain = .packed_snow, // Residential roads less icy
+                        },
                     };
 
+                    // Road depression
                     try elevation_ops.append(allocator, .{
                         .primitive = .{ .polyline = .{
                             .points = try allocator.dupe(NormalizedPos, norm_coords),
@@ -667,8 +811,12 @@ pub fn convertFeaturesToPrimitives(
                         .blend = .add,
                     });
 
-                    // Add snow zone for road surface
-                    try addPolylineSnowZone(allocator, &snow_ops, norm_coords, road_config.width, config.road_terrain);
+                    // Road surface terrain
+                    try addPolylineSnowZone(allocator, &snow_ops, norm_coords, road_config.width, road_config.terrain);
+
+                    // Add sidewalk zones along roads (slightly narrower, packed snow)
+                    const sidewalk_offset = road_config.width * 0.6;
+                    try addPolylineSnowZone(allocator, &snow_ops, norm_coords, road_config.width + sidewalk_offset, config.footpath_terrain);
                 }
             },
 
@@ -683,23 +831,21 @@ pub fn convertFeaturesToPrimitives(
 
             .water => {
                 if (feature.geometry_type == .polygon) {
-                    // Water becomes icy ground
                     const norm_coords = try geoToNormalized(allocator, feature.coordinates, bounds);
                     defer allocator.free(norm_coords);
 
-                    // Add as a slight depression
+                    // Frozen water - slight depression
                     try elevation_ops.append(allocator, .{
                         .primitive = .{
                             .polygon = .{
                                 .vertices = try allocator.dupe(NormalizedPos, norm_coords),
-                                .height = -5.0, // Slight depression
+                                .height = -5.0,
                                 .edge_falloff = 0.01,
                             },
                         },
                         .blend = .add,
                     });
 
-                    // Add icy terrain
                     try addPolygonSnowZone(allocator, &snow_ops, norm_coords, config.water_terrain);
                 }
             },
@@ -709,7 +855,7 @@ pub fn convertFeaturesToPrimitives(
                     const norm_coords = try geoToNormalized(allocator, feature.coordinates, bounds);
                     defer allocator.free(norm_coords);
 
-                    // Parks have thick snow
+                    // Parks have pristine deep powder
                     try addPolygonSnowZone(allocator, &snow_ops, norm_coords, config.park_terrain);
                 }
             },
@@ -719,7 +865,7 @@ pub fn convertFeaturesToPrimitives(
                     const norm_coords = try geoToNormalized(allocator, feature.coordinates, bounds);
                     defer allocator.free(norm_coords);
 
-                    // Parking lots are cleared/packed
+                    // Parking lots are icy from car traffic
                     try addPolygonSnowZone(allocator, &snow_ops, norm_coords, config.parking_terrain);
                 }
             },
@@ -740,6 +886,13 @@ pub fn convertFeaturesToPrimitives(
         }
     }
 
+    // ========================================================================
+    // PASS 3: Generate kid shortcut paths between nearby buildings
+    // ========================================================================
+    if (config.enable_kid_paths and building_centers.items.len > 1) {
+        try generateKidPaths(allocator, &snow_ops, building_centers.items, config);
+    }
+
     return .{
         .elevation_ops = try elevation_ops.toOwnedSlice(allocator),
         .snow_ops = try snow_ops.toOwnedSlice(allocator),
@@ -758,9 +911,111 @@ fn geoToNormalized(allocator: Allocator, points: []const GeoPoint, bounds: GeoBo
     return result;
 }
 
+/// Calculate the centroid of a polygon
+fn calculatePolygonCenter(vertices: []const NormalizedPos) NormalizedPos {
+    if (vertices.len == 0) return .{ .x = 0.5, .z = 0.5 };
+
+    var sum_x: f32 = 0;
+    var sum_z: f32 = 0;
+    for (vertices) |v| {
+        sum_x += v.x;
+        sum_z += v.z;
+    }
+    const n = @as(f32, @floatFromInt(vertices.len));
+    return .{ .x = sum_x / n, .z = sum_z / n };
+}
+
+/// Bounding box result for polygon
+const PolygonBBox = struct {
+    min_x: f32,
+    min_z: f32,
+    max_x: f32,
+    max_z: f32,
+    width: f32,
+    height: f32,
+};
+
+/// Calculate bounding box of a polygon
+fn calculatePolygonBBox(vertices: []const NormalizedPos) PolygonBBox {
+    if (vertices.len == 0) return .{
+        .min_x = 0.5,
+        .min_z = 0.5,
+        .max_x = 0.5,
+        .max_z = 0.5,
+        .width = 0,
+        .height = 0,
+    };
+
+    var min_x: f32 = 1.0;
+    var min_z: f32 = 1.0;
+    var max_x: f32 = 0.0;
+    var max_z: f32 = 0.0;
+
+    for (vertices) |v| {
+        min_x = @min(min_x, v.x);
+        min_z = @min(min_z, v.z);
+        max_x = @max(max_x, v.x);
+        max_z = @max(max_z, v.z);
+    }
+
+    return .{
+        .min_x = min_x,
+        .min_z = min_z,
+        .max_x = max_x,
+        .max_z = max_z,
+        .width = max_x - min_x,
+        .height = max_z - min_z,
+    };
+}
+
+/// Generate kid shortcut paths between nearby buildings
+/// Kids don't follow sidewalks - they cut through yards!
+fn generateKidPaths(
+    allocator: Allocator,
+    snow_ops: *std.ArrayListUnmanaged(SnowZonePrimitive),
+    building_centers: []const NormalizedPos,
+    config: ConversionConfig,
+) !void {
+    // Connect nearby buildings with diagonal paths
+    // These represent the shortcuts kids naturally create walking to friends' houses
+
+    const max_path_distance: f32 = 0.12; // Only connect buildings within this distance
+    const min_path_distance: f32 = 0.02; // Don't connect buildings that are too close (same lot)
+
+    for (building_centers, 0..) |center_a, i| {
+        // Only check buildings after this one to avoid duplicate paths
+        for (building_centers[i + 1 ..]) |center_b| {
+            const dx = center_b.x - center_a.x;
+            const dz = center_b.z - center_a.z;
+            const dist = @sqrt(dx * dx + dz * dz);
+
+            // Check if buildings are at a good distance for a shortcut
+            if (dist >= min_path_distance and dist <= max_path_distance) {
+                // Add some randomness - not all possible paths exist
+                // Use position-based hash for deterministic "randomness"
+                const hash = @as(u32, @intFromFloat((center_a.x * 1000 + center_a.z * 100 + center_b.x * 10 + center_b.z) * 12345)) % 100;
+
+                // ~30% of possible paths actually get worn in
+                if (hash < 30) {
+                    try snow_ops.append(allocator, .{ .path = .{
+                        .start = center_a,
+                        .end = center_b,
+                        .width = config.kid_path_width,
+                        .terrain_type = config.kid_path_terrain,
+                    } });
+                }
+            }
+        }
+    }
+}
+
 /// Convert array of GeoPoints to world coordinate vertices for building geometry
 /// World coordinates: centered arena with extent from -arena_size/2 to +arena_size/2
 /// Default arena is 2000x2000 units (100 cells * 20 units/cell), so -1000 to +1000
+///
+/// KID SCALE: Coordinates are scaled by 3x (KID_SCALE) to make the world feel
+/// bigger from a child's perspective. This means a 150m radius region becomes
+/// effectively 50m in "kid perceived" space - everything is 3x larger!
 fn geoToWorldVertices(allocator: Allocator, points: []const GeoPoint, bounds: GeoBounds) ![]buildings.WorldVertex {
     const result = try allocator.alloc(buildings.WorldVertex, points.len);
 
@@ -771,9 +1026,10 @@ fn geoToWorldVertices(allocator: Allocator, points: []const GeoPoint, bounds: Ge
     for (points, 0..) |p, i| {
         const norm = bounds.toNormalized(p);
         // Convert normalized (0-1) to world coords (-1000 to +1000)
+        // Then scale by KID_SCALE to make everything bigger!
         result[i] = .{
-            .x = norm.x * arena_size - half_size,
-            .z = norm.z * arena_size - half_size,
+            .x = (norm.x * arena_size - half_size) * buildings.KID_SCALE,
+            .z = (norm.z * arena_size - half_size) * buildings.KID_SCALE,
         };
     }
     return result;
@@ -1007,10 +1263,17 @@ test "GeoBounds to normalized" {
     try std.testing.expectApproxEqAbs(center.x, 0.5, 0.001);
     try std.testing.expectApproxEqAbs(center.z, 0.5, 0.001);
 
-    // Min corner should map to (0, 0)
+    // Min lat corner maps to (0, 1) because Z is flipped (north = -Z)
+    // min_lat = south = high Z value
     const min_corner = bounds.toNormalized(.{ .lon = -71.1, .lat = 42.3 });
     try std.testing.expectApproxEqAbs(min_corner.x, 0.0, 0.001);
-    try std.testing.expectApproxEqAbs(min_corner.z, 0.0, 0.001);
+    try std.testing.expectApproxEqAbs(min_corner.z, 1.0, 0.001); // Flipped!
+
+    // Max lat corner maps to (1, 0) because Z is flipped
+    // max_lat = north = low Z value
+    const max_corner = bounds.toNormalized(.{ .lon = -71.0, .lat = 42.4 });
+    try std.testing.expectApproxEqAbs(max_corner.x, 1.0, 0.001);
+    try std.testing.expectApproxEqAbs(max_corner.z, 0.0, 0.001); // Flipped!
 }
 
 test "FeatureClass from tags" {
@@ -1133,12 +1396,13 @@ pub const HaysboroRegion = enum {
 };
 
 /// Configuration optimized for Haysboro's scale and features
+/// Tuned for authentic Calgary winter feel
 pub const HAYSBORO_CONFIG = ConversionConfig{
     // Calgary houses are typically single-story with basements
     .building_height = 35.0,
     .building_falloff = 0.003,
 
-    // Calgary streets are wider than average (snow removal)
+    // Calgary streets are wider than average (snow removal equipment)
     .primary_road_depth = -3.0,
     .primary_road_width = 0.05,
     .secondary_road_depth = -2.5,
@@ -1149,12 +1413,56 @@ pub const HAYSBORO_CONFIG = ConversionConfig{
     // Generous sidewalks/paths
     .footpath_width = 0.015,
 
-    // Calgary winter terrain types
-    .road_terrain = .packed_snow, // Plowed but snowy
-    .footpath_terrain = .packed_snow, // Shoveled paths
-    .water_terrain = .icy_ground, // Frozen ponds/streams
-    .park_terrain = .deep_powder, // Untouched park snow
-    .parking_terrain = .packed_snow, // School parking lots
+    // ========================================================================
+    // CALGARY WINTER TERRAIN - Authentic patterns
+    // ========================================================================
+
+    // Yards start as thick snow (gets packed near buildings)
+    .yard_terrain = .thick_snow,
+
+    // Main roads are icy (plowed, salted, refreezes)
+    .road_terrain = .icy_ground,
+
+    // Sidewalks and footpaths are packed from foot traffic
+    .footpath_terrain = .packed_snow,
+
+    // Parking lots are icy (cars polish it)
+    .parking_terrain = .icy_ground,
+
+    // Parks and open fields are pristine powder
+    .park_terrain = .deep_powder,
+
+    // Frozen ponds
+    .water_terrain = .icy_ground,
+
+    // Building perimeters - packed from people walking around
+    .building_perimeter_terrain = .packed_snow,
+    .building_perimeter_width = 0.008,
+
+    // Snow taper around buildings - thick snow ring before packed zone
+    .enable_building_snow_taper = true,
+    .building_taper_width = 0.025,
+    .building_taper_terrain = .thick_snow,
+
+    // Entrances are shoveled clear
+    .entrance_terrain = .cleared_ground,
+    .entrance_size = 0.01,
+
+    // ========================================================================
+    // CALGARY WIND DRIFTS
+    // ========================================================================
+    // Prevailing winds from NW create drifts on SE side of buildings
+    .enable_wind_drifts = true,
+    .wind_direction = 0.7, // ~40 degrees from north (NW wind)
+    .drift_distance = 0.012,
+    .drift_height = 12.0,
+
+    // ========================================================================
+    // KID PATHS - Shortcuts through yards
+    // ========================================================================
+    .enable_kid_paths = true,
+    .kid_path_terrain = .packed_snow,
+    .kid_path_width = 0.005,
 };
 
 /// Load Haysboro GeoJSON data for a specific region
@@ -1214,6 +1522,9 @@ pub const HaysboroArenaData = struct {
     recipe: *arena_gen.ArenaRecipe,
     building_data: []BuildingData,
     allocator: Allocator,
+    /// Arena dimensions in world units (after KID_SCALE applied)
+    arena_width: f32,
+    arena_height: f32,
 
     pub fn deinit(self: *HaysboroArenaData) void {
         freeHaysboroRecipe(self.allocator, self.recipe);
@@ -1230,6 +1541,11 @@ pub fn loadHaysboroArenaData(
     allocator: Allocator,
     region: HaysboroRegion,
 ) !HaysboroArenaData {
+    // Calculate arena dimensions (base size scaled by KID_SCALE)
+    const base_arena_size: f32 = 2000.0; // Base arena size in world units
+    const arena_width = base_arena_size * buildings.KID_SCALE;
+    const arena_height = base_arena_size * buildings.KID_SCALE;
+
     // Load GIS data
     var conversion = try loadHaysboroRegion(allocator, region);
     errdefer conversion.deinit();
@@ -1249,11 +1565,13 @@ pub fn loadHaysboroArenaData(
         .seed = 0,
     };
 
-    // Return both recipe and building data
+    // Return both recipe and building data with arena dimensions
     return HaysboroArenaData{
         .recipe = recipe,
         .building_data = conversion.building_data,
         .allocator = allocator,
+        .arena_width = arena_width,
+        .arena_height = arena_height,
     };
 }
 

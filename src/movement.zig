@@ -105,13 +105,13 @@ pub fn applyMovement(
     entity.position.x = new_x;
     entity.position.z = new_z;
 
-    // Check collision with boundary walls (massive snowdrifts)
+    // Check collision with invisible arena boundary (soft collision - no visual wall)
     if (terrain_grid) |grid| {
         if (grid.isBlocked(new_x, new_z)) {
-            // Hit boundary wall - revert to old position
+            // Hit arena edge - revert to old position
             entity.position.x = old_x;
             entity.position.z = old_z;
-            return; // Can't move into walls
+            return; // Can't move outside arena bounds
         }
     }
 

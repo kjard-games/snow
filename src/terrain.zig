@@ -278,29 +278,8 @@ pub const TerrainGrid = struct {
                 const flatten_factor = @max(0.0, 1.0 - dist_to_center * 2.5); // Flatten center 40%
                 elevation = elevation * (1.0 - flatten_factor * 0.7); // Reduce elevation in center
 
-                // Create massive irregular snowdrift walls at edges (natural arena boundary)
-                // Use distance from edge with noise to make it organic
-                const edge_dist_x = @min(nx, 1.0 - nx); // Distance to nearest X edge (0-0.5)
-                const edge_dist_z = @min(nz, 1.0 - nz); // Distance to nearest Z edge (0-0.5)
-                const edge_dist = @min(edge_dist_x, edge_dist_z); // Distance to nearest edge
-
-                // Create irregular boundary with noise
-                const boundary_noise = @sin(nx * 23.0 + nz * 17.0) * 0.03 +
-                    @cos(nx * 31.0 - nz * 29.0) * 0.02;
-                const boundary_threshold = 0.08 + boundary_noise; // ~8% from edge with variation
-
-                if (edge_dist < boundary_threshold) {
-                    // Inside boundary zone - create massive snowdrifts
-                    const wall_factor = 1.0 - (edge_dist / boundary_threshold);
-
-                    // Add wavy variation to wall height for natural look
-                    const wall_variation = @sin(nx * 19.0) * @cos(nz * 23.0) * 20.0 +
-                        @sin(nx * 37.0 + nz * 41.0) * 15.0;
-
-                    // Massive snowdrift walls (80-150 units high)
-                    const wall_height = 80.0 + wall_factor * 70.0 + wall_variation;
-                    elevation = @max(elevation, wall_height);
-                }
+                // No visual boundary walls - arena edges are handled by soft collision in movement.zig
+                // This allows the terrain to blend naturally with the skybox
 
                 heightmap[index] = elevation;
             }
@@ -317,12 +296,6 @@ pub const TerrainGrid = struct {
             for (0..height) |z| {
                 for (0..width) |x| {
                     const index = z * width + x;
-
-                    // Skip boundary walls - keep them sharp
-                    if (heightmap[index] > 70.0) {
-                        smoothed_heightmap[index] = heightmap[index];
-                        continue;
-                    }
 
                     var sum: f32 = 0.0;
                     var count: f32 = 0.0;
@@ -355,97 +328,21 @@ pub const TerrainGrid = struct {
             for (0..height) |z| {
                 for (0..width) |x| {
                     const index = z * width + x;
-                    if (heightmap[index] < 70.0) {
-                        heightmap[index] = smoothed_heightmap[index];
-                    }
+                    heightmap[index] = smoothed_heightmap[index];
                 }
             }
         }
 
-        // Initialize terrain cells with VARIED snow types based on elevation and position
-        // Creates natural-looking zones: valleys tend to be icy/packed, ridges have powder
+        // Initialize terrain cells with packed snow as the default
+        // Building proximity will add thick snow tapering (handled by GIS loader)
         for (0..height) |z| {
             for (0..width) |x| {
                 const index = z * width + x;
-                const elevation = heightmap[index];
 
-                // Normalized coordinates for zone calculation
-                const nx = @as(f32, @floatFromInt(x)) / @as(f32, @floatFromInt(width));
-                const nz = @as(f32, @floatFromInt(z)) / @as(f32, @floatFromInt(height));
-
-                // Boundary walls (high elevation) are impassable deep powder
-                if (elevation > 70.0) {
-                    cells[index] = TerrainCell{
-                        .type = .deep_powder,
-                        .snow_depth = 3.0,
-                    };
-                    continue;
-                }
-
-                // === NATURAL SNOW ZONE GENERATION ===
-                // Use elevation + position-based noise to create organic zones
-
-                // Zone noise - creates irregular patches
-                const zone_noise1 = @sin(nx * 8.0 + nz * 6.0) * @cos(nx * 5.0 - nz * 7.0);
-                const zone_noise2 = @sin(nx * 12.0 - nz * 9.0 + 2.0) * 0.5;
-                const zone_noise = (zone_noise1 + zone_noise2) * 0.5; // Range: roughly -1 to 1
-
-                // Elevation factor: lower = more packed/icy, higher = more powder
-                // Normalize elevation to 0-1 range (playable area is roughly -30 to +30)
-                const elev_normalized = (elevation + 30.0) / 60.0;
-                const elev_clamped = @max(0.0, @min(1.0, elev_normalized));
-
-                // Combined zone value: elevation + noise creates natural variation
-                const zone_value = elev_clamped * 0.6 + (zone_noise * 0.5 + 0.5) * 0.4;
-
-                // Distance from center affects snow type (center more trafficked = more packed)
-                const center_x: f32 = 0.5;
-                const center_z: f32 = 0.5;
-                const dist_to_center = @sqrt((nx - center_x) * (nx - center_x) + (nz - center_z) * (nz - center_z));
-                const center_factor = @max(0.0, 1.0 - dist_to_center * 1.5); // 1 at center, 0 at edges
-
-                // Final snow type determination
-                // Lower zone_value = more packed, higher = more powder
-                // Center bias toward packed snow (simulated foot traffic)
-                const adjusted_zone = zone_value - center_factor * 0.3;
-
-                var terrain_type: TerrainType = undefined;
-                var snow_depth: f32 = undefined;
-
-                if (adjusted_zone < 0.15) {
-                    // Lowest areas: icy ground (frozen puddles, wind-scoured)
-                    terrain_type = .icy_ground;
-                    snow_depth = 0.3;
-                } else if (adjusted_zone < 0.25) {
-                    // Low areas: cleared or slushy
-                    if (zone_noise > 0.0) {
-                        terrain_type = .slushy;
-                        snow_depth = 0.5;
-                    } else {
-                        terrain_type = .cleared_ground;
-                        snow_depth = 0.1;
-                    }
-                } else if (adjusted_zone < 0.45) {
-                    // Mid-low: packed snow (well-traveled)
-                    terrain_type = .packed_snow;
-                    snow_depth = 0.8 + zone_noise * 0.2;
-                } else if (adjusted_zone < 0.65) {
-                    // Mid: thick snow
-                    terrain_type = .thick_snow;
-                    snow_depth = 1.0 + zone_noise * 0.3;
-                } else if (adjusted_zone < 0.85) {
-                    // High: deep powder transitioning
-                    terrain_type = .thick_snow;
-                    snow_depth = 1.3 + zone_noise * 0.2;
-                } else {
-                    // Highest/edges: pristine deep powder
-                    terrain_type = .deep_powder;
-                    snow_depth = 1.5 + (zone_value - 0.85) * 2.0;
-                }
-
+                // Default: packed snow everywhere (Calgary winter - snow gets packed down)
                 cells[index] = TerrainCell{
-                    .type = terrain_type,
-                    .snow_depth = snow_depth,
+                    .type = .packed_snow,
+                    .snow_depth = 1.0,
                 };
             }
         }
@@ -892,11 +789,22 @@ pub const TerrainGrid = struct {
         return elevation + snow_height;
     }
 
-    // Check if a position is blocked by boundary walls (massive snowdrifts)
+    // Check if a position is outside the playable arena bounds (invisible soft boundary)
+    // No visual walls - players simply can't move past the edge
     pub fn isBlocked(self: *const TerrainGrid, world_x: f32, world_z: f32) bool {
-        const elevation = self.getElevationAt(world_x, world_z);
-        // Boundary walls are 70+ units high - impassable
-        return elevation > 70.0;
+        // Calculate arena bounds from grid dimensions
+        const half_width = @as(f32, @floatFromInt(self.width)) * self.grid_size / 2.0;
+        const half_height = @as(f32, @floatFromInt(self.height)) * self.grid_size / 2.0;
+
+        // Small margin to prevent clipping at exact edge
+        const margin: f32 = 5.0;
+
+        const min_x = self.world_offset_x + self.grid_size / 2.0 + margin;
+        const max_x = self.world_offset_x + half_width * 2.0 - self.grid_size / 2.0 - margin;
+        const min_z = self.world_offset_z + self.grid_size / 2.0 + margin;
+        const max_z = self.world_offset_z + half_height * 2.0 - self.grid_size / 2.0 - margin;
+
+        return world_x < min_x or world_x > max_x or world_z < min_z or world_z > max_z;
     }
 
     // === TERRAIN MODIFICATION API (for skills) ===

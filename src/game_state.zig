@@ -214,10 +214,10 @@ pub const GameStateBuilder = struct {
             .controlled_entity_id = controlled_id,
             .selected_target = null,
             .camera = rl.Camera{
-                .position = .{ .x = 0, .y = 600, .z = 700 },
-                .target = .{ .x = 0, .y = 0, .z = 0 },
+                .position = .{ .x = 0, .y = 50, .z = 80 }, // Start closer, lower (kid perspective)
+                .target = .{ .x = 0, .y = 8, .z = 0 }, // Target at kid eye level
                 .up = .{ .x = 0, .y = 1, .z = 0 },
-                .fovy = 55.0,
+                .fovy = 70.0, // Wider FOV for more immersive feel (was 55)
                 .projection = .perspective,
             },
             .input_state = input.InputState{

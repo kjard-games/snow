@@ -17,6 +17,32 @@ const TerrainGrid = terrain.TerrainGrid;
 // This is separate from TerrainGrid (which handles ground elevation/snow)
 // and PropManager (which handles point-based objects like trees/cars).
 
+// ============================================================================
+// KID SCALE SYSTEM
+// ============================================================================
+//
+// We're 10-year-old kids in this game! Everything should feel BIG.
+// Real-world scale is exaggerated 3x to give that childhood perspective
+// where houses tower over you and streets feel impossibly wide.
+//
+// Reference: A 10-year-old is ~1.4m tall (4'6")
+// In game units: 1 meter ≈ 6.67 units (2000 unit arena = 300m real)
+// With 3x scale: 1 meter ≈ 20 units (making world feel 3x larger)
+
+/// The kid scale factor - everything in the world is scaled up by this much
+/// to make it feel like you're a small kid in a big world
+pub const KID_SCALE: f32 = 2.2;
+
+/// Real height of a 10-year-old in meters
+pub const KID_HEIGHT_METERS: f32 = 1.4;
+
+/// Kid height in game units (without scale applied - this is what the player model is)
+/// Base: 6.67 units per meter * 1.4m = ~9.3 units
+pub const KID_HEIGHT_UNITS: f32 = 9.3;
+
+/// Kid eye level in game units (roughly 90% of height)
+pub const KID_EYE_LEVEL: f32 = KID_HEIGHT_UNITS * 0.9;
+
 /// Building types affect height, color, and gameplay
 pub const BuildingType = enum {
     residential_house, // Single family home (~8m)
@@ -32,9 +58,11 @@ pub const BuildingType = enum {
     unknown, // Default
 
     /// Get typical height in world units for this building type
-    /// Scale: ~6.7 game units per real meter (2000 unit arena = 300m real)
+    /// Scaled by KID_SCALE (3x) to make buildings tower over kid characters
+    /// Base scale: ~6.67 game units per real meter, then 3x for kid perspective
     pub fn getDefaultHeight(self: BuildingType) f32 {
-        return switch (self) {
+        // Base heights (real-world accurate at 6.67 units/meter)
+        const base_height: f32 = switch (self) {
             .residential_house => 55.0, // ~8m real
             .residential_garage => 27.0, // ~4m real
             .apartment_low => 70.0, // ~10m real
@@ -47,6 +75,8 @@ pub const BuildingType = enum {
             .shed => 20.0, // ~3m real
             .unknown => 50.0, // ~7.5m default
         };
+        // Apply kid scale - buildings are 3x taller from a kid's perspective!
+        return base_height * KID_SCALE;
     }
 
     /// Get wall color for this building type (distinct, easily identifiable)
@@ -281,6 +311,235 @@ pub const BuildingManager = struct {
 };
 
 // ============================================================================
+// EAR CLIPPING TRIANGULATION
+// ============================================================================
+//
+// The ear clipping algorithm triangulates arbitrary simple polygons (including
+// concave ones like U-shaped or L-shaped buildings). It works by repeatedly
+// finding "ears" - triangles formed by three consecutive vertices where:
+// 1. The middle vertex is convex (interior angle < 180°)
+// 2. No other vertices lie inside the triangle
+//
+// Each ear can be "clipped" (removed), reducing the polygon by one vertex.
+// Repeat until only 3 vertices remain (one final triangle).
+
+/// Maximum triangles for a polygon (n-2 triangles for n vertices)
+const MAX_TRIANGLES: usize = MAX_BUILDING_VERTICES - 2;
+
+/// A triangle defined by three vertex indices
+const Triangle = struct {
+    a: usize,
+    b: usize,
+    c: usize,
+};
+
+/// Result of ear clipping triangulation
+const TriangulationResult = struct {
+    triangles: [MAX_TRIANGLES]Triangle,
+    count: usize,
+};
+
+/// Cross product of 2D vectors (returns Z component, positive = counter-clockwise)
+fn cross2D(ax: f32, az: f32, bx: f32, bz: f32) f32 {
+    return ax * bz - az * bx;
+}
+
+/// Check if polygon vertices are in counter-clockwise order
+/// Uses signed area: positive = CCW, negative = CW
+fn isCounterClockwise(vertices: []const WorldVertex) bool {
+    var signed_area: f32 = 0;
+    const n = vertices.len;
+    for (0..n) |i| {
+        const v0 = vertices[i];
+        const v1 = vertices[(i + 1) % n];
+        signed_area += (v1.x - v0.x) * (v1.z + v0.z);
+    }
+    return signed_area < 0; // Negative in our coord system = CCW
+}
+
+/// Check if vertex at index 'b' is convex (interior angle < 180°)
+/// For CCW polygon, convex means the cross product of edges is positive
+fn isConvex(vertices: []const WorldVertex, indices: []const usize, idx: usize) bool {
+    const n = indices.len;
+    const i_prev = indices[(idx + n - 1) % n];
+    const i_curr = indices[idx];
+    const i_next = indices[(idx + 1) % n];
+
+    const prev = vertices[i_prev];
+    const curr = vertices[i_curr];
+    const next = vertices[i_next];
+
+    // Vector from prev to curr
+    const ax = curr.x - prev.x;
+    const az = curr.z - prev.z;
+    // Vector from curr to next
+    const bx = next.x - curr.x;
+    const bz = next.z - curr.z;
+
+    // Cross product: positive means left turn (convex for CCW polygon)
+    return cross2D(ax, az, bx, bz) > 0;
+}
+
+/// Check if point p is inside triangle abc (using barycentric coordinates)
+fn pointInTriangle(p: WorldVertex, a: WorldVertex, b: WorldVertex, c: WorldVertex) bool {
+    // Compute vectors
+    const v0x = c.x - a.x;
+    const v0z = c.z - a.z;
+    const v1x = b.x - a.x;
+    const v1z = b.z - a.z;
+    const v2x = p.x - a.x;
+    const v2z = p.z - a.z;
+
+    // Compute dot products
+    const dot00 = v0x * v0x + v0z * v0z;
+    const dot01 = v0x * v1x + v0z * v1z;
+    const dot02 = v0x * v2x + v0z * v2z;
+    const dot11 = v1x * v1x + v1z * v1z;
+    const dot12 = v1x * v2x + v1z * v2z;
+
+    // Compute barycentric coordinates
+    const denom = dot00 * dot11 - dot01 * dot01;
+    if (@abs(denom) < 0.0001) return false; // Degenerate triangle
+
+    const inv_denom = 1.0 / denom;
+    const u = (dot11 * dot02 - dot01 * dot12) * inv_denom;
+    const v = (dot00 * dot12 - dot01 * dot02) * inv_denom;
+
+    // Check if point is in triangle (with small epsilon for edge cases)
+    const epsilon: f32 = 0.0001;
+    return (u >= -epsilon) and (v >= -epsilon) and (u + v <= 1.0 + epsilon);
+}
+
+/// Check if the triangle at vertex idx is an "ear" (can be clipped)
+/// An ear is a convex vertex where no other polygon vertices are inside the triangle
+fn isEar(vertices: []const WorldVertex, indices: []const usize, idx: usize) bool {
+    // Must be convex
+    if (!isConvex(vertices, indices, idx)) return false;
+
+    const n = indices.len;
+    const i_prev = indices[(idx + n - 1) % n];
+    const i_curr = indices[idx];
+    const i_next = indices[(idx + 1) % n];
+
+    const a = vertices[i_prev];
+    const b = vertices[i_curr];
+    const c = vertices[i_next];
+
+    // Check that no other vertices are inside this triangle
+    for (0..n) |i| {
+        if (i == (idx + n - 1) % n or i == idx or i == (idx + 1) % n) continue;
+        const p = vertices[indices[i]];
+        if (pointInTriangle(p, a, b, c)) return false;
+    }
+
+    return true;
+}
+
+/// Triangulate a polygon using ear clipping algorithm
+/// Returns array of triangles (vertex indices into original vertices array)
+fn triangulatePolygon(vertices: []const WorldVertex, vertex_count: usize) TriangulationResult {
+    var result = TriangulationResult{
+        .triangles = undefined,
+        .count = 0,
+    };
+
+    if (vertex_count < 3) return result;
+    if (vertex_count == 3) {
+        // Simple case: already a triangle
+        result.triangles[0] = .{ .a = 0, .b = 1, .c = 2 };
+        result.count = 1;
+        return result;
+    }
+
+    // Working list of vertex indices (we remove vertices as we clip ears)
+    var indices: [MAX_BUILDING_VERTICES]usize = undefined;
+    var n = vertex_count;
+    for (0..n) |i| {
+        indices[i] = i;
+    }
+
+    // Ensure polygon is counter-clockwise (required for convexity test)
+    const ccw = isCounterClockwise(vertices[0..vertex_count]);
+    if (!ccw) {
+        // Reverse the indices to make it CCW
+        var left: usize = 0;
+        var right: usize = n - 1;
+        while (left < right) {
+            const tmp = indices[left];
+            indices[left] = indices[right];
+            indices[right] = tmp;
+            left += 1;
+            right -= 1;
+        }
+    }
+
+    // Ear clipping loop
+    var idx: usize = 0;
+    var consecutive_failures: usize = 0;
+
+    while (n > 3) {
+        // Safety: if we've gone around the whole polygon without finding an ear,
+        // the polygon might be degenerate - fall back to fan triangulation
+        if (consecutive_failures >= n) {
+            // Fallback: just create remaining triangles from first vertex
+            while (n > 2 and result.count < MAX_TRIANGLES) {
+                result.triangles[result.count] = .{
+                    .a = indices[0],
+                    .b = indices[1],
+                    .c = indices[2],
+                };
+                result.count += 1;
+                // Remove middle vertex
+                for (1..n - 1) |i| {
+                    indices[i] = indices[i + 1];
+                }
+                n -= 1;
+            }
+            break;
+        }
+
+        if (isEar(vertices, indices[0..n], idx)) {
+            // Clip this ear: add triangle and remove middle vertex
+            const prev_idx = (idx + n - 1) % n;
+            const next_idx = (idx + 1) % n;
+
+            result.triangles[result.count] = .{
+                .a = indices[prev_idx],
+                .b = indices[idx],
+                .c = indices[next_idx],
+            };
+            result.count += 1;
+
+            // Remove vertex at idx by shifting remaining vertices
+            for (idx..n - 1) |i| {
+                indices[i] = indices[i + 1];
+            }
+            n -= 1;
+
+            // Stay at same index (or wrap if at end)
+            if (idx >= n) idx = 0;
+            consecutive_failures = 0;
+        } else {
+            // Move to next vertex
+            idx = (idx + 1) % n;
+            consecutive_failures += 1;
+        }
+    }
+
+    // Add final triangle
+    if (n == 3 and result.count < MAX_TRIANGLES) {
+        result.triangles[result.count] = .{
+            .a = indices[0],
+            .b = indices[1],
+            .c = indices[2],
+        };
+        result.count += 1;
+    }
+
+    return result;
+}
+
+// ============================================================================
 // RENDERING
 // ============================================================================
 
@@ -339,19 +598,25 @@ fn drawBuilding(building: *const Building, terrain_grid: *const TerrainGrid) voi
         j = i;
     }
 
-    // Draw roof (flat for now - fan triangulation from center)
+    // Draw roof using ear clipping triangulation
+    // This correctly handles concave polygons (U-shaped, L-shaped buildings)
     // Also double-sided so roof is visible from below (if camera clips inside)
-    const roof_center = rl.Vector3{ .x = center.x, .y = top_y, .z = center.z };
-    for (0..building.vertex_count) |i| {
-        const v0 = building.vertices[i];
-        const v1 = building.vertices[(i + 1) % building.vertex_count];
-        const rv0 = rl.Vector3{ .x = v0.x, .y = top_y, .z = v0.z };
-        const rv1 = rl.Vector3{ .x = v1.x, .y = top_y, .z = v1.z };
+    const triangulation = triangulatePolygon(building.vertices[0..building.vertex_count], building.vertex_count);
+
+    for (0..triangulation.count) |i| {
+        const tri = triangulation.triangles[i];
+        const va = building.vertices[tri.a];
+        const vb = building.vertices[tri.b];
+        const vc = building.vertices[tri.c];
+
+        const ra = rl.Vector3{ .x = va.x, .y = top_y, .z = va.z };
+        const rb = rl.Vector3{ .x = vb.x, .y = top_y, .z = vb.z };
+        const rc = rl.Vector3{ .x = vc.x, .y = top_y, .z = vc.z };
 
         // Top face (visible from above)
-        rl.drawTriangle3D(roof_center, rv0, rv1, roof_color);
+        rl.drawTriangle3D(ra, rb, rc, roof_color);
         // Bottom face (visible from below)
-        rl.drawTriangle3D(roof_center, rv1, rv0, roof_color);
+        rl.drawTriangle3D(ra, rc, rb, roof_color);
     }
 }
 
@@ -427,4 +692,86 @@ test "building manager" {
     try std.testing.expect(manager.building_count == 1);
     try std.testing.expect(manager.checkCollision(5, 5) != null);
     try std.testing.expect(manager.checkCollision(20, 20) == null);
+}
+
+test "ear clipping - simple square" {
+    // Square polygon - should produce 2 triangles
+    const verts = [_]WorldVertex{
+        .{ .x = 0, .z = 0 },
+        .{ .x = 10, .z = 0 },
+        .{ .x = 10, .z = 10 },
+        .{ .x = 0, .z = 10 },
+    };
+
+    const result = triangulatePolygon(&verts, 4);
+    try std.testing.expectEqual(@as(usize, 2), result.count);
+}
+
+test "ear clipping - triangle" {
+    // Triangle - should produce 1 triangle
+    const verts = [_]WorldVertex{
+        .{ .x = 0, .z = 0 },
+        .{ .x = 10, .z = 0 },
+        .{ .x = 5, .z = 10 },
+    };
+
+    const result = triangulatePolygon(&verts, 3);
+    try std.testing.expectEqual(@as(usize, 1), result.count);
+}
+
+test "ear clipping - L-shaped (concave)" {
+    // L-shaped polygon (6 vertices) - should produce 4 triangles
+    //   +--+
+    //   |  |
+    // +-+  |
+    // |    |
+    // +----+
+    const verts = [_]WorldVertex{
+        .{ .x = 0, .z = 0 }, // bottom-left
+        .{ .x = 20, .z = 0 }, // bottom-right
+        .{ .x = 20, .z = 20 }, // top-right
+        .{ .x = 10, .z = 20 }, // inner top-right
+        .{ .x = 10, .z = 10 }, // inner corner
+        .{ .x = 0, .z = 10 }, // left middle
+    };
+
+    const result = triangulatePolygon(&verts, 6);
+    // 6 vertices -> 4 triangles (n-2 rule)
+    try std.testing.expectEqual(@as(usize, 4), result.count);
+}
+
+test "ear clipping - U-shaped (concave)" {
+    // U-shaped polygon (8 vertices) - should produce 6 triangles
+    // +--+  +--+
+    // |  |  |  |
+    // |  +--+  |
+    // |        |
+    // +--------+
+    const verts = [_]WorldVertex{
+        .{ .x = 0, .z = 0 }, // bottom-left
+        .{ .x = 30, .z = 0 }, // bottom-right
+        .{ .x = 30, .z = 20 }, // top-right outer
+        .{ .x = 20, .z = 20 }, // top-right inner
+        .{ .x = 20, .z = 10 }, // right inner bottom
+        .{ .x = 10, .z = 10 }, // left inner bottom
+        .{ .x = 10, .z = 20 }, // top-left inner
+        .{ .x = 0, .z = 20 }, // top-left outer
+    };
+
+    const result = triangulatePolygon(&verts, 8);
+    // 8 vertices -> 6 triangles (n-2 rule)
+    try std.testing.expectEqual(@as(usize, 6), result.count);
+}
+
+test "point in triangle" {
+    const a = WorldVertex{ .x = 0, .z = 0 };
+    const b = WorldVertex{ .x = 10, .z = 0 };
+    const c = WorldVertex{ .x = 5, .z = 10 };
+
+    // Center should be inside
+    try std.testing.expect(pointInTriangle(.{ .x = 5, .z = 3 }, a, b, c));
+
+    // Outside points
+    try std.testing.expect(!pointInTriangle(.{ .x = -1, .z = 0 }, a, b, c));
+    try std.testing.expect(!pointInTriangle(.{ .x = 5, .z = 15 }, a, b, c));
 }

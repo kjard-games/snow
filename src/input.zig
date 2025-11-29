@@ -6,6 +6,7 @@ const combat = @import("combat.zig");
 const movement = @import("movement.zig");
 const entity_types = @import("entity.zig");
 const ground_targeting = @import("ground_targeting.zig");
+const buildings = @import("buildings.zig");
 
 const Character = character.Character;
 const Skill = character.Skill;
@@ -14,14 +15,25 @@ const EntityId = entity_types.EntityId;
 const GroundTargetingState = ground_targeting.GroundTargetingState;
 const print = std.debug.print;
 
-// Camera constants
-pub const DEFAULT_CAMERA_PITCH: f32 = 0.6; // ~34 degrees, good default viewing angle
-pub const DEFAULT_CAMERA_DISTANCE: f32 = 250.0;
-pub const MIN_CAMERA_PITCH: f32 = 0.1; // Nearly horizontal
-pub const MAX_CAMERA_PITCH: f32 = 1.4; // Nearly straight down
-pub const MIN_CAMERA_DISTANCE: f32 = 50.0;
-pub const MAX_CAMERA_DISTANCE: f32 = 400.0;
-pub const CAMERA_ZOOM_SPEED: f32 = 20.0; // Units per mouse wheel increment
+// ============================================================================
+// CAMERA CONSTANTS - Kid's Eye View
+// ============================================================================
+// Camera is positioned to feel like a kid's perspective - lower, closer,
+// making the world feel bigger and more imposing.
+
+/// Default pitch - more horizontal to see buildings towering above
+pub const DEFAULT_CAMERA_PITCH: f32 = 0.35; // ~20 degrees, looking more ahead than down
+/// Default distance - closer for more immersive feel
+pub const DEFAULT_CAMERA_DISTANCE: f32 = 80.0; // Much closer than before (was 250)
+/// Minimum pitch - can look almost straight ahead
+pub const MIN_CAMERA_PITCH: f32 = 0.05; // Nearly horizontal for dramatic building views
+/// Maximum pitch - can still look down for tactical view
+pub const MAX_CAMERA_PITCH: f32 = 1.2; // Not quite straight down
+/// Minimum zoom distance
+pub const MIN_CAMERA_DISTANCE: f32 = 30.0; // Very close, over-the-shoulder
+/// Maximum zoom distance - still closer than before for kid scale
+pub const MAX_CAMERA_DISTANCE: f32 = 200.0; // Was 400, now capped lower
+pub const CAMERA_ZOOM_SPEED: f32 = 10.0; // Units per mouse wheel increment
 
 // Input sensitivity constants
 pub const MOUSE_SENSITIVITY: f32 = 0.003; // Radians per pixel
@@ -998,17 +1010,21 @@ pub fn updateCamera(camera: *rl.Camera, player_pos: rl.Vector3, input_state: Inp
     // Update camera to follow player with pitch
     // Use spherical coordinates: distance, angle (yaw), pitch
     const horizontal_distance = input_state.camera_distance * @cos(input_state.camera_pitch);
-    const cam_height = player_pos.y + input_state.camera_distance * @sin(input_state.camera_pitch);
+
+    // Camera height: start at kid eye level, then add pitch-based offset
+    // Kid eye level is about 8-9 units (from buildings.KID_EYE_LEVEL)
+    const base_cam_height = player_pos.y + buildings.KID_EYE_LEVEL;
+    const cam_height = base_cam_height + input_state.camera_distance * @sin(input_state.camera_pitch);
 
     const cam_x = player_pos.x + @sin(input_state.camera_angle) * horizontal_distance;
     const cam_z = player_pos.z + @cos(input_state.camera_angle) * horizontal_distance;
 
     camera.position = .{ .x = cam_x, .y = cam_height, .z = cam_z };
 
-    // Offset camera target up and slightly to the side for over-shoulder view
-    // This prevents the reticle from aiming through the player character
-    const target_offset_y: f32 = 50.0; // Height offset (up)
-    const target_offset_x: f32 = 20.0; // Shoulder offset (right)
+    // Target is at kid eye level - we're looking FROM kid height AT kid height
+    // Small shoulder offset for over-the-shoulder feel
+    const target_offset_y: f32 = buildings.KID_EYE_LEVEL; // Look at eye level
+    const target_offset_x: f32 = 8.0; // Smaller shoulder offset for closer camera
 
     camera.target = .{
         .x = player_pos.x + target_offset_x,
