@@ -331,6 +331,7 @@ pub const WorldState = struct {
 
     // External systems
     terrain: *const TerrainGrid,
+    building_mgr: ?*const BuildingManager,
     vfx_mgr: *VFXManager,
     rng: *std.Random,
     telem: ?*MatchTelemetry,
@@ -340,6 +341,7 @@ pub const WorldState = struct {
         self_char: *Character,
         all_entities: []Character,
         terrain: *const TerrainGrid,
+        building_mgr: ?*const BuildingManager,
         vfx_mgr: *VFXManager,
         rng: *std.Random,
         telem: ?*MatchTelemetry,
@@ -349,6 +351,7 @@ pub const WorldState = struct {
             .self = self_char,
             .entities = all_entities,
             .terrain = terrain,
+            .building_mgr = building_mgr,
             .vfx_mgr = vfx_mgr,
             .rng = rng,
             .telem = telem,
@@ -453,13 +456,30 @@ pub const WorldState = struct {
     }
 
     fn hasWallTo(self: *const WorldState, target: *const Character) bool {
-        return self.terrain.hasWallBetween(
+        // Check terrain walls (snow walls built by players)
+        if (self.terrain.hasWallBetween(
             self.self.position.x,
             self.self.position.z,
             target.position.x,
             target.position.z,
             10.0,
-        );
+        )) {
+            return true;
+        }
+
+        // Check building LoS blocking
+        if (self.building_mgr) |bm| {
+            if (!bm.checkLoS(
+                self.self.position.x,
+                self.self.position.z,
+                target.position.x,
+                target.position.z,
+            )) {
+                return true; // Building blocks LoS
+            }
+        }
+
+        return false;
     }
 
     // ========== TERRAIN EVALUATION HELPERS ==========
@@ -514,7 +534,7 @@ pub const WorldState = struct {
     }
 
     /// Evaluate terrain quality in a direction (higher = better for movement)
-    /// Considers: speed modifier, ice risk (if enemies nearby), wall obstacles
+    /// Considers: speed modifier, ice risk (if enemies nearby), wall obstacles, buildings
     fn evalTerrainDirection(self: *const WorldState, dir_x: f32, dir_z: f32, sample_dist: f32) f32 {
         var score: f32 = 0.0;
 
@@ -541,7 +561,118 @@ pub const WorldState = struct {
             score -= 0.2; // Smaller penalty for low walls
         }
 
+        // Check for buildings blocking the path
+        if (self.building_mgr) |bm| {
+            // Sample multiple points along the path for building collision
+            const sample_count: usize = 3;
+            for (1..sample_count + 1) |i| {
+                const t = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(sample_count));
+                const sample_x = self.self.position.x + dir_x * sample_dist * t;
+                const sample_z = self.self.position.z + dir_z * sample_dist * t;
+                if (bm.checkCollision(sample_x, sample_z) != null) {
+                    score -= 1.0; // Heavy penalty - path blocked by building
+                    break;
+                }
+            }
+        }
+
         return score;
+    }
+
+    // ========== BUILDING AVOIDANCE HELPERS ==========
+
+    /// Check if there's a clear path to a position (no buildings blocking)
+    fn hasClearPathTo(self: *const WorldState, target_x: f32, target_z: f32) bool {
+        if (self.building_mgr) |bm| {
+            return bm.checkLoS(self.self.position.x, self.self.position.z, target_x, target_z);
+        }
+        return true; // No buildings = clear path
+    }
+
+    /// Check if a specific position is blocked by a building
+    fn isBuildingAt(self: *const WorldState, x: f32, z: f32) bool {
+        if (self.building_mgr) |bm| {
+            return bm.checkCollision(x, z) != null;
+        }
+        return false;
+    }
+
+    /// Find a steering direction to avoid buildings while moving toward a target
+    /// Returns adjusted direction (normalized) or original direction if no adjustment needed
+    fn findBuildingAvoidanceDir(self: *const WorldState, target_x: f32, target_z: f32, look_ahead: f32) struct { x: f32, z: f32 } {
+        const dx = target_x - self.self.position.x;
+        const dz = target_z - self.self.position.z;
+        const dist = @sqrt(dx * dx + dz * dz);
+
+        if (dist < 1.0) return .{ .x = 0, .z = 0 };
+
+        const dir_x = dx / dist;
+        const dir_z = dz / dist;
+
+        // Check if direct path is clear
+        const check_dist = @min(look_ahead, dist);
+        const check_x = self.self.position.x + dir_x * check_dist;
+        const check_z = self.self.position.z + dir_z * check_dist;
+
+        if (!self.isBuildingAt(check_x, check_z)) {
+            // Direct path is clear
+            return .{ .x = dir_x, .z = dir_z };
+        }
+
+        // Direct path blocked - try to steer around
+        // Check perpendicular directions (left and right)
+        const perp_l_x = -dir_z;
+        const perp_l_z = dir_x;
+        const perp_r_x = dir_z;
+        const perp_r_z = -dir_x;
+
+        // Sample several angles to find a clear path
+        const angles = [_]f32{ 0.3, 0.5, 0.7, 0.9 }; // Blend amounts toward perpendicular
+
+        var best_dir_x: f32 = dir_x;
+        var best_dir_z: f32 = dir_z;
+        var found_clear = false;
+
+        // Try left side first
+        for (angles) |blend| {
+            const try_x = dir_x * (1.0 - blend) + perp_l_x * blend;
+            const try_z = dir_z * (1.0 - blend) + perp_l_z * blend;
+            const try_dist = @sqrt(try_x * try_x + try_z * try_z);
+            const norm_x = try_x / try_dist;
+            const norm_z = try_z / try_dist;
+
+            const sample_x = self.self.position.x + norm_x * check_dist;
+            const sample_z = self.self.position.z + norm_z * check_dist;
+
+            if (!self.isBuildingAt(sample_x, sample_z)) {
+                best_dir_x = norm_x;
+                best_dir_z = norm_z;
+                found_clear = true;
+                break;
+            }
+        }
+
+        // If left didn't work, try right
+        if (!found_clear) {
+            for (angles) |blend| {
+                const try_x = dir_x * (1.0 - blend) + perp_r_x * blend;
+                const try_z = dir_z * (1.0 - blend) + perp_r_z * blend;
+                const try_dist = @sqrt(try_x * try_x + try_z * try_z);
+                const norm_x = try_x / try_dist;
+                const norm_z = try_z / try_dist;
+
+                const sample_x = self.self.position.x + norm_x * check_dist;
+                const sample_z = self.self.position.z + norm_z * check_dist;
+
+                if (!self.isBuildingAt(sample_x, sample_z)) {
+                    best_dir_x = norm_x;
+                    best_dir_z = norm_z;
+                    break;
+                }
+            }
+        }
+
+        return .{ .x = best_dir_x, .z = best_dir_z };
     }
 };
 
@@ -1030,13 +1161,10 @@ fn calcMovement(world: *WorldState, ai: *AIState, action: ?*const SkillAction, i
         if (self.casting.queued_skill) |queued| {
             for (world.entities) |*e| {
                 if (e.id == queued.target_id and e.isAlive()) {
-                    const dx = e.position.x - self.position.x;
-                    const dz = e.position.z - self.position.z;
-                    const dist = @sqrt(dx * dx + dz * dz);
-                    if (dist > 1.0) {
-                        move_x = dx / dist;
-                        move_z = dz / dist;
-                    }
+                    // Use building avoidance when moving to target
+                    const avoid_dir = world.findBuildingAvoidanceDir(e.position.x, e.position.z, 60.0);
+                    move_x = avoid_dir.x;
+                    move_z = avoid_dir.z;
                     break;
                 }
             }
@@ -1050,13 +1178,10 @@ fn calcMovement(world: *WorldState, ai: *AIState, action: ?*const SkillAction, i
                 // They CAN chase enemy targets (offensive skills)
                 const is_ally_target = self.isAlly(target.*);
                 if (!is_ally_backline or !is_ally_target) {
-                    const dx = target.position.x - self.position.x;
-                    const dz = target.position.z - self.position.z;
-                    const dist = @sqrt(dx * dx + dz * dz);
-                    if (dist > 1.0) {
-                        move_x = dx / dist;
-                        move_z = dz / dist;
-                    }
+                    // Use building avoidance when moving to target
+                    const avoid_dir = world.findBuildingAvoidanceDir(target.position.x, target.position.z, 60.0);
+                    move_x = avoid_dir.x;
+                    move_z = avoid_dir.z;
                 }
             }
         }
@@ -1101,9 +1226,10 @@ fn calcMovement(world: *WorldState, ai: *AIState, action: ?*const SkillAction, i
                 if (ai.last_stand) {
                     ai.is_kiting = false;
                     if (dist > preferred * 0.5) {
-                        // Advance aggressively
-                        move_x = dir_x;
-                        move_z = dir_z;
+                        // Advance aggressively (with building avoidance)
+                        const avoid_dir = world.findBuildingAvoidanceDir(enemy.position.x, enemy.position.z, 60.0);
+                        move_x = avoid_dir.x;
+                        move_z = avoid_dir.z;
                     }
                     // If close enough, hold position and fight
                 } else {
@@ -1111,25 +1237,48 @@ fn calcMovement(world: *WorldState, ai: *AIState, action: ?*const SkillAction, i
                     switch (ai.formation) {
                         .frontline => {
                             if (dist > preferred * 1.2) {
-                                move_x = dir_x;
-                                move_z = dir_z;
+                                // Advance (with building avoidance)
+                                const avoid_dir = world.findBuildingAvoidanceDir(enemy.position.x, enemy.position.z, 60.0);
+                                move_x = avoid_dir.x;
+                                move_z = avoid_dir.z;
                             }
                         },
                         .midline => {
                             // Kite when hurt (but not in last stand)
                             if (self_hp < Config.LOW_HEALTH or (dist < Config.MELEE_RANGE and self_hp < Config.WOUNDED)) {
-                                move_x = -dir_x;
-                                move_z = -dir_z;
+                                // Retreating - check if retreat direction hits a building
+                                const retreat_x = self.position.x - dir_x * 60.0;
+                                const retreat_z = self.position.z - dir_z * 60.0;
+                                if (!world.isBuildingAt(retreat_x, retreat_z)) {
+                                    move_x = -dir_x;
+                                    move_z = -dir_z;
+                                } else {
+                                    // Building behind us - try to strafe instead
+                                    const perp_x = -dir_z;
+                                    const perp_z = dir_x;
+                                    const strafe_x = self.position.x + perp_x * 60.0;
+                                    const strafe_z = self.position.z + perp_z * 60.0;
+                                    if (!world.isBuildingAt(strafe_x, strafe_z)) {
+                                        move_x = perp_x;
+                                        move_z = perp_z;
+                                    } else {
+                                        // Try other strafe direction
+                                        move_x = -perp_x;
+                                        move_z = -perp_z;
+                                    }
+                                }
                                 ai.is_kiting = true;
                             } else if (dist > preferred * 1.5) {
-                                // Very far - full speed approach
-                                move_x = dir_x;
-                                move_z = dir_z;
+                                // Very far - full speed approach (with building avoidance)
+                                const avoid_dir = world.findBuildingAvoidanceDir(enemy.position.x, enemy.position.z, 60.0);
+                                move_x = avoid_dir.x;
+                                move_z = avoid_dir.z;
                                 ai.is_kiting = false;
                             } else if (dist > preferred * 1.1) {
-                                // Slightly out of range - approach at reduced speed
-                                move_x = dir_x * 0.7;
-                                move_z = dir_z * 0.7;
+                                // Slightly out of range - approach at reduced speed (with building avoidance)
+                                const avoid_dir = world.findBuildingAvoidanceDir(enemy.position.x, enemy.position.z, 40.0);
+                                move_x = avoid_dir.x * 0.7;
+                                move_z = avoid_dir.z * 0.7;
                                 ai.is_kiting = false;
                             } else if (dist < preferred * 0.7) {
                                 move_x = -dir_x * 0.5;
@@ -1144,9 +1293,10 @@ fn calcMovement(world: *WorldState, ai: *AIState, action: ?*const SkillAction, i
                             if (is_player_ally) {
                                 // Ally healer behavior: stay at preferred range, approach if too far
                                 if (dist > preferred * 1.2) {
-                                    // Too far - approach to get in healing range
-                                    move_x = dir_x * 0.6;
-                                    move_z = dir_z * 0.6;
+                                    // Too far - approach to get in healing range (with building avoidance)
+                                    const avoid_dir = world.findBuildingAvoidanceDir(enemy.position.x, enemy.position.z, 40.0);
+                                    move_x = avoid_dir.x * 0.6;
+                                    move_z = avoid_dir.z * 0.6;
                                     ai.is_kiting = false;
                                 } else if (dist < preferred * 0.5) {
                                     // Too close - back up slightly but don't flee
@@ -1160,17 +1310,27 @@ fn calcMovement(world: *WorldState, ai: *AIState, action: ?*const SkillAction, i
                             } else {
                                 // Enemy backline behavior: retreat when threatened (original behavior)
                                 if (dist < Config.THREAT_RANGE) {
-                                    move_x = -dir_x;
-                                    move_z = -dir_z;
+                                    // Retreating - check if retreat direction hits a building
+                                    const retreat_x = self.position.x - dir_x * 60.0;
+                                    const retreat_z = self.position.z - dir_z * 60.0;
+                                    if (!world.isBuildingAt(retreat_x, retreat_z)) {
+                                        move_x = -dir_x;
+                                        move_z = -dir_z;
+                                    } else {
+                                        // Building behind us - strafe instead
+                                        move_x = -dir_z;
+                                        move_z = dir_x;
+                                    }
                                     ai.is_kiting = true;
                                 } else if (dist < Config.BACKLINE_SAFE_DIST) {
                                     move_x = -dir_x * 0.5;
                                     move_z = -dir_z * 0.5;
                                     ai.is_kiting = true;
                                 } else if (dist > preferred * 1.5) {
-                                    // Too far from fight - cautiously approach
-                                    move_x = dir_x * 0.5;
-                                    move_z = dir_z * 0.5;
+                                    // Too far from fight - cautiously approach (with building avoidance)
+                                    const avoid_dir = world.findBuildingAvoidanceDir(enemy.position.x, enemy.position.z, 40.0);
+                                    move_x = avoid_dir.x * 0.5;
+                                    move_z = avoid_dir.z * 0.5;
                                     ai.is_kiting = false;
                                 } else {
                                     ai.is_kiting = false;
@@ -1875,7 +2035,7 @@ pub fn updateAI(
         }
 
         // Build world state
-        var world = WorldState.build(ent, entities, terrain_grid, vfx_manager, rng, match_telemetry, delta_time);
+        var world = WorldState.build(ent, entities, terrain_grid, building_manager, vfx_manager, rng, match_telemetry, delta_time);
 
         // ========== ENGAGEMENT STATE MACHINE ==========
         // Check aggro, leashing, and reset states for dungeon AI

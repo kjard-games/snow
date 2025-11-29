@@ -262,6 +262,7 @@ const TestContext = struct {
                     ent,
                     self.entities[0..self.totalCount()],
                     &self.terrain,
+                    null, // No building manager in tests
                     &self.vfx_mgr,
                     &self.rng,
                     null,
