@@ -13,8 +13,8 @@
   "entities": [
     {
       "entity_id": 5,
-      "name": "BluePitcher",
-      "school": "private_school",
+      "name": "BlueAnimator",
+      "school": "waldorf",
       "position": "fielder",
       "team": 0,
       "damage_dealt": 0,
@@ -55,8 +55,8 @@
     {
       "entity_id": 6,
       "name": "BluePitcher",
-      "school": "public_school",
-      "position": "fielder",
+      "school": "waldorf",
+      "position": "sledder",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -95,9 +95,9 @@
     },
     {
       "entity_id": 7,
-      "name": "RedPitcher",
-      "school": "public_school",
-      "position": "sledder",
+      "name": "RedFielder",
+      "school": "waldorf",
+      "position": "animator",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -136,9 +136,9 @@
     },
     {
       "entity_id": 8,
-      "name": "RedSledder",
-      "school": "public_school",
-      "position": "animator",
+      "name": "RedFielder",
+      "school": "homeschool",
+      "position": "shoveler",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,

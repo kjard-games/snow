@@ -6,6 +6,7 @@ const vfx = @import("vfx.zig");
 const palette = @import("color_palette.zig");
 const terrain = @import("terrain.zig");
 const ground_targeting = @import("ground_targeting.zig");
+const arena_props = @import("arena_props.zig");
 
 const Character = character.Character;
 const EntityId = entity_types.EntityId;
@@ -379,7 +380,7 @@ fn drawCharacterBody(render_pos: rl.Vector3, radius: f32, school_color: rl.Color
 
 /// Main 3D rendering function. Draws the game world with interpolated positions for smooth visuals.
 /// Uses interpolation_alpha (0.0-1.0) to smoothly render between fixed-timestep game logic updates.
-pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager, terrain_grid: *const @import("terrain.zig").TerrainGrid, ground_target_state: *const GroundTargetingState, skill_range_preview: *const SkillRangePreviewState) void {
+pub fn draw(player: *const Character, entities: []const Character, selected_target: ?EntityId, camera: rl.Camera, interpolation_alpha: f32, vfx_manager: *const vfx.VFXManager, terrain_grid: *const @import("terrain.zig").TerrainGrid, ground_target_state: *const GroundTargetingState, skill_range_preview: *const SkillRangePreviewState, prop_manager: ?*const arena_props.PropManager) void {
     rl.clearBackground(rl.Color{ .r = 180, .g = 200, .b = 220, .a = 255 }); // Soft winter sky color
 
     // === 3D RENDERING ===
@@ -399,6 +400,11 @@ pub fn draw(player: *const Character, entities: []const Character, selected_targ
             }
             rl.drawMesh(mesh, material, rl.Matrix.identity());
         }
+    }
+
+    // Draw arena props (placed environment objects)
+    if (prop_manager) |pm| {
+        arena_props.drawAllProps(pm);
     }
 
     // Draw entities (interpolated for smooth movement, adjusted for snow depth)

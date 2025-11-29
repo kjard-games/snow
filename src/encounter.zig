@@ -25,6 +25,7 @@ const school_mod = @import("school.zig");
 const position_mod = @import("position.zig");
 const terrain_mod = @import("terrain.zig");
 const skills = @import("skills.zig");
+const arena_gen = @import("arena_gen.zig");
 
 const EntityId = entity.EntityId;
 const Team = entity.Team;
@@ -32,6 +33,13 @@ const School = school_mod.School;
 const Position = position_mod.Position;
 const Skill = skills.Skill;
 const TerrainType = terrain_mod.TerrainType;
+const TerrainGrid = terrain_mod.TerrainGrid;
+const ArenaRecipe = arena_gen.ArenaRecipe;
+const ElevationOp = arena_gen.ElevationOp;
+const ElevationPrimitive = arena_gen.ElevationPrimitive;
+const SnowZonePrimitive = arena_gen.SnowZonePrimitive;
+const NormalizedPos = arena_gen.NormalizedPos;
+const BlendMode = arena_gen.BlendMode;
 
 // ============================================================================
 // ENEMY SPECIFICATION
@@ -533,6 +541,10 @@ pub const Encounter = struct {
 
     // ========== WHERE - Arena Setup ==========
 
+    /// Arena recipe for procedural generation (optional)
+    /// If set, this will be applied to the terrain grid before the encounter starts
+    arena_recipe: ?*const ArenaRecipe = null,
+
     /// Arena boundaries
     arena_bounds: ArenaBounds = .{},
 
@@ -627,6 +639,58 @@ pub const Encounter = struct {
         }
         return duration;
     }
+
+    /// Apply this encounter's arena setup to a terrain grid
+    /// This includes:
+    /// 1. Arena recipe (if set) - procedural heightmap + snow zones
+    /// 2. Terrain patches - specific terrain type modifications
+    /// 3. (Hazard zones are handled separately at runtime)
+    pub fn applyToTerrain(self: *const Encounter, grid: *TerrainGrid) void {
+        // Phase 1: Apply arena recipe if present
+        if (self.arena_recipe) |recipe| {
+            arena_gen.applyRecipe(grid, recipe.*);
+        }
+
+        // Phase 2: Apply terrain patches on top
+        for (self.terrain_patches) |patch| {
+            const world_x = patch.center.x;
+            const world_z = patch.center.z;
+            grid.setTerrainInRadius(world_x, world_z, patch.radius, patch.terrain_type);
+        }
+
+        // Mark mesh dirty after all modifications
+        grid.markMeshDirty();
+    }
+
+    /// Get spawn positions for a wave based on arena geometry
+    /// Returns world coordinates for spawning enemies
+    pub fn getWaveSpawnPositions(self: *const Encounter, wave_idx: usize, count: usize) []rl.Vector3 {
+        const S = struct {
+            var positions: [12]rl.Vector3 = undefined;
+        };
+
+        if (wave_idx >= self.enemy_waves.len) {
+            return S.positions[0..0];
+        }
+
+        const wave = self.enemy_waves[wave_idx];
+        const center = wave.spawn_position;
+        const radius = wave.spawn_radius;
+
+        const actual_count = @min(count, 12);
+        for (0..actual_count) |i| {
+            // Distribute in a circle around spawn center
+            const angle = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(actual_count)) * std.math.pi * 2.0;
+            const spread = if (actual_count == 1) 0.0 else radius * 0.5;
+            S.positions[i] = .{
+                .x = center.x + @cos(angle) * spread,
+                .y = center.y,
+                .z = center.z + @sin(angle) * spread,
+            };
+        }
+
+        return S.positions[0..actual_count];
+    }
 };
 
 /// Non-boss phase changes (environmental, encounter-wide)
@@ -646,6 +710,7 @@ pub const example_trash_pull = Encounter{
     .id = "tutorial_backyard",
     .name = "Backyard Skirmish",
     .description = "Some neighborhood kids want to test your arm.",
+    .arena_recipe = &arena_gen.template_open_arena,
     .enemy_waves = &[_]EnemyWave{
         .{
             .enemies = &[_]EnemySpec{
@@ -666,6 +731,7 @@ pub const example_boss_encounter = Encounter{
     .id = "the_snowlord",
     .name = "The Snowlord's Domain",
     .description = "Tommy built the biggest snowman anyone's ever seen. Then it started moving.",
+    .arena_recipe = &arena_gen.template_frozen_pond, // Boss arena is a frozen pond!
     .arena_bounds = .{
         .shape = .circle,
         .primary_size = 400.0,
@@ -743,4 +809,70 @@ pub const example_boss_encounter = Encounter{
     },
     .difficulty_rating = 5,
     .time_limit_ms = 600000, // 10 minute hard limit
+};
+
+/// Canyon encounter - enemies defend a narrow passage
+pub const example_canyon_ambush = Encounter{
+    .id = "canyon_ambush",
+    .name = "Ice Canyon Ambush",
+    .description = "The narrow canyon seemed like a shortcut. It wasn't.",
+    .arena_recipe = &arena_gen.template_canyon,
+    .enemy_waves = &[_]EnemyWave{
+        // Front blockers
+        .{
+            .enemies = &[_]EnemySpec{
+                .{ .name = "Canyon Guard", .position = .shoveler, .difficulty_rating = 3 },
+                .{ .name = "Canyon Guard", .position = .shoveler, .difficulty_rating = 3 },
+            },
+            .spawn_position = .{ .x = 0, .y = 0, .z = -150 },
+            .engagement_radius = 100.0,
+        },
+        // Ridge snipers
+        .{
+            .enemies = &[_]EnemySpec{
+                .{ .name = "Ridge Sniper", .position = .pitcher, .difficulty_rating = 2 },
+                .{ .name = "Ridge Sniper", .position = .pitcher, .difficulty_rating = 2 },
+            },
+            .spawn_position = .{ .x = 0, .y = 30, .z = -100 }, // On the ridge
+            .engagement_radius = 200.0, // Long range
+            .link_groups = &[_]u8{0}, // Aggro with front blockers
+        },
+    },
+    .objectives = &[_]Objective{
+        .{ .objective_type = .kill_all, .description = "Clear the canyon" },
+    },
+    .difficulty_rating = 4,
+};
+
+/// Fortress assault - capture a defended position
+pub const example_fortress_assault = Encounter{
+    .id = "fortress_assault",
+    .name = "Fort Frosty",
+    .description = "The fifth-graders built the ultimate snow fort. Time to storm it.",
+    .arena_recipe = &arena_gen.template_fortress,
+    .enemy_waves = &[_]EnemyWave{
+        // Outer defenders
+        .{
+            .enemies = &[_]EnemySpec{
+                .{ .name = "Fort Defender", .position = .fielder, .difficulty_rating = 2 },
+                .{ .name = "Fort Defender", .position = .fielder, .difficulty_rating = 2 },
+            },
+            .spawn_position = .{ .x = 0, .y = 0, .z = 100 },
+            .engagement_radius = 150.0,
+        },
+        // Fort garrison
+        .{
+            .enemies = &[_]EnemySpec{
+                .{ .name = "Fort Captain", .position = .pitcher, .difficulty_rating = 4, .is_champion = true },
+                .{ .name = "Fort Guard", .position = .shoveler, .difficulty_rating = 3 },
+                .{ .name = "Fort Medic", .position = .thermos, .difficulty_rating = 3 },
+            },
+            .spawn_position = .{ .x = 0, .y = 25, .z = 0 }, // On the fortress
+            .engagement_radius = 120.0,
+        },
+    },
+    .objectives = &[_]Objective{
+        .{ .objective_type = .kill_all, .description = "Capture the fort" },
+    },
+    .difficulty_rating = 5,
 };

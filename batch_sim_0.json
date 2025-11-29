@@ -1,5 +1,5 @@
 {
-  "match_duration_ticks": 853,
+  "match_duration_ticks": 656,
   "winning_team": 1,
   "total_damage_dealt_ally": 0,
   "total_damage_dealt_enemy": 0,
@@ -13,9 +13,9 @@
   "entities": [
     {
       "entity_id": 1,
-      "name": "BlueFielder",
+      "name": "BlueSledder",
       "school": "montessori",
-      "position": "sledder",
+      "position": "fielder",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -54,9 +54,9 @@
     },
     {
       "entity_id": 2,
-      "name": "BlueSledder",
-      "school": "homeschool",
-      "position": "pitcher",
+      "name": "BlueShoveler",
+      "school": "public_school",
+      "position": "fielder",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -95,9 +95,9 @@
     },
     {
       "entity_id": 3,
-      "name": "BlueAnimator",
-      "school": "private_school",
-      "position": "sledder",
+      "name": "BluePitcher",
+      "school": "public_school",
+      "position": "animator",
       "team": 0,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -137,7 +137,7 @@
     {
       "entity_id": 4,
       "name": "RedShoveler",
-      "school": "montessori",
+      "school": "homeschool",
       "position": "sledder",
       "team": 1,
       "damage_dealt": 0,
@@ -178,8 +178,8 @@
     {
       "entity_id": 5,
       "name": "RedSledder",
-      "school": "public_school",
-      "position": "sledder",
+      "school": "private_school",
+      "position": "shoveler",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -218,9 +218,9 @@
     },
     {
       "entity_id": 6,
-      "name": "RedAnimator",
-      "school": "private_school",
-      "position": "sledder",
+      "name": "RedFielder",
+      "school": "public_school",
+      "position": "fielder",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,
@@ -259,7 +259,7 @@
     },
     {
       "entity_id": 7,
-      "name": "YellowShoveler",
+      "name": "YellowAnimator",
       "school": "homeschool",
       "position": "animator",
       "team": 1,
@@ -301,8 +301,8 @@
     {
       "entity_id": 8,
       "name": "YellowSledder",
-      "school": "waldorf",
-      "position": "shoveler",
+      "school": "montessori",
+      "position": "animator",
       "team": 1,
       "damage_dealt": 0,
       "damage_received": 0,

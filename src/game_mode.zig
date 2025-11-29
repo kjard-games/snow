@@ -12,6 +12,7 @@ const palette = @import("color_palette.zig");
 const encounter = @import("encounter.zig");
 const ai = @import("ai.zig");
 const affix_processor = @import("affix_processor.zig");
+const arena_gen = @import("arena_gen.zig");
 
 const GameState = game_state.GameState;
 const Character = @import("character.zig").Character;
@@ -678,6 +679,25 @@ pub const GameMode = struct {
             return;
         };
 
+        // Apply a random arena template for visual variety
+        const arena_templates = [_]*const arena_gen.ArenaRecipe{
+            &arena_gen.template_school_yard,
+            &arena_gen.template_cul_de_sac,
+            &arena_gen.template_snowy_street,
+            &arena_gen.template_courtyard,
+            &arena_gen.template_intersection,
+            &arena_gen.template_backyard,
+            &arena_gen.template_parking_lot,
+        };
+        const template_idx = self.prng.random().intRangeAtMost(usize, 0, arena_templates.len - 1);
+        const selected_recipe = arena_templates[template_idx].*;
+        arena_gen.applyRecipe(&gs_ptr.terrain_grid, selected_recipe);
+
+        // Place props from the selected arena template
+        if (gs_ptr.prop_manager) |*pm| {
+            arena_gen.placePropsFromRecipe(pm, selected_recipe, &gs_ptr.terrain_grid);
+        }
+
         self.game_state = gs_ptr;
         self.phase = .match_active;
     }
@@ -1063,6 +1083,17 @@ pub const GameMode = struct {
         self.game_state = gs_ptr;
         self.current_runtime_encounter = runtime_enc;
         self.boss_entity_index = boss_idx;
+
+        // Apply arena terrain from encounter definition
+        // This generates the heightmap and snow zones before combat starts
+        enc_def.applyToTerrain(&gs_ptr.terrain_grid);
+
+        // Place props from encounter's arena recipe if present
+        if (enc_def.arena_recipe) |recipe| {
+            if (gs_ptr.prop_manager) |*pm| {
+                arena_gen.placePropsFromRecipe(pm, recipe.*, &gs_ptr.terrain_grid);
+            }
+        }
 
         // Initialize hazard zones from encounter definition
         self.initializeHazardZones(enc_def);

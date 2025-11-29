@@ -20,6 +20,7 @@ const gear_slot = @import("gear_slot.zig");
 const palette = @import("color_palette.zig");
 const telemetry = @import("telemetry.zig");
 const factory = @import("factory.zig");
+const arena_props = @import("arena_props.zig");
 
 const print = std.debug.print;
 
@@ -229,6 +230,7 @@ pub const GameStateBuilder = struct {
             .terrain_grid = terrain_grid,
             .allocator = self.allocator,
             .simulation_mode = !self.config.rendering,
+            .prop_manager = PropManager.init(self.allocator),
         };
     }
 
@@ -508,6 +510,7 @@ const EntityIdGenerator = entity.EntityIdGenerator;
 pub const TerrainGrid = terrain.TerrainGrid;
 const MatchTelemetry = telemetry.MatchTelemetry;
 const SkillRangePreviewState = ground_targeting.SkillRangePreviewState;
+const PropManager = arena_props.PropManager;
 
 // Game configuration constants
 pub const MAX_ENTITIES: usize = 128; // Support dungeon encounters with many enemies (4 player party + up to 124 enemies/NPCs)
@@ -557,6 +560,9 @@ pub const GameState = struct {
 
     // Skill range preview state (for hover and cast previews)
     skill_range_preview: SkillRangePreviewState = .{},
+
+    // Arena props system (placed environment objects)
+    prop_manager: ?PropManager = null,
 
     // ============================================
     // INITIALIZATION METHODS
@@ -909,7 +915,7 @@ pub const GameState = struct {
             self.selected_target,
         );
 
-        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid, &self.input_state.ground_targeting, &self.skill_range_preview);
+        render.draw(player, &self.entities, self.selected_target, self.camera, alpha, &self.vfx_manager, &self.terrain_grid, &self.input_state.ground_targeting, &self.skill_range_preview, if (self.prop_manager) |*pm| pm else null);
     }
 
     /// Render UI elements (skill bars, target info, etc.) on top of the 3D scene.
