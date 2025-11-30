@@ -1269,10 +1269,19 @@ pub fn drawCampaignUI(state: *CampaignState, ui_state: *CampaignUIState) void {
 // INPUT HANDLING
 // ============================================================================
 
+/// Result from campaign input handling
+pub const CampaignInputResult = union(enum) {
+    /// No action taken
+    none,
+    /// Player wants to engage this block (start combat)
+    engage: u32,
+    /// DEBUG: Auto-win this block without combat
+    debug_auto_win: u32,
+};
+
 /// Handle input for campaign UI
-/// Returns a block ID (u32) if an encounter should be started, null otherwise
-/// Note: Return type changed from ?u16 to ?u32 to accommodate polyomino block IDs
-pub fn handleCampaignInput(state: *CampaignState, ui_state: *CampaignUIState) ?u32 {
+/// Returns action if an encounter should be started or debug action taken
+pub fn handleCampaignInput(state: *CampaignState, ui_state: *CampaignUIState) CampaignInputResult {
     const screen_width = rl.getScreenWidth();
     const screen_height = rl.getScreenHeight();
 
@@ -1285,7 +1294,7 @@ pub fn handleCampaignInput(state: *CampaignState, ui_state: *CampaignUIState) ?u
     switch (ui_state.mode) {
         .overworld => {
             // Handle polyomino map input (panning, zooming, selection)
-            const engaged_block = polyomino_map_ui.handlePolyominoMapInput(
+            const map_result = polyomino_map_ui.handlePolyominoMapInput(
                 &state.poly_map,
                 &ui_state.poly_ui,
                 map_x,
@@ -1294,8 +1303,10 @@ pub fn handleCampaignInput(state: *CampaignState, ui_state: *CampaignUIState) ?u
                 map_height,
             );
 
-            if (engaged_block) |block_id| {
-                return block_id;
+            switch (map_result) {
+                .engage => |block_id| return .{ .engage = block_id },
+                .debug_auto_win => |block_id| return .{ .debug_auto_win = block_id },
+                .none => {},
             }
 
             // Edit skills
@@ -1357,5 +1368,5 @@ pub fn handleCampaignInput(state: *CampaignState, ui_state: *CampaignUIState) ?u
         },
     }
 
-    return null;
+    return .none;
 }

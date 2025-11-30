@@ -38,6 +38,13 @@ const GRID_LINE_COLOR = rl.Color.init(50, 55, 65, 100);
 // Interior border dimming factor (how dim same-faction interior borders are)
 const INTERIOR_BORDER_DIM: u8 = 60; // Very dim
 
+// Camera control constants
+const PAN_SPEED: f32 = 400.0; // Pixels per second at zoom 1.0
+const ZOOM_SPEED: f32 = 1.5; // Zoom multiplier per second when holding key
+const GAMEPAD_PAN_SPEED: f32 = 500.0; // Pixels per second at zoom 1.0 with gamepad
+const GAMEPAD_ZOOM_SPEED: f32 = 2.0; // Zoom multiplier per second with triggers
+const GAMEPAD_DEADZONE: f32 = 0.15; // Stick deadzone
+
 // ============================================================================
 // UI STATE
 // ============================================================================
@@ -117,6 +124,43 @@ pub const PolyominoMapUIState = struct {
             .x = (world_x - self.camera_x) * self.zoom,
             .y = (world_y - self.camera_y) * self.zoom,
         };
+    }
+
+    /// Center camera on a specific world position
+    pub fn centerOn(self: *PolyominoMapUIState, world_x: f32, world_y: f32, screen_width: f32, screen_height: f32) void {
+        const view_width = screen_width / self.zoom;
+        const view_height = screen_height / self.zoom;
+        self.camera_x = world_x - view_width / 2;
+        self.camera_y = world_y - view_height / 2;
+    }
+
+    /// Center camera on home block
+    pub fn centerOnHome(self: *PolyominoMapUIState, map: *PolyominoMap, screen_width: f32, screen_height: f32) void {
+        if (map.start_block_id) |start_id| {
+            if (map.getBlock(start_id)) |block| {
+                const center = block.getCentroid();
+                self.centerOn(center.x, center.y, screen_width, screen_height);
+            }
+        }
+    }
+
+    /// Fit all visible territory in view
+    pub fn fitAllTerritory(self: *PolyominoMapUIState, map: *PolyominoMap, screen_width: f32, screen_height: f32) void {
+        const bounds = map.camera_bounds;
+        const world_width = bounds.max_x - bounds.min_x;
+        const world_height = bounds.max_y - bounds.min_y;
+
+        if (world_width <= 0 or world_height <= 0) return;
+
+        // Calculate zoom to fit, with some padding
+        const zoom_x = screen_width / (world_width * 1.1);
+        const zoom_y = screen_height / (world_height * 1.1);
+        self.zoom = std.math.clamp(@min(zoom_x, zoom_y), MIN_ZOOM, MAX_ZOOM);
+
+        // Center on the bounds
+        const center_x = (bounds.min_x + bounds.max_x) / 2;
+        const center_y = (bounds.min_y + bounds.max_y) / 2;
+        self.centerOn(center_x, center_y, screen_width, screen_height);
     }
 };
 
@@ -919,6 +963,8 @@ pub fn drawBlockDetails(
         if (block.encounter != null) {
             const prompt_text = if (is_tutorial_target) "[Enter] Defend Home" else "[Enter] Engage";
             rl.drawText(prompt_text, toI32(panel_x + padding), toI32(panel_y + panel_height - 25), 12, rl.Color.white);
+            // DEBUG: Show auto-win hint
+            rl.drawText("[W] Debug Win", toI32(panel_x + padding + 120), toI32(panel_y + panel_height - 25), 12, rl.Color.init(150, 150, 150, 180));
         }
     }
 }
@@ -927,8 +973,22 @@ pub fn drawBlockDetails(
 // INPUT HANDLING
 // ============================================================================
 
+// ============================================================================
+// INPUT RESULT
+// ============================================================================
+
+/// Result from map input handling
+pub const MapInputResult = union(enum) {
+    /// No action taken
+    none,
+    /// Player wants to engage this block (start combat)
+    engage: u32,
+    /// DEBUG: Auto-win this block without combat
+    debug_auto_win: u32,
+};
+
 /// Handle input for the polyomino map
-/// Returns selected block ID if player confirms engagement
+/// Returns action if player confirms engagement or debug action
 pub fn handlePolyominoMapInput(
     map: *PolyominoMap,
     ui_state: *PolyominoMapUIState,
@@ -936,7 +996,7 @@ pub fn handlePolyominoMapInput(
     area_y: f32,
     area_width: f32,
     area_height: f32,
-) ?u32 {
+) MapInputResult {
     const mouse_pos = rl.getMousePosition();
 
     // Check if mouse is in map area
@@ -989,6 +1049,206 @@ pub fn handlePolyominoMapInput(
         }
     }
 
+    // Keyboard pan with arrow keys (continuous while held)
+    const dt = rl.getFrameTime();
+    const pan_amount = PAN_SPEED * dt / ui_state.zoom;
+
+    if (rl.isKeyDown(.up)) {
+        ui_state.camera_y -= pan_amount;
+    }
+    if (rl.isKeyDown(.down)) {
+        ui_state.camera_y += pan_amount;
+    }
+    if (rl.isKeyDown(.left)) {
+        ui_state.camera_x -= pan_amount;
+    }
+    if (rl.isKeyDown(.right)) {
+        ui_state.camera_x += pan_amount;
+    }
+
+    // Keyboard zoom with +/- or =/- keys (continuous while held)
+    const zoom_factor = std.math.pow(f32, ZOOM_SPEED, dt);
+    if (rl.isKeyDown(.equal) or rl.isKeyDown(.kp_add)) {
+        // Zoom in toward center
+        const center_x = area_width / 2;
+        const center_y = area_height / 2;
+        const world_before = ui_state.screenToWorld(center_x, center_y);
+
+        ui_state.zoom = std.math.clamp(ui_state.zoom * zoom_factor, PolyominoMapUIState.MIN_ZOOM, PolyominoMapUIState.MAX_ZOOM);
+
+        const world_after_x = center_x / ui_state.zoom + ui_state.camera_x;
+        const world_after_y = center_y / ui_state.zoom + ui_state.camera_y;
+        ui_state.camera_x += world_before.x - world_after_x;
+        ui_state.camera_y += world_before.y - world_after_y;
+    }
+    if (rl.isKeyDown(.minus) or rl.isKeyDown(.kp_subtract)) {
+        // Zoom out from center
+        const center_x = area_width / 2;
+        const center_y = area_height / 2;
+        const world_before = ui_state.screenToWorld(center_x, center_y);
+
+        ui_state.zoom = std.math.clamp(ui_state.zoom / zoom_factor, PolyominoMapUIState.MIN_ZOOM, PolyominoMapUIState.MAX_ZOOM);
+
+        const world_after_x = center_x / ui_state.zoom + ui_state.camera_x;
+        const world_after_y = center_y / ui_state.zoom + ui_state.camera_y;
+        ui_state.camera_x += world_before.x - world_after_x;
+        ui_state.camera_y += world_before.y - world_after_y;
+    }
+
+    // H = Center on home
+    if (rl.isKeyPressed(.h)) {
+        ui_state.centerOnHome(map, area_width, area_height);
+    }
+
+    // F = Fit all territory in view
+    if (rl.isKeyPressed(.f)) {
+        ui_state.fitAllTerritory(map, area_width, area_height);
+    }
+
+    // ========================================
+    // GAMEPAD CONTROLS
+    // ========================================
+    if (rl.isGamepadAvailable(0)) {
+        // Left stick: Pan camera
+        const left_x = rl.getGamepadAxisMovement(0, .left_x);
+        const left_y = rl.getGamepadAxisMovement(0, .left_y);
+        const gamepad_pan = GAMEPAD_PAN_SPEED * dt / ui_state.zoom;
+
+        if (@abs(left_x) > GAMEPAD_DEADZONE) {
+            ui_state.camera_x += left_x * gamepad_pan;
+        }
+        if (@abs(left_y) > GAMEPAD_DEADZONE) {
+            ui_state.camera_y += left_y * gamepad_pan;
+        }
+
+        // Triggers: Zoom in/out (RT = zoom in, LT = zoom out)
+        const left_trigger = rl.getGamepadAxisMovement(0, .left_trigger);
+        const right_trigger = rl.getGamepadAxisMovement(0, .right_trigger);
+        const gamepad_zoom_factor = std.math.pow(f32, GAMEPAD_ZOOM_SPEED, dt);
+
+        // Note: Triggers often return -1 to 1, where -1 is released, 1 is fully pressed
+        // Normalize to 0-1 range
+        const lt_value = (left_trigger + 1.0) / 2.0;
+        const rt_value = (right_trigger + 1.0) / 2.0;
+
+        if (rt_value > 0.1) {
+            // Zoom in toward center
+            const center_x = area_width / 2;
+            const center_y = area_height / 2;
+            const world_before = ui_state.screenToWorld(center_x, center_y);
+
+            const zoom_amount = 1.0 + (gamepad_zoom_factor - 1.0) * rt_value;
+            ui_state.zoom = std.math.clamp(ui_state.zoom * zoom_amount, PolyominoMapUIState.MIN_ZOOM, PolyominoMapUIState.MAX_ZOOM);
+
+            const world_after_x = center_x / ui_state.zoom + ui_state.camera_x;
+            const world_after_y = center_y / ui_state.zoom + ui_state.camera_y;
+            ui_state.camera_x += world_before.x - world_after_x;
+            ui_state.camera_y += world_before.y - world_after_y;
+        }
+        if (lt_value > 0.1) {
+            // Zoom out from center
+            const center_x = area_width / 2;
+            const center_y = area_height / 2;
+            const world_before = ui_state.screenToWorld(center_x, center_y);
+
+            const zoom_amount = 1.0 + (gamepad_zoom_factor - 1.0) * lt_value;
+            ui_state.zoom = std.math.clamp(ui_state.zoom / zoom_amount, PolyominoMapUIState.MIN_ZOOM, PolyominoMapUIState.MAX_ZOOM);
+
+            const world_after_x = center_x / ui_state.zoom + ui_state.camera_x;
+            const world_after_y = center_y / ui_state.zoom + ui_state.camera_y;
+            ui_state.camera_x += world_before.x - world_after_x;
+            ui_state.camera_y += world_before.y - world_after_y;
+        }
+
+        // Y button: Center on home
+        if (rl.isGamepadButtonPressed(0, .right_face_up)) {
+            ui_state.centerOnHome(map, area_width, area_height);
+        }
+
+        // X button: Fit all territory
+        if (rl.isGamepadButtonPressed(0, .right_face_left)) {
+            ui_state.fitAllTerritory(map, area_width, area_height);
+        }
+
+        // D-pad: Navigate between adjacent blocks
+        if (ui_state.selected_block_id) |selected_id| {
+            if (map.getBlock(selected_id)) |selected_block| {
+                const adjacent = selected_block.getAdjacentBlocks();
+                if (adjacent.len > 0) {
+                    var nav_direction: ?struct { dx: f32, dy: f32 } = null;
+
+                    if (rl.isGamepadButtonPressed(0, .left_face_up)) nav_direction = .{ .dx = 0, .dy = -1 };
+                    if (rl.isGamepadButtonPressed(0, .left_face_down)) nav_direction = .{ .dx = 0, .dy = 1 };
+                    if (rl.isGamepadButtonPressed(0, .left_face_left)) nav_direction = .{ .dx = -1, .dy = 0 };
+                    if (rl.isGamepadButtonPressed(0, .left_face_right)) nav_direction = .{ .dx = 1, .dy = 0 };
+
+                    if (nav_direction) |dir| {
+                        // Find the adjacent block closest to the desired direction
+                        const selected_center = selected_block.getCentroid();
+                        var best_id: ?u32 = null;
+                        var best_dot: f32 = -2.0;
+
+                        for (adjacent) |adj_id| {
+                            if (map.getBlock(adj_id)) |adj_block| {
+                                // Only navigate to visible blocks
+                                if (adj_block.state == .fogged) continue;
+
+                                const adj_center = adj_block.getCentroid();
+                                const to_adj_x = adj_center.x - selected_center.x;
+                                const to_adj_y = adj_center.y - selected_center.y;
+                                const len = @sqrt(to_adj_x * to_adj_x + to_adj_y * to_adj_y);
+                                if (len > 0.001) {
+                                    const dot = (to_adj_x / len) * dir.dx + (to_adj_y / len) * dir.dy;
+                                    if (dot > best_dot) {
+                                        best_dot = dot;
+                                        best_id = adj_id;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (best_id) |new_id| {
+                            ui_state.selected_block_id = new_id;
+                        }
+                    }
+                }
+            }
+        } else {
+            // No selection - D-pad selects home block
+            if (rl.isGamepadButtonPressed(0, .left_face_up) or
+                rl.isGamepadButtonPressed(0, .left_face_down) or
+                rl.isGamepadButtonPressed(0, .left_face_left) or
+                rl.isGamepadButtonPressed(0, .left_face_right))
+            {
+                if (map.start_block_id) |start_id| {
+                    ui_state.selected_block_id = start_id;
+                    ui_state.centerOnHome(map, area_width, area_height);
+                }
+            }
+        }
+
+        // A button: Engage selected block (same as Enter)
+        if (rl.isGamepadButtonPressed(0, .right_face_down)) {
+            if (ui_state.selected_block_id) |selected_id| {
+                if (map.getBlock(selected_id)) |block| {
+                    const is_tutorial_target = map.in_tutorial_mode and
+                        map.start_block_id != null and
+                        selected_id == map.start_block_id.?;
+                    const is_normal_target = block.state == .revealed and block.encounter != null;
+
+                    if ((is_normal_target or is_tutorial_target) and block.encounter != null) {
+                        return .{ .engage = selected_id };
+                    }
+                }
+            }
+        }
+
+        // B button: Deselect (same as Escape)
+        if (rl.isGamepadButtonPressed(0, .right_face_right)) {
+            ui_state.selected_block_id = null;
+        }
+    }
+
     // Clamp camera to bounds
     ui_state.clampCamera(map, area_width, area_height);
 
@@ -1012,7 +1272,24 @@ pub fn handlePolyominoMapInput(
                 const is_normal_target = block.state == .revealed and block.encounter != null;
 
                 if ((is_normal_target or is_tutorial_target) and block.encounter != null) {
-                    return selected_id;
+                    return .{ .engage = selected_id };
+                }
+            }
+        }
+    }
+
+    // DEBUG: W to auto-win selected block (skip combat)
+    if (rl.isKeyPressed(.w)) {
+        if (ui_state.selected_block_id) |selected_id| {
+            if (map.getBlock(selected_id)) |block| {
+                // Can auto-win any block with an encounter that's revealed or tutorial target
+                const is_tutorial_target = map.in_tutorial_mode and
+                    map.start_block_id != null and
+                    selected_id == map.start_block_id.?;
+                const is_valid_target = (block.state == .revealed or is_tutorial_target) and block.encounter != null;
+
+                if (is_valid_target) {
+                    return .{ .debug_auto_win = selected_id };
                 }
             }
         }
@@ -1023,7 +1300,7 @@ pub fn handlePolyominoMapInput(
         ui_state.selected_block_id = null;
     }
 
-    return null;
+    return .none;
 }
 
 // ============================================================================

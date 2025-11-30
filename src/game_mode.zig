@@ -978,13 +978,25 @@ pub const GameMode = struct {
             .campaign_overworld, .run_start, .encounter_select => {
                 // Handle campaign UI input
                 if (self.campaign_state) |cs| {
-                    if (campaign_ui.handleCampaignInput(cs, &self.campaign_ui_state)) |block_id| {
-                        // Player selected a polyomino block encounter - start it
-                        if (cs.getPolyBlockEncounter(block_id)) |node| {
-                            self.current_encounter_node = node;
-                            self.current_encounter_block_id = block_id;
-                            self.startCampaignEncounter(node);
-                        }
+                    const input_result = campaign_ui.handleCampaignInput(cs, &self.campaign_ui_state);
+                    switch (input_result) {
+                        .engage => |block_id| {
+                            // Player selected a polyomino block encounter - start it
+                            if (cs.getPolyBlockEncounter(block_id)) |node| {
+                                self.current_encounter_node = node;
+                                self.current_encounter_block_id = block_id;
+                                self.startCampaignEncounter(node);
+                            }
+                        },
+                        .debug_auto_win => |block_id| {
+                            // DEBUG: Auto-win without combat
+                            if (cs.getPolyBlockEncounter(block_id)) |node| {
+                                self.current_encounter_node = node;
+                                self.current_encounter_block_id = block_id;
+                                self.handleEncounterResult(true); // true = victory
+                            }
+                        },
+                        .none => {},
                     }
                 }
 

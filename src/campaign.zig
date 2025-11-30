@@ -1293,6 +1293,10 @@ pub const QuestProgress = struct {
         };
     }
 
+    // Minimum intel nodes required before brother can be found
+    // This prevents instant victory on first encounter
+    const MIN_INTEL_FOR_FIND: u8 = 3;
+
     /// Process completing an intel node (for find_brother goal)
     /// Returns true if brother was found
     pub fn processIntel(self: *QuestProgress, rng: std.Random) bool {
@@ -1303,6 +1307,11 @@ pub const QuestProgress = struct {
         // Each intel increases progress by 10-20
         const gain = rng.intRangeAtMost(u8, 10, 20);
         self.search_progress = @min(100, self.search_progress + gain);
+
+        // Can't find brother until we've gathered enough intel
+        if (self.intel_gathered < MIN_INTEL_FOR_FIND) {
+            return false;
+        }
 
         // Roll to find brother - chance equals search_progress
         const roll = rng.intRangeAtMost(u8, 1, 100);
