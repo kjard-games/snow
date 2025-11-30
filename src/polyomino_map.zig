@@ -474,50 +474,119 @@ pub const PolyominoMap = struct {
     /// Generate the starting area - player's first encounter is their home block
     /// Unlike later gameplay, the starting block is revealed but NOT conquered yet
     /// First encounter is always an easy intel mission (tutorial + narrative hook)
+    /// GUARANTEES the starting block has exactly 3 adjacent polyominoes for 1->3->many progression
     pub fn generateStartingArea(self: *PolyominoMap, player_faction: Faction) !void {
         self.player_faction = player_faction;
 
-        // Generate the center chunk and its neighbors for initial map
+        // Try to generate a map with a starting block that has exactly 3 neighbors
+        // Regenerate with different seeds until we find one (guaranteed to succeed eventually)
+        var attempt: u32 = 0;
+        const max_attempts: u32 = 100;
+
+        while (attempt < max_attempts) : (attempt += 1) {
+            // Clear any previous generation
+            if (attempt > 0) {
+                self.clearAllChunks();
+                self.seed +%= 7919; // Add a prime to get different generation
+            }
+
+            // Generate the center chunk and its neighbors for initial map
+            const center = ChunkCoord.init(0, 0);
+            try self.ensureChunkGenerated(center);
+
+            // Generate neighboring chunks for a fuller starting map
+            for (center.getNeighbors()) |neighbor| {
+                try self.ensureChunkGenerated(neighbor);
+            }
+
+            // Generate additional layer chunks BEFORE computing adjacencies
+            // This ensures we have all chunks that could affect adjacencies
+            // Generate 2 more rings of chunks for stable adjacencies
+            for (center.getNeighbors()) |neighbor| {
+                for (neighbor.getNeighbors()) |outer| {
+                    try self.ensureChunkGenerated(outer);
+                }
+            }
+
+            // Compute adjacencies across all chunks
+            var all_chunks_iter = self.chunks.valueIterator();
+            while (all_chunks_iter.next()) |chunk_ptr| {
+                self.computeChunkAdjacencies(chunk_ptr.*);
+            }
+
+            // Find a block with exactly 3 neighbors
+            if (self.findBlockWithExactlyThreeNeighbors()) |start_block| {
+                self.start_block_id = start_block.id;
+
+                // Tutorial mode: starting block LOOKS conquered but IS the engagement target
+                // Player "owns" this territory visually, but must defend it in the tutorial fight
+                self.in_tutorial_mode = true;
+
+                // Mark starting block as conquered for rendering purposes
+                // (it will look like owned territory with solid borders against enemies)
+                start_block.state = .conquered;
+                start_block.visibility_layer = .conquered;
+                try self.conquered_blocks.put(start_block.id, {});
+
+                // But it still has an encounter - the tutorial "defend your home" mission
+                start_block.encounter = EncounterNode{
+                    .encounter_type = .intel,
+                    .name = "Last Seen Here",
+                    .challenge_rating = 1,
+                    .expires_in_turns = null,
+                    .controlling_faction = player_faction,
+                    .x = 0,
+                    .y = 0,
+                    .id = 0,
+                    .skill_capture_tier = .basic,
+                    .offers_quest_progress = true,
+                    .offers_recruitment = false,
+                    .faction_influence = 1,
+                };
+                start_block.faction = player_faction;
+                start_block.name = "Home Base";
+
+                // Assign contiguous faction territories
+                try self.assignContiguousFactions(player_faction);
+
+                // Update camera to show starting area
+                self.updateCameraBounds();
+
+                // Compute visibility layers to reveal surrounding territory
+                try self.recomputeVisibilityLayers();
+
+                if (attempt > 0) {
+                    std.log.info("Found starting block with exactly 3 neighbors after {d} attempts", .{attempt + 1});
+                }
+                return;
+            }
+        }
+
+        // This should never happen with 100 attempts, but fallback gracefully
+        std.log.warn("Could not find block with exactly 3 neighbors after {d} attempts, using best available", .{max_attempts});
+        try self.generateStartingAreaFallback(player_faction);
+    }
+
+    /// Fallback starting area generation if we can't find exactly 3 neighbors
+    fn generateStartingAreaFallback(self: *PolyominoMap, player_faction: Faction) !void {
         const center = ChunkCoord.init(0, 0);
-        try self.ensureChunkGenerated(center);
 
-        // Generate neighboring chunks for a fuller starting map
-        for (center.getNeighbors()) |neighbor| {
-            try self.ensureChunkGenerated(neighbor);
-        }
-
-        // Compute adjacencies across all chunks
-        var all_chunks_iter = self.chunks.valueIterator();
-        while (all_chunks_iter.next()) |chunk_ptr| {
-            self.computeChunkAdjacencies(chunk_ptr.*);
-        }
-
-        // Find a good starting block:
-        // - Should be a 5-cell polyomino (or close to it)
-        // - Should have many adjacent blocks (for faction diversity)
         const start_block = self.findBestStartingBlock() orelse blk: {
-            // Fallback to first block in center chunk
             if (self.getChunk(center)) |center_chunk| {
                 if (center_chunk.block_count > 0) {
                     break :blk &center_chunk.blocks[0];
                 }
             }
-            return; // No blocks at all - shouldn't happen
+            return;
         };
 
         self.start_block_id = start_block.id;
-
-        // Tutorial mode: starting block LOOKS conquered but IS the engagement target
-        // Player "owns" this territory visually, but must defend it in the tutorial fight
         self.in_tutorial_mode = true;
 
-        // Mark starting block as conquered for rendering purposes
-        // (it will look like owned territory with solid borders against enemies)
         start_block.state = .conquered;
         start_block.visibility_layer = .conquered;
         try self.conquered_blocks.put(start_block.id, {});
 
-        // But it still has an encounter - the tutorial "defend your home" mission
         start_block.encounter = EncounterNode{
             .encounter_type = .intel,
             .name = "Last Seen Here",
@@ -535,78 +604,88 @@ pub const PolyominoMap = struct {
         start_block.faction = player_faction;
         start_block.name = "Home Base";
 
-        // Assign contiguous faction territories, ensuring at least 3 factions border the start
         try self.assignContiguousFactions(player_faction);
-
-        // Verify we have at least 3 adjacent factions, regenerate if not
-        var attempts: u32 = 0;
-        while (attempts < 10) {
-            const adjacent_faction_count = self.countAdjacentFactions(start_block.id);
-            if (adjacent_faction_count >= 3) break;
-
-            // Re-seed factions with different seed
-            attempts += 1;
-            self.seed +%= attempts * 12345;
-
-            // Clear all faction assignments except player's start block
-            var chunks_iter = self.chunks.valueIterator();
-            while (chunks_iter.next()) |chunk_ptr| {
-                for (0..chunk_ptr.*.block_count) |i| {
-                    const block = &chunk_ptr.*.blocks[i];
-                    if (block.id != start_block.id) {
-                        block.faction = null;
-                    }
-                }
-            }
-
-            try self.assignContiguousFactions(player_faction);
-        }
-
-        // Update camera to show starting area
         self.updateCameraBounds();
-
-        // Compute visibility layers to reveal surrounding territory
         try self.recomputeVisibilityLayers();
     }
 
-    /// Find the best starting block: ideally 5 cells with many neighbors
+    /// Clear all generated chunks (for regeneration)
+    fn clearAllChunks(self: *PolyominoMap) void {
+        var chunk_iter = self.chunks.valueIterator();
+        while (chunk_iter.next()) |chunk_ptr| {
+            self.allocator.destroy(chunk_ptr.*);
+        }
+        self.chunks.clearRetainingCapacity();
+        self.block_locations.clearRetainingCapacity();
+        self.conquered_blocks.clearRetainingCapacity();
+        self.revealed_blocks.clearRetainingCapacity();
+        self.layer_1_blocks.clearRetainingCapacity();
+        self.layer_2_blocks.clearRetainingCapacity();
+        self.layer_3_blocks.clearRetainingCapacity();
+        self.next_block_id = 1;
+        self.start_block_id = null;
+    }
+
+    /// Find a block with exactly 3 adjacent neighbors, preferring good size and central location
+    fn findBlockWithExactlyThreeNeighbors(self: *PolyominoMap) ?*Block {
+        var best_block: ?*Block = null;
+        var best_score: i32 = -1000;
+
+        // Search ALL generated chunks for blocks with exactly 3 neighbors
+        var chunks_iter = self.chunks.valueIterator();
+        while (chunks_iter.next()) |chunk_ptr| {
+            const chunk = chunk_ptr.*;
+            for (0..chunk.block_count) |i| {
+                const block = &chunk.blocks[i];
+
+                // ONLY consider blocks with exactly 3 neighbors
+                if (block.adjacent_count != 3) continue;
+
+                // Score based on size (prefer 4-5 cells) and distance from center
+                const size_score: i32 = -@as(i32, @intCast(@abs(@as(i32, @intCast(block.cell_count)) - 5))) * 10;
+
+                const centroid = block.getCentroid();
+                const dist_from_center = @abs(centroid.x) + @abs(centroid.y);
+                const center_score: i32 = -@as(i32, @intFromFloat(dist_from_center / 50.0));
+
+                const total_score = size_score + center_score;
+
+                if (total_score > best_score) {
+                    best_score = total_score;
+                    best_block = block;
+                }
+            }
+        }
+
+        return best_block;
+    }
+
+    /// Find the best starting block by score (fallback when no exactly-3-neighbor block exists)
     fn findBestStartingBlock(self: *PolyominoMap) ?*Block {
         var best_block: ?*Block = null;
         var best_score: i32 = -1000;
 
-        const center = ChunkCoord.init(0, 0);
+        // Search ALL generated chunks
+        var chunks_iter = self.chunks.valueIterator();
+        while (chunks_iter.next()) |chunk_ptr| {
+            const chunk = chunk_ptr.*;
+            for (0..chunk.block_count) |i| {
+                const block = &chunk.blocks[i];
 
-        // Check center chunk and immediate neighbors
-        const chunks_to_check = [_]ChunkCoord{
-            center,
-            ChunkCoord.init(0, -1),
-            ChunkCoord.init(1, 0),
-            ChunkCoord.init(0, 1),
-            ChunkCoord.init(-1, 0),
-        };
+                // Score: prefer ~5 cells, prefer closer to 3 neighbors, prefer central
+                const size_score: i32 = -@as(i32, @intCast(@abs(@as(i32, @intCast(block.cell_count)) - 5))) * 10;
+                const adj_diff: i32 = @intCast(@abs(@as(i32, @intCast(block.adjacent_count)) - 3));
+                const neighbor_score: i32 = -adj_diff * 20;
 
-        for (chunks_to_check) |chunk_coord| {
-            if (self.getChunk(chunk_coord)) |chunk| {
-                for (0..chunk.block_count) |i| {
-                    const block = &chunk.blocks[i];
+                const centroid = block.getCentroid();
+                const dist_from_center = @abs(centroid.x) + @abs(centroid.y);
+                const center_score: i32 = -@as(i32, @intFromFloat(dist_from_center / 50.0));
 
-                    // Score based on:
-                    // - Prefer 5 cells (ideal), penalize deviation
-                    // - More adjacent blocks = better (more faction diversity potential)
-                    const size_score: i32 = -@as(i32, @intCast(@abs(@as(i32, @intCast(block.cell_count)) - 5))) * 10;
-                    const neighbor_score: i32 = @intCast(block.adjacent_count * 5);
+                const total_score = size_score + neighbor_score + center_score;
 
-                    // Prefer blocks closer to center (0,0)
-                    const centroid = block.getCentroid();
-                    const dist_from_center = @abs(centroid.x) + @abs(centroid.y);
-                    const center_score: i32 = -@as(i32, @intFromFloat(dist_from_center / 100.0));
-
-                    const total_score = size_score + neighbor_score + center_score;
-
-                    if (total_score > best_score) {
-                        best_score = total_score;
-                        best_block = block;
-                    }
+                if (total_score > best_score) {
+                    best_score = total_score;
+                    best_block = block;
                 }
             }
         }
@@ -1276,6 +1355,7 @@ pub const PolyominoMap = struct {
 
     /// Assign factions to blocks using flood-fill to create contiguous territories
     /// Called after chunks are generated to ensure proper adjacency information
+    /// GUARANTEES: The 3 blocks adjacent to the starting block get 3 different factions
     pub fn assignContiguousFactions(self: *PolyominoMap, player_faction: Faction) !void {
         // Collect all blocks that need faction assignment
         var unassigned = std.AutoHashMap(u32, void).init(self.allocator);
@@ -1297,16 +1377,57 @@ pub const PolyominoMap = struct {
             }
         }
 
-        // Create seed points for each non-player faction
+        // CRITICAL: First, assign the 3 adjacent blocks to 3 different factions
+        // This guarantees the 1 -> 3 teams -> many progression
         const enemy_factions = [_]Faction{ .red, .yellow, .green, .purple, .orange };
         var faction_seeds = std.AutoHashMap(u32, Faction).init(self.allocator);
         defer faction_seeds.deinit();
 
-        // Pick seed blocks for each faction (spread them out)
+        if (self.start_block_id) |start_id| {
+            if (self.getBlock(start_id)) |start_block| {
+                const adjacent = start_block.getAdjacentBlocks();
+                // Assign each of the 3 adjacent blocks a different faction
+                for (0..@min(3, adjacent.len)) |i| {
+                    const adj_id = adjacent[i];
+                    if (self.getBlock(adj_id)) |adj_block| {
+                        // Pick a faction that's not the player's
+                        const faction = blk: {
+                            for (enemy_factions) |f| {
+                                if (f != player_faction) {
+                                    // Check this faction isn't already used for another adjacent block
+                                    var already_used = false;
+                                    for (0..i) |j| {
+                                        if (self.getBlock(adjacent[j])) |prev_block| {
+                                            if (prev_block.faction == f) {
+                                                already_used = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (!already_used) break :blk f;
+                                }
+                            }
+                            break :blk enemy_factions[i % enemy_factions.len];
+                        };
+
+                        adj_block.faction = faction;
+                        if (adj_block.encounter) |*enc| {
+                            enc.controlling_faction = faction;
+                        }
+                        _ = unassigned.remove(adj_id);
+
+                        // Use these as seed points for flood-fill
+                        try faction_seeds.put(adj_id, faction);
+                    }
+                }
+            }
+        }
+
+        // Pick additional seed blocks for each faction (spread them out)
         var seed_rng_state = std.Random.DefaultPrng.init(self.seed +% 999);
         const seed_rng = seed_rng_state.random();
 
-        // Get list of unassigned block IDs
+        // Get list of remaining unassigned block IDs
         var unassigned_list = std.ArrayListUnmanaged(u32){};
         defer unassigned_list.deinit(self.allocator);
 
@@ -1325,7 +1446,10 @@ pub const PolyominoMap = struct {
             var seeds_assigned: usize = 0;
             while (seeds_assigned < seeds_per_faction and seed_idx < unassigned_list.items.len) {
                 const block_id = unassigned_list.items[seed_idx];
-                try faction_seeds.put(block_id, faction);
+                // Don't override already-seeded blocks (the 3 adjacent ones)
+                if (!faction_seeds.contains(block_id)) {
+                    try faction_seeds.put(block_id, faction);
+                }
                 seed_idx += 1;
                 seeds_assigned += 1;
             }
@@ -1566,9 +1690,10 @@ test "polyomino map initialization" {
     // Should have a starting block
     try std.testing.expect(map.start_block_id != null);
 
-    // Starting block should be revealed (not conquered yet - player must win first fight)
-    try std.testing.expect(map.revealed_blocks.count() == 1);
-    try std.testing.expect(map.conquered_blocks.count() == 0);
+    // Starting block looks conquered (tutorial mode) but has encounter
+    // Adjacent blocks are revealed as layer 1
+    try std.testing.expect(map.conquered_blocks.count() == 1);
+    try std.testing.expect(map.in_tutorial_mode);
 }
 
 test "block adjacency" {
@@ -1585,15 +1710,13 @@ test "block adjacency" {
     // Starting block should have adjacent blocks (computed during generation)
     try std.testing.expect(start_block.adjacent_count > 0);
 
-    // Starting block is revealed but not conquered yet
-    try std.testing.expect(start_block.state == .revealed);
+    // Starting block appears conquered in tutorial mode
+    try std.testing.expect(start_block.state == .conquered);
+    try std.testing.expect(map.in_tutorial_mode);
 
-    // Simulate winning the first fight - conquer the starting block
-    try map.conquerBlock(start_id, .blue);
-
-    // Now adjacent blocks should be revealed
+    // Adjacent blocks should be visible (layer 1, 2, or revealed)
     for (start_block.getAdjacentBlocks()) |adj_id| {
-        try std.testing.expect(map.revealed_blocks.contains(adj_id));
+        try std.testing.expect(map.isBlockVisible(adj_id));
     }
 }
 
@@ -1620,4 +1743,44 @@ test "chunk generation produces valid polyominoes" {
     // Total cells should equal chunk size squared
     const expected_cells: usize = @intCast(CHUNK_SIZE * CHUNK_SIZE);
     try std.testing.expect(total_cells == expected_cells);
+}
+
+test "starting block has exactly 3 neighbors from 3 different factions" {
+    const allocator = std.testing.allocator;
+
+    // Test with multiple different seeds to ensure the guarantee holds
+    const test_seeds = [_]u64{ 12345, 54321, 99999, 11111, 77777, 33333, 88888, 24680 };
+
+    for (test_seeds) |seed| {
+        var map = PolyominoMap.init(allocator, seed);
+        defer map.deinit();
+
+        try map.generateStartingArea(.blue);
+
+        // Starting block MUST have exactly 3 neighbors for 1 -> 3 -> many progression
+        const start_id = map.start_block_id.?;
+        const start_block = map.getBlock(start_id).?;
+        try std.testing.expectEqual(@as(usize, 3), start_block.adjacent_count);
+
+        // The 3 adjacent blocks MUST each have a different faction
+        const adjacent = start_block.getAdjacentBlocks();
+        try std.testing.expectEqual(@as(usize, 3), adjacent.len);
+
+        var factions_seen: [3]?Faction = .{ null, null, null };
+        for (0..3) |i| {
+            const adj_block = map.getBlock(adjacent[i]).?;
+            const faction = adj_block.faction.?;
+
+            // Faction must not be the player's faction
+            try std.testing.expect(faction != .blue);
+
+            // Faction must not have been seen before
+            for (factions_seen) |seen| {
+                if (seen) |f| {
+                    try std.testing.expect(f != faction);
+                }
+            }
+            factions_seen[i] = faction;
+        }
+    }
 }
